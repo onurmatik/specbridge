@@ -1,6 +1,6 @@
 {% load static %}
 <!DOCTYPE html>
-<html lang="en" class="antialiased">
+<html lang="en" class="antialiased {% block html_class %}{% endblock %}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,7 +10,7 @@
   {% block extra_head %}{% endblock %}
 </head>
 <body
-  class="bg-gray-50 text-gray-900"
+  class="{% block body_class %}bg-gray-50 text-gray-900{% endblock %}"
   data-auto-refresh="{% block auto_refresh_ms %}45000{% endblock %}"
   data-authenticated="{% if request.user.is_authenticated %}true{% else %}false{% endif %}"
   data-current-path="{{ request.get_full_path }}"

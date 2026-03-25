@@ -1,14 +1,16 @@
 {% extends "base.html" %}
 
 {% block title %}SpecBridge · Workspace{% endblock %}
+{% block html_class %}h-full{% endblock %}
+{% block body_class %}h-screen overflow-hidden bg-gray-50 text-gray-900{% endblock %}
 
 {% block content %}
-<div class="app-shell">
+<div class="app-shell h-screen">
   {% include "components/global_sidebar.html" %}
-  <main class="flex min-w-0 flex-1 flex-col">
+  <main class="flex min-h-0 min-w-0 flex-1 flex-col">
     {% include "components/page_header.html" %}
-    <div class="flex flex-1 overflow-hidden">
-      <section class="relative flex w-[45%] min-w-[420px] flex-col border-r border-gray-200 bg-white">
+    <div class="flex min-h-0 flex-1 overflow-hidden">
+      <section class="relative flex min-h-0 w-[45%] min-w-[420px] flex-col border-r border-gray-200 bg-white">
         <div class="flex items-center justify-between border-b border-gray-100 bg-white/80 px-6 py-4 backdrop-blur-sm">
           <h2 class="font-display text-lg font-bold text-gray-900">Alignment Stream</h2>
           <div class="flex items-center gap-3">
@@ -23,7 +25,7 @@
           </div>
         </div>
 
-        <div class="flex-1 space-y-8 overflow-y-auto p-6">
+        <div class="min-h-0 flex-1 space-y-8 overflow-y-auto p-6">
           {% for entry in stream_entries %}
             {% if entry.kind == "decision" %}
               <div class="flex items-start gap-4">
@@ -100,7 +102,7 @@
           {% endfor %}
         </div>
 
-        <div class="border-t border-gray-200 bg-gray-50 p-4">
+        <div class="shrink-0 border-t border-gray-200 bg-gray-50 p-4">
           {% if request.user.is_authenticated %}
             <form class="field-shell" data-api-form="/api/projects/{{ project.slug }}/stream">
               <textarea name="body" rows="3" class="w-full resize-none border-0 bg-transparent p-3 text-sm text-gray-900 placeholder-gray-400 focus:ring-0" placeholder="Add to the discussion or propose a decision..."></textarea>
@@ -129,7 +131,7 @@
         <div class="h-8 w-0.5 rounded-full bg-gray-400"></div>
       </div>
 
-      <section class="relative flex-1 overflow-y-auto bg-gray-50">
+      <section class="relative min-h-0 flex-1 overflow-y-auto bg-gray-50">
         <div class="sticky top-0 z-10 h-8 w-full bg-gradient-to-b from-gray-50 to-transparent"></div>
         <div class="mx-auto max-w-3xl px-8 py-8 pb-32">
           <div class="mb-12">
