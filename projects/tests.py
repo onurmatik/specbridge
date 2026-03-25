@@ -1,10 +1,14 @@
 import json
 
+from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 from django.urls import reverse
 
 from projects.demo import ensure_demo_workspace
-from projects.models import Project
+from projects.models import MembershipRole, Project, ProjectMembership
+from projects.services import create_project_workspace
+
+User = get_user_model()
 
 
 class ProjectPageTests(TestCase):
@@ -18,6 +22,25 @@ class ProjectPageTests(TestCase):
         self.assertContains(response, "Agent-Driven Spec System")
         self.assertContains(response, self.project.name)
         self.assertContains(response, "data-project-modal-trigger", html=False)
+
+    def test_anonymous_directory_only_shows_demo_workspace(self):
+        outsider = User.objects.create_user(
+            username="ada",
+            email="ada@example.com",
+            password="SpecBridge!123",
+            first_name="Ada",
+            last_name="Lovelace",
+        )
+        private_project = create_project_workspace(
+            actor=outsider,
+            project_name="Roadmap Console",
+            tagline="Private roadmap coordination workspace.",
+        )
+
+        response = self.client.get(reverse("project-directory"))
+
+        self.assertContains(response, self.project.name)
+        self.assertNotContains(response, private_project.name)
 
     def test_project_pages_render(self):
         paths = [
@@ -37,6 +60,89 @@ class ProjectPageTests(TestCase):
         response = self.client.get(reverse("dashboard-shortcut"))
         self.assertEqual(response.status_code, 302)
         self.assertIn(self.project.slug, response["Location"])
+
+    def test_shortcuts_redirect_to_directory_when_authenticated_user_has_no_projects(self):
+        outsider = User.objects.create_user(
+            username="grace",
+            email="grace@example.com",
+            password="SpecBridge!123",
+        )
+        self.client.force_login(outsider)
+
+        response = self.client.get(reverse("dashboard-shortcut"))
+
+        self.assertRedirects(response, reverse("project-directory"))
+
+    def test_authenticated_directory_shows_only_member_projects(self):
+        outsider = User.objects.create_user(
+            username="taylor",
+            email="taylor@example.com",
+            password="SpecBridge!123",
+            first_name="Taylor",
+            last_name="Ng",
+            title="PM",
+        )
+        member_project = create_project_workspace(
+            actor=outsider,
+            project_name="Launch Readiness",
+            tagline="Launch coordination workspace.",
+        )
+        self.client.force_login(outsider)
+
+        response = self.client.get(reverse("project-directory"))
+
+        self.assertContains(response, member_project.name)
+        self.assertNotContains(response, self.project.name)
+        self.assertNotContains(response, "Open Demo Project")
+
+    def test_authenticated_non_member_cannot_open_demo_workspace(self):
+        outsider = User.objects.create_user(
+            username="linus",
+            email="linus@example.com",
+            password="SpecBridge!123",
+        )
+        self.client.force_login(outsider)
+
+        response = self.client.get(reverse("project-workspace", args=[self.project.slug]))
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_authenticated_directory_hides_demo_even_with_legacy_membership(self):
+        outsider = User.objects.create_user(
+            username="legacy",
+            email="legacy@example.com",
+            password="SpecBridge!123",
+        )
+        ProjectMembership.objects.create(
+            project=self.project,
+            user=outsider,
+            role=MembershipRole.VIEWER,
+            title="Legacy viewer",
+        )
+        self.client.force_login(outsider)
+
+        response = self.client.get(reverse("project-directory"))
+
+        self.assertNotContains(response, self.project.name)
+        self.assertContains(response, "No projects yet")
+
+    def test_authenticated_legacy_demo_member_cannot_open_demo_workspace(self):
+        outsider = User.objects.create_user(
+            username="legacy-path",
+            email="legacy-path@example.com",
+            password="SpecBridge!123",
+        )
+        ProjectMembership.objects.create(
+            project=self.project,
+            user=outsider,
+            role=MembershipRole.VIEWER,
+            title="Legacy viewer",
+        )
+        self.client.force_login(outsider)
+
+        response = self.client.get(reverse("project-workspace", args=[self.project.slug]))
+
+        self.assertEqual(response.status_code, 404)
 
     def test_authenticated_user_can_create_project(self):
         self.client.force_login(self.project.created_by)

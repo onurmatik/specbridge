@@ -8,7 +8,7 @@ from django.utils import timezone
 from django.utils.text import slugify
 
 from alignment.services import build_workspace_entries, compute_dashboard_metrics
-from projects.demo import ensure_demo_workspace
+from projects.demo import DEMO_PROJECT_SLUG, DEMO_USERNAMES, ensure_demo_workspace
 from projects.models import MembershipRole, Organization, Project, ProjectMembership
 from specs.models import SectionStatus, SpecSection
 from specs.services import capture_version
@@ -77,16 +77,33 @@ PROJECT_BOOTSTRAP_SECTIONS = (
 )
 
 
-def get_primary_project():
-    return ensure_demo_workspace()
+def can_access_demo_project(user) -> bool:
+    return bool(
+        user is not None
+        and getattr(user, "is_authenticated", False)
+        and getattr(user, "username", "") in DEMO_USERNAMES
+    )
 
 
-def get_project_or_404(slug: str):
+def visible_projects_for_user(user):
+    projects = Project.objects.select_related("organization")
+    if user is not None and getattr(user, "is_authenticated", False):
+        visible_projects = projects.filter(memberships__user=user, memberships__is_active=True)
+        if not can_access_demo_project(user):
+            visible_projects = visible_projects.exclude(slug=DEMO_PROJECT_SLUG)
+        return visible_projects.distinct()
+
     ensure_demo_workspace()
-    from projects.models import Project
+    return projects.filter(slug=DEMO_PROJECT_SLUG)
 
+
+def get_primary_project(user=None):
+    return visible_projects_for_user(user).order_by("-last_activity_at", "-updated_at", "name").first()
+
+
+def get_project_or_404(slug: str, user=None):
     try:
-        return Project.objects.select_related("organization").get(slug=slug)
+        return visible_projects_for_user(user).get(slug=slug)
     except Project.DoesNotExist as exc:
         raise Http404("Project not found") from exc
 

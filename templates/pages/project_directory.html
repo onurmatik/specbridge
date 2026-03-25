@@ -12,30 +12,69 @@
         <section class="mb-8 overflow-hidden rounded-[28px] border border-gray-200 bg-white shadow-card">
           <div class="grid gap-0 lg:grid-cols-[1.2fr,0.8fr]">
             <div class="border-b border-gray-200 bg-gradient-to-br from-white via-gray-50 to-purple-50/40 p-8 lg:border-b-0 lg:border-r">
-              <span class="workspace-badge border-purple-200 bg-purple-50 text-brand-agent">
-                <iconify-icon icon="lucide:layout-template"></iconify-icon>
-                Agent-Driven Spec System
-              </span>
-              <h2 class="mt-5 max-w-2xl font-display text-4xl font-bold tracking-tight text-gray-900">
-                Keep the CEO, PM, and engineering team aligned on one revisable source of truth.
-              </h2>
-              <p class="mt-4 max-w-2xl text-lg leading-relaxed text-gray-600">
-                SpecBridge tracks decisions, assumptions, blockers, and agent suggestions as structured system state,
-                not just document edits.
-              </p>
-              <div class="mt-8 flex flex-wrap gap-4">
-                <a href="{% url 'project-workspace' current_project.slug %}" class="primary-button">
-                  <iconify-icon icon="lucide:arrow-right"></iconify-icon>
-                  Open Demo Project
-                </a>
-                <a href="{% url 'project-history' current_project.slug %}" class="secondary-button">
-                  <iconify-icon icon="lucide:git-compare-arrows"></iconify-icon>
-                  Review Version History
-                </a>
-                {% if not request.user.is_authenticated %}
-                  <span class="self-center text-sm italic text-gray-400">Sign in to comment, approve, invite, and export.</span>
+              {% if request.user.is_authenticated %}
+                <span class="workspace-badge border-purple-200 bg-purple-50 text-brand-agent">
+                  <iconify-icon icon="lucide:briefcase-business"></iconify-icon>
+                  Your Workspaces
+                </span>
+                {% if current_project %}
+                  <h2 class="mt-5 max-w-2xl font-display text-4xl font-bold tracking-tight text-gray-900">
+                    Sign-in no longer falls back to the demo workspace. You only see projects you actively belong to.
+                  </h2>
+                  <p class="mt-4 max-w-2xl text-lg leading-relaxed text-gray-600">
+                    Continue from your latest workspace, or create a new project when you need a fresh spec, decision log,
+                    and alignment thread.
+                  </p>
+                  <div class="mt-8 flex flex-wrap gap-4">
+                    <a href="{% url 'project-workspace' current_project.slug %}" class="primary-button">
+                      <iconify-icon icon="lucide:arrow-right"></iconify-icon>
+                      Open Latest Project
+                    </a>
+                    <a href="{% url 'project-history' current_project.slug %}" class="secondary-button">
+                      <iconify-icon icon="lucide:git-compare-arrows"></iconify-icon>
+                      Review Version History
+                    </a>
+                  </div>
+                {% else %}
+                  <h2 class="mt-5 max-w-2xl font-display text-4xl font-bold tracking-tight text-gray-900">
+                    You do not have any active projects yet.
+                  </h2>
+                  <p class="mt-4 max-w-2xl text-lg leading-relaxed text-gray-600">
+                    This page now lists only your active memberships. Create your first workspace to start capturing the
+                    spec, decisions, blockers, and handoff artifacts.
+                  </p>
+                  <div class="mt-8 flex flex-wrap gap-4">
+                    <button type="button" class="primary-button" data-project-modal-trigger>
+                      <iconify-icon icon="lucide:folder-plus"></iconify-icon>
+                      Create Your First Project
+                    </button>
+                    <span class="self-center text-sm italic text-gray-400">Only projects where you are an active member appear here.</span>
+                  </div>
                 {% endif %}
-              </div>
+              {% else %}
+                <span class="workspace-badge border-purple-200 bg-purple-50 text-brand-agent">
+                  <iconify-icon icon="lucide:layout-template"></iconify-icon>
+                  Agent-Driven Spec System
+                </span>
+                <h2 class="mt-5 max-w-2xl font-display text-4xl font-bold tracking-tight text-gray-900">
+                  Keep the CEO, PM, and engineering team aligned on one revisable source of truth.
+                </h2>
+                <p class="mt-4 max-w-2xl text-lg leading-relaxed text-gray-600">
+                  SpecBridge tracks decisions, assumptions, blockers, and agent suggestions as structured system state,
+                  not just document edits.
+                </p>
+                <div class="mt-8 flex flex-wrap gap-4">
+                  <a href="{% url 'project-workspace' current_project.slug %}" class="primary-button">
+                    <iconify-icon icon="lucide:arrow-right"></iconify-icon>
+                    Open Demo Project
+                  </a>
+                  <a href="{% url 'project-history' current_project.slug %}" class="secondary-button">
+                    <iconify-icon icon="lucide:git-compare-arrows"></iconify-icon>
+                    Review Version History
+                  </a>
+                  <span class="self-center text-sm italic text-gray-400">Sign in to comment, approve, invite, and export.</span>
+                </div>
+              {% endif %}
             </div>
             <div class="grid gap-4 bg-gray-50/70 p-8 sm:grid-cols-2 lg:grid-cols-1">
               <div class="metric-card border-brand-decision/20">
@@ -96,6 +135,17 @@
                   </div>
                 </div>
               </a>
+            {% empty %}
+              <div class="rounded-[26px] border border-dashed border-gray-300 bg-white p-7 text-center shadow-card">
+                <h4 class="font-display text-2xl font-bold tracking-tight text-gray-900">No projects yet</h4>
+                <p class="mx-auto mt-3 max-w-2xl text-base leading-relaxed text-gray-600">
+                  Only your active project memberships are shown here. Start a new workspace to replace the demo flow with your own.
+                </p>
+                <button type="button" class="primary-button mt-6" data-project-modal-trigger>
+                  <iconify-icon icon="lucide:folder-plus"></iconify-icon>
+                  Create Project
+                </button>
+              </div>
             {% endfor %}
           </div>
 
@@ -105,26 +155,33 @@
                 <h3 class="font-display text-lg font-bold text-gray-900">Gap Closers</h3>
                 <iconify-icon icon="lucide:square-library" class="text-gray-400"></iconify-icon>
               </div>
-              <div class="space-y-3">
-                <a href="{% url 'project-assumptions' current_project.slug %}" class="flex items-start gap-3 rounded-xl border border-gray-200 bg-gray-50 p-4">
-                  <div class="rounded-xl bg-purple-100 p-2 text-brand-agent"><iconify-icon icon="lucide:flask-conical"></iconify-icon></div>
-                  <div>
-                    <div class="text-sm font-medium text-gray-900">Assumptions Register</div>
-                    <p class="mt-1 text-xs text-gray-500">Track validation state and link assumptions back to spec sections.</p>
-                  </div>
-                </a>
-                <a href="{% url 'project-members' current_project.slug %}" class="flex items-start gap-3 rounded-xl border border-gray-200 bg-gray-50 p-4">
-                  <div class="rounded-xl bg-blue-100 p-2 text-blue-600"><iconify-icon icon="lucide:users"></iconify-icon></div>
-                  <div>
-                    <div class="text-sm font-medium text-gray-900">Members & Roles</div>
-                    <p class="mt-1 text-xs text-gray-500">Make collaboration explicit with roles, invites, and ownership.</p>
-                  </div>
-                </a>
-              </div>
+              {% if current_project %}
+                <div class="space-y-3">
+                  <a href="{% url 'project-assumptions' current_project.slug %}" class="flex items-start gap-3 rounded-xl border border-gray-200 bg-gray-50 p-4">
+                    <div class="rounded-xl bg-purple-100 p-2 text-brand-agent"><iconify-icon icon="lucide:flask-conical"></iconify-icon></div>
+                    <div>
+                      <div class="text-sm font-medium text-gray-900">Assumptions Register</div>
+                      <p class="mt-1 text-xs text-gray-500">Track validation state and link assumptions back to spec sections.</p>
+                    </div>
+                  </a>
+                  <a href="{% url 'project-members' current_project.slug %}" class="flex items-start gap-3 rounded-xl border border-gray-200 bg-gray-50 p-4">
+                    <div class="rounded-xl bg-blue-100 p-2 text-blue-600"><iconify-icon icon="lucide:users"></iconify-icon></div>
+                    <div>
+                      <div class="text-sm font-medium text-gray-900">Members & Roles</div>
+                      <p class="mt-1 text-xs text-gray-500">Make collaboration explicit with roles, invites, and ownership.</p>
+                    </div>
+                  </a>
+                </div>
+              {% else %}
+                <div class="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-4">
+                  <div class="text-sm font-medium text-gray-900">No linked workspace yet</div>
+                  <p class="mt-1 text-xs text-gray-500">Assumptions, members, decisions, and handoff tools activate after your first project is created.</p>
+                </div>
+              {% endif %}
             </section>
             <section class="workspace-panel p-6">
               <div class="mb-4 flex items-center justify-between">
-                <h3 class="font-display text-lg font-bold text-gray-900">Current Demo Flow</h3>
+                <h3 class="font-display text-lg font-bold text-gray-900">{% if request.user.is_authenticated %}Workspace Flow{% else %}Current Demo Flow{% endif %}</h3>
                 <iconify-icon icon="lucide:waypoints" class="text-gray-400"></iconify-icon>
               </div>
               <div class="space-y-4">

@@ -2,39 +2,52 @@
   <div class="min-w-0">
     <div class="mb-1 flex items-center gap-2 text-sm text-gray-500">
       <a href="{% url 'project-directory' %}" class="hover:text-gray-900">Projects</a>
-      <iconify-icon icon="lucide:chevron-right" class="text-xs"></iconify-icon>
-      <span class="truncate text-gray-900">{{ project.name }}</span>
+      {% if project %}
+        <iconify-icon icon="lucide:chevron-right" class="text-xs"></iconify-icon>
+        <span class="truncate text-gray-900">{{ project.name }}</span>
+      {% endif %}
     </div>
     <div class="flex items-center gap-3">
-      <h1 class="font-display text-lg font-bold text-gray-900">{{ project.name }}</h1>
-      <span class="workspace-badge border-gray-200 bg-gray-50 text-gray-600">{{ status_label }}</span>
-      {% if request.user.is_authenticated %}
-        <span class="inline-flex items-center gap-1.5 rounded-md bg-purple-50 px-2 py-1 text-xs font-medium text-brand-agent">
-          <iconify-icon icon="lucide:bot"></iconify-icon>
-          Polling MVP
-        </span>
+      <h1 class="font-display text-lg font-bold text-gray-900">{% if project %}{{ project.name }}{% else %}Projects{% endif %}</h1>
+      {% if project %}
+        <span class="workspace-badge border-gray-200 bg-gray-50 text-gray-600">{{ status_label }}</span>
+        {% if request.user.is_authenticated %}
+          <span class="inline-flex items-center gap-1.5 rounded-md bg-purple-50 px-2 py-1 text-xs font-medium text-brand-agent">
+            <iconify-icon icon="lucide:bot"></iconify-icon>
+            Polling MVP
+          </span>
+        {% else %}
+          <span class="workspace-badge border-blue-100 bg-blue-50 text-blue-700">
+            <iconify-icon icon="lucide:eye"></iconify-icon>
+            Read-only
+          </span>
+        {% endif %}
+      {% elif request.user.is_authenticated %}
+        <span class="workspace-badge border-gray-200 bg-gray-50 text-gray-600">Your workspaces</span>
       {% else %}
         <span class="workspace-badge border-blue-100 bg-blue-50 text-blue-700">
           <iconify-icon icon="lucide:eye"></iconify-icon>
-          Read-only
+          Public preview
         </span>
       {% endif %}
     </div>
   </div>
   <div class="flex items-center gap-5">
-    <div class="hidden items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-4 py-2 lg:flex">
-      <div>
-        <div class="text-xs uppercase tracking-wider text-gray-400">Team</div>
-        <div class="text-sm font-medium text-gray-900">{{ active_members_count }} active</div>
-      </div>
-      <div class="h-8 w-px bg-gray-200"></div>
-      <div>
-        <div class="text-xs uppercase tracking-wider text-gray-400">Open items</div>
-        <div class="text-sm font-medium {% if unresolved_count %}text-brand-warning{% else %}text-brand-decision{% endif %}">
-          {{ unresolved_count }} unresolved
+    {% if project %}
+      <div class="hidden items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-4 py-2 lg:flex">
+        <div>
+          <div class="text-xs uppercase tracking-wider text-gray-400">Team</div>
+          <div class="text-sm font-medium text-gray-900">{{ active_members_count }} active</div>
+        </div>
+        <div class="h-8 w-px bg-gray-200"></div>
+        <div>
+          <div class="text-xs uppercase tracking-wider text-gray-400">Open items</div>
+          <div class="text-sm font-medium {% if unresolved_count %}text-brand-warning{% else %}text-brand-decision{% endif %}">
+            {{ unresolved_count }} unresolved
+          </div>
         </div>
       </div>
-    </div>
+    {% endif %}
     {% if request.user.is_authenticated %}
       <div class="hidden items-center gap-3 rounded-xl border border-gray-200 bg-white px-3 py-2 xl:flex">
         <div class="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border border-gray-200 bg-gray-100">
@@ -52,15 +65,22 @@
         Collaborative tools require sign in
       </div>
     {% endif %}
-    <a href="/api/projects/{{ project.slug }}/stats" class="secondary-button">
-      <iconify-icon icon="lucide:braces"></iconify-icon>
-      API
-    </a>
     {% if request.user.is_authenticated %}
-      <a href="{% url 'project-workspace' project.slug %}" class="primary-button">
-        <iconify-icon icon="lucide:sparkles"></iconify-icon>
-        Open Workspace
-      </a>
+      {% if project %}
+        <a href="/api/projects/{{ project.slug }}/stats" class="secondary-button">
+          <iconify-icon icon="lucide:braces"></iconify-icon>
+          API
+        </a>
+        <a href="{% url 'project-workspace' project.slug %}" class="primary-button">
+          <iconify-icon icon="lucide:sparkles"></iconify-icon>
+          Open Workspace
+        </a>
+      {% else %}
+        <button type="button" class="primary-button" data-project-modal-trigger>
+          <iconify-icon icon="lucide:folder-plus"></iconify-icon>
+          Create Project
+        </button>
+      {% endif %}
       <form method="post" action="{% url 'logout' %}">
         {% csrf_token %}
         <input type="hidden" name="{{ redirect_field_name|default:'next' }}" value="{{ request.get_full_path }}">

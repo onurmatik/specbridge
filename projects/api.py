@@ -58,7 +58,7 @@ def create_project(request, payload: ProjectCreatePayload):
 
 @router.get("/{slug}/stats")
 def project_stats(request, slug: str):
-    project = get_project_or_404(slug)
+    project = get_project_or_404(slug, request.user)
     metrics = compute_dashboard_metrics(project)
     return {
         "project": {
@@ -74,7 +74,7 @@ def project_stats(request, slug: str):
 
 @router.get("/{slug}/memberships")
 def list_memberships(request, slug: str):
-    project = get_project_or_404(slug)
+    project = get_project_or_404(slug, request.user)
     return {
         "items": [
             {
@@ -92,7 +92,7 @@ def list_memberships(request, slug: str):
 
 @router.post("/{slug}/memberships/invite", auth=django_auth)
 def invite_membership(request, slug: str, payload: InvitePayload):
-    project = get_project_or_404(slug)
+    project = get_project_or_404(slug, request.user)
     actor = resolve_actor(request, project)
     invite = ProjectInvite.objects.create(
         project=project,
@@ -113,7 +113,7 @@ def invite_membership(request, slug: str, payload: InvitePayload):
 
 @router.post("/{slug}/memberships/{membership_id}/update", auth=django_auth)
 def update_membership(request, slug: str, membership_id: int, payload: MembershipUpdatePayload):
-    project = get_project_or_404(slug)
+    project = get_project_or_404(slug, request.user)
     actor = resolve_actor(request, project)
     membership = project.memberships.select_related("user").get(pk=membership_id)
     if payload.role is not None:
@@ -136,7 +136,7 @@ def update_membership(request, slug: str, membership_id: int, payload: Membershi
 
 @router.post("/{slug}/memberships/{membership_id}/remove", auth=django_auth)
 def remove_membership(request, slug: str, membership_id: int):
-    project = get_project_or_404(slug)
+    project = get_project_or_404(slug, request.user)
     actor = resolve_actor(request, project)
     membership = project.memberships.select_related("user").get(pk=membership_id)
     membership.is_active = False

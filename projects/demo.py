@@ -20,6 +20,9 @@ from exports.models import ExportArtifact, ExportFormat, ExportStatus
 from projects.models import MembershipRole, Organization, Project, ProjectMembership, ProjectInvite
 from specs.models import Assumption, AssumptionStatus, SectionStatus, SpecSection, SpecVersion
 
+DEMO_PROJECT_SLUG = "q3-auth-revamp"
+DEMO_USERNAMES = {"sarah", "marcus", "lena"}
+
 
 def _set_timestamp(instance, when):
     instance.__class__.objects.filter(pk=instance.pk).update(created_at=when, updated_at=when)
@@ -28,7 +31,7 @@ def _set_timestamp(instance, when):
 
 
 def ensure_demo_workspace():
-    project = Project.objects.filter(slug="q3-auth-revamp").first()
+    project = Project.objects.filter(slug=DEMO_PROJECT_SLUG).first()
     if project:
         return project
 
@@ -82,7 +85,7 @@ def ensure_demo_workspace():
             lena.save()
 
         project, project_created = Project.objects.get_or_create(
-            slug="q3-auth-revamp",
+            slug=DEMO_PROJECT_SLUG,
             defaults={
                 "organization": org,
                 "name": "Authentication Revamp",

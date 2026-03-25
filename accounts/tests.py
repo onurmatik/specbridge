@@ -19,7 +19,7 @@ class AuthenticationFlowTests(TestCase):
         self.assertContains(directory_response, "Read-only")
         self.assertEqual(workspace_response.status_code, 200)
 
-    def test_signup_creates_user_logs_in_and_adds_primary_membership(self):
+    def test_signup_creates_user_logs_in_without_demo_membership(self):
         response = self.client.post(
             reverse("signup"),
             {
@@ -32,16 +32,17 @@ class AuthenticationFlowTests(TestCase):
                 "password1": "SpecBridge!123",
                 "password2": "SpecBridge!123",
             },
+            follow=True,
         )
 
         self.assertRedirects(response, reverse("project-directory"))
         user = User.objects.get(username="ada")
-        membership = ProjectMembership.objects.get(user=user)
         organization = Organization.objects.get(name="Analogue Labs")
-        self.assertEqual(membership.role, MembershipRole.VIEWER)
-        self.assertEqual(membership.title, "PM")
+        self.assertFalse(ProjectMembership.objects.filter(user=user).exists())
         self.assertEqual(organization.slug, "analogue-labs")
         self.assertEqual(int(self.client.session["_auth_user_id"]), user.pk)
+        self.assertContains(response, "No projects yet")
+        self.assertNotContains(response, "Authentication Revamp")
 
     def test_login_accepts_email_and_honors_next_redirect(self):
         ensure_demo_workspace()
@@ -56,6 +57,31 @@ class AuthenticationFlowTests(TestCase):
 
         self.assertRedirects(response, reverse("project-directory"))
         self.assertEqual(self.client.session["_auth_user_id"], str(User.objects.get(username="sarah").pk))
+
+    def test_login_ignores_demo_next_for_non_demo_user_with_legacy_membership(self):
+        project = ensure_demo_workspace()
+        user = User.objects.create_user(
+            username="casey",
+            email="casey@example.com",
+            password="SpecBridge!123",
+        )
+        ProjectMembership.objects.create(
+            project=project,
+            user=user,
+            role=MembershipRole.VIEWER,
+            title="Legacy viewer",
+        )
+
+        response = self.client.post(
+            reverse("login"),
+            {
+                "username": "casey",
+                "password": "SpecBridge!123",
+                "next": reverse("project-workspace", args=[project.slug]),
+            },
+        )
+
+        self.assertRedirects(response, reverse("project-directory"))
 
     def test_ajax_login_returns_json_and_logs_user_in(self):
         ensure_demo_workspace()
