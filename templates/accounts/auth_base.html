@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block auto_refresh_ms %}0{% endblock %}
+
+{% block content %}
+<div class="flex min-h-screen items-center justify-center bg-gray-50 px-6 py-10">
+  <div class="grid w-full max-w-7xl gap-8 lg:grid-cols-[1.05fr,0.95fr]">
+    <section class="overflow-hidden rounded-[28px] border border-gray-200 bg-white shadow-paper">
+      <div class="border-b border-gray-200 bg-gradient-to-br from-white via-gray-50 to-purple-50/40 p-8">
+        <div class="workspace-badge border-purple-200 bg-purple-50 text-brand-agent">
+          <iconify-icon icon="lucide:shield-check"></iconify-icon>
+          Public Access
+        </div>
+        <h1 class="mt-5 max-w-2xl font-display text-4xl font-bold tracking-tight text-gray-900">
+          Keep product, engineering, and leadership aligned in one shared spec workspace.
+        </h1>
+        <p class="mt-4 max-w-2xl text-lg leading-relaxed text-gray-600">
+          Sign up for a public account or use one of the seeded demo users to explore the workflow.
+        </p>
+      </div>
+      <div class="grid gap-4 bg-gray-50/70 p-8 sm:grid-cols-2">
+        <div class="metric-card border-brand-agent/20">
+          <div class="flex items-center justify-between">
+            <div class="text-sm font-medium text-gray-500">Shared state</div>
+            <div class="rounded-full bg-purple-50 p-2 text-brand-agent">
+              <iconify-icon icon="lucide:bot"></iconify-icon>
+            </div>
+          </div>
+          <div class="mt-4 text-2xl font-display font-bold text-gray-900">Structured decisions</div>
+          <p class="mt-2 text-sm text-gray-500">Specs, questions, blockers, and exports stay tied together.</p>
+        </div>
+        <div class="metric-card border-brand-decision/20">
+          <div class="flex items-center justify-between">
+            <div class="text-sm font-medium text-gray-500">Demo accounts</div>
+            <div class="rounded-full bg-green-50 p-2 text-brand-decision">
+              <iconify-icon icon="lucide:key-round"></iconify-icon>
+            </div>
+          </div>
+          <div class="mt-4 space-y-2 text-sm text-gray-600">
+            <div><span class="font-medium text-gray-900">Usernames:</span> sarah, marcus, lena</div>
+            <div><span class="font-medium text-gray-900">Password:</span> specbridge</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="workspace-panel self-center p-8">
+      {% block auth_card %}{% endblock %}
+    </section>
+  </div>
+</div>
+{% endblock %}

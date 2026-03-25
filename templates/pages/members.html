@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+
+{% block title %}SpecBridge · Members{% endblock %}
+
+{% block content %}
+<div class="app-shell">
+  {% include "components/global_sidebar.html" %}
+  <main class="flex min-w-0 flex-1 flex-col bg-gray-50">
+    {% include "components/page_header.html" %}
+    <div class="flex-1 overflow-y-auto">
+      <div class="mx-auto grid max-w-7xl gap-8 px-8 py-8 pb-24 lg:grid-cols-[1.1fr,0.9fr]">
+        <section>
+          <div class="mb-6 flex items-end justify-between">
+            <div>
+              <span class="workspace-badge border-blue-100 bg-blue-50 text-blue-700">Gap-closing surface</span>
+              <h1 class="mt-4 font-display text-3xl font-bold tracking-tight text-gray-900">Members & Roles</h1>
+              <p class="mt-2 text-sm text-gray-500">Collaboration is explicit here: ownership, invites, and roles are part of the product state.</p>
+            </div>
+          </div>
+          <div class="space-y-5">
+            {% for membership in memberships %}
+              <div class="workspace-panel p-6">
+                <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                  <div class="flex items-center gap-4">
+                    <div class="h-14 w-14 overflow-hidden rounded-2xl border border-gray-200 bg-gray-100">
+                      <img src="{{ membership.user.avatar_url }}" alt="{{ membership.user.display_name }}" class="h-full w-full object-cover">
+                    </div>
+                    <div>
+                      <div class="flex items-center gap-2">
+                        <h2 class="text-lg font-medium text-gray-900">{{ membership.user.display_name }}</h2>
+                        <span class="workspace-badge border-gray-200 bg-gray-50 text-gray-600">{{ membership.get_role_display }}</span>
+                      </div>
+                      <p class="mt-1 text-sm text-gray-500">{{ membership.title|default:membership.user.title }}</p>
+                      <p class="mt-2 text-xs text-gray-400">{{ membership.user.email }}</p>
+                    </div>
+                  </div>
+                  <div class="flex gap-2">
+                    {% if membership.is_active %}
+                      {% if request.user.is_authenticated %}
+                        <button class="secondary-button !px-3 !py-1.5 text-xs" data-api-post="/api/projects/{{ project.slug }}/memberships/{{ membership.id }}/remove">Deactivate</button>
+                      {% else %}
+                        <button type="button" class="secondary-button !px-3 !py-1.5 text-xs" data-auth-modal-trigger data-auth-mode="login">Sign In to Edit</button>
+                      {% endif %}
+                    {% endif %}
+                  </div>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        </section>
+
+        <div class="space-y-6">
+          <section class="workspace-panel p-6">
+            <h2 class="font-display text-lg font-bold text-gray-900">Invite Member</h2>
+            {% if request.user.is_authenticated %}
+              <form class="mt-5 space-y-4" data-api-form="/api/projects/{{ project.slug }}/memberships/invite">
+                <div>
+                  <label class="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500">Email</label>
+                  <input type="email" name="email" required class="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-200" placeholder="teammate@example.com">
+                </div>
+                <div>
+                  <label class="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500">Role</label>
+                  <select name="role" class="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-200">
+                    <option value="viewer">Viewer</option>
+                    <option value="product">Product</option>
+                    <option value="engineering">Engineering</option>
+                    <option value="design">Design</option>
+                    <option value="ceo">CEO</option>
+                  </select>
+                </div>
+                <button type="submit" class="primary-button w-full">
+                  <iconify-icon icon="lucide:send"></iconify-icon>
+                  Send Invite
+                </button>
+              </form>
+            {% else %}
+              <div class="mt-5 rounded-2xl border border-dashed border-gray-300 bg-gray-50 px-5 py-6">
+                <p class="text-sm leading-relaxed text-gray-600">Public visitors can inspect roles and pending invites, but adding collaborators requires an account.</p>
+                <button type="button" class="primary-button mt-4 w-full" data-auth-modal-trigger data-auth-mode="signup">
+                  <iconify-icon icon="lucide:user-plus"></iconify-icon>
+                  Sign In to Invite
+                </button>
+              </div>
+            {% endif %}
+          </section>
+
+          <section class="workspace-panel p-6">
+            <div class="mb-4 flex items-center justify-between">
+              <h2 class="font-display text-lg font-bold text-gray-900">Pending Invites</h2>
+              <span class="rounded-md bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600">{{ invites|length }}</span>
+            </div>
+            <div class="space-y-3">
+              {% for invite in invites %}
+                <div class="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                  <div class="flex items-center justify-between gap-3">
+                    <div>
+                      <div class="text-sm font-medium text-gray-900">{{ invite.email }}</div>
+                      <div class="mt-1 text-xs text-gray-500">Role: {{ invite.get_role_display }} · {{ invite.status|title }}</div>
+                    </div>
+                    <span class="workspace-badge border-gray-200 bg-white text-gray-600">{{ invite.status|title }}</span>
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+{% endblock %}

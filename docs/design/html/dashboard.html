@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en" class="antialiased">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Align - Team Alignment Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://code.iconify.design/iconify-icon/1.0.7/iconify-icon.min.js"></script>
+  <style>
+    @import url('https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@800,500,700&f[]=satoshi@400,500,700&display=swap');
+    
+    :root {
+      --font-sans: 'Satoshi', sans-serif;
+      --font-display: 'Cabinet Grotesk', sans-serif;
+    }
+    
+    body {
+      font-family: var(--font-sans);
+      background-color: #FAFAFA;
+      color: #18181B;
+      margin: 0;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    h1, h2, h3, h4, h5, h6, .font-display {
+      font-family: var(--font-display);
+    }
+
+    /* Custom scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #E4E4E7;
+      border-radius: 10px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #D4D4D8;
+    }
+
+    /* Animations */
+    @keyframes pulse-soft {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.6; }
+    }
+    .animate-pulse-soft {
+      animation: pulse-soft 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+    
+    .progress-bar-fill {
+      transition: width 1s ease-out;
+    }
+  </style>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            gray: {
+              50: '#FAFAFA',
+              100: '#F4F4F5',
+              200: '#E4E4E7',
+              300: '#D4D4D8',
+              400: '#A1A1AA',
+              500: '#71717A',
+              600: '#52525B',
+              700: '#3F3F46',
+              800: '#27272A',
+              900: '#18181B',
+            },
+            brand: {
+              agent: '#8B5CF6',
+              decision: '#10B981',
+              warning: '#F59E0B',
+              danger: '#EF4444',
+            }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body>
+  <!-- ROOT CONTAINER -->
+  <div class="flex h-screen w-full bg-gray-50 overflow-hidden">
+    
+    <!-- SLIM GLOBAL SIDEBAR -->
+    <sd-component componentId="c499c3eb-6f50-46ff-9945-e4011f25ff54" name="GlobalSidebar" props='{"activeItem":"team"}'></sd-component>
+
+    <!-- MAIN WORKSPACE -->
+    <main class="flex-1 flex flex-col min-w-0 bg-gray-50">
+      
+      <!-- TOP HEADER -->
+      <sd-component componentId="d1c411f2-4007-453c-ac17-8de1723af111" name="PageHeader" props='{"projectsHref":"#","currentProjectHref":"#","statusLabel":"Aligning","unresolvedCount":3}'></sd-component>
+
+      <!-- DASHBOARD CONTENT -->
+      <div class="flex-1 overflow-y-auto relative">
+        <!-- Subtle top gradient -->
+        <div class="sticky top-0 w-full h-8 bg-gradient-to-b from-gray-50 to-transparent z-10 pointer-events-none"></div>
+
+        <div class="max-w-7xl mx-auto px-8 py-4 pb-24 space-y-8">
+          
+          <!-- Dashboard Header -->
+          <div class="flex items-end justify-between mb-2">
+            <div>
+              <div class="flex items-center gap-2 mb-2">
+                <span class="px-2.5 py-1 rounded-md bg-white border border-gray-200 text-gray-600 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5">
+                  <iconify-icon icon="lucide:layout-dashboard" class="text-brand-agent"></iconify-icon>
+                  Project Pulse
+                </span>
+              </div>
+              <h1 class="font-display font-bold text-3xl text-gray-900 tracking-tight">
+                Team Alignment Dashboard
+              </h1>
+            </div>
+            <div class="text-sm text-gray-500 flex items-center gap-1.5">
+              <iconify-icon icon="lucide:refresh-cw" class="text-xs"></iconify-icon>
+              Live sync active
+            </div>
+          </div>
+
+          <!-- ROW 1: METRICS OVERVIEW -->
+          <section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <!-- Metric 1: Alignment -->
+            <div class="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm flex flex-col justify-between group hover:border-gray-300 transition-colors">
+              <div class="flex items-center justify-between mb-4">
+                <div class="text-sm font-medium text-gray-500">Overall Alignment</div>
+                <div class="w-8 h-8 rounded-full bg-green-50 flex items-center justify-center text-brand-decision">
+                  <iconify-icon icon="lucide:users"></iconify-icon>
+                </div>
+              </div>
+              <div class="flex items-baseline gap-2">
+                <div class="text-4xl font-display font-bold text-gray-900">82<span class="text-2xl text-gray-400">%</span></div>
+                <div class="text-xs font-medium text-brand-decision flex items-center">
+                  <iconify-icon icon="lucide:trending-up" class="mr-0.5"></iconify-icon> +5% this week
+                </div>
+              </div>
+            </div>
+
+            <!-- Metric 2: Maturity Score -->
+            <div class="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm flex flex-col justify-between group hover:border-gray-300 transition-colors">
+              <div class="flex items-center justify-between mb-4">
+                <div class="text-sm font-medium text-gray-500">Spec Maturity Score</div>
+                <div class="w-8 h-8 rounded-full bg-purple-50 flex items-center justify-center text-brand-agent">
+                  <iconify-icon icon="lucide:file-check-2"></iconify-icon>
+                </div>
+              </div>
+              <div class="flex items-baseline gap-2">
+                <div class="text-4xl font-display font-bold text-gray-900">74<span class="text-2xl text-gray-400">/100</span></div>
+                <div class="text-xs font-medium text-gray-500">
+                  Drafting Phase
+                </div>
+              </div>
+            </div>
+
+            <!-- Metric 3: Decision Velocity -->
+            <div class="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm flex flex-col justify-between group hover:border-gray-300 transition-colors">
+              <div class="flex items-center justify-between mb-4">
+                <div class="text-sm font-medium text-gray-500">Decision Velocity</div>
+                <div class="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center text-blue-600">
+                  <iconify-icon icon="lucide:zap"></iconify-icon>
+                </div>
+              </div>
+              <div class="flex items-baseline gap-2">
+                <div class="text-4xl font-display font-bold text-gray-900">4.2</div>
+                <div class="text-xs font-medium text-gray-500">
+                  decisions / day
+                </div>
+              </div>
+            </div>
+
+            <!-- Metric 4: Blockers -->
+            <div class="bg-white rounded-2xl border border-brand-danger/30 p-6 shadow-sm flex flex-col justify-between relative overflow-hidden">
+              <div class="absolute top-0 left-0 w-1 h-full bg-brand-danger"></div>
+              <div class="flex items-center justify-between mb-4">
+                <div class="text-sm font-medium text-brand-danger">Critical Blockers</div>
+                <div class="w-8 h-8 rounded-full bg-red-50 flex items-center justify-center text-brand-danger animate-pulse-soft">
+                  <iconify-icon icon="lucide:shield-alert"></iconify-icon>
+                </div>
+              </div>
+              <div class="flex items-baseline gap-2">
+                <div class="text-4xl font-display font-bold text-gray-900">1</div>
+                <div class="text-xs font-medium text-brand-danger flex items-center">
+                  Requires immediate attention
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- MAIN GRID: LEFT (8 cols) / RIGHT (4 cols) -->
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            
+            <!-- LEFT COLUMN (Span 8) -->
+            <div class="lg:col-span-8 space-y-8">
+              
+              <!-- Alignment Breakdown -->
+              <section class="bg-white rounded-2xl border border-gray-200 p-8 shadow-sm">
+                <div class="flex items-center justify-between mb-8">
+                  <h2 class="font-display font-bold text-xl text-gray-900 flex items-center gap-2">
+                    <iconify-icon icon="lucide:bar-chart-3" class="text-gray-400"></iconify-icon>
+                    Alignment by Spec Section
+                  </h2>
+                  <button class="text-sm text-brand-agent font-medium hover:underline">View Full Spec &rarr;</button>
+                </div>
+
+                <div class="space-y-6">
+                  <!-- Bar 1 -->
+                  <div class="group">
+                    <div class="flex justify-between items-end mb-2">
+                      <span class="text-sm font-medium text-gray-900">1. Problem & Goals</span>
+                      <span class="text-sm font-bold text-brand-decision">100%</span>
+                    </div>
+                    <div class="w-full h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div class="h-full bg-brand-decision progress-bar-fill" style="width: 100%"></div>
+                    </div>
+                  </div>
+
+                  <!-- Bar 2 -->
+                  <div class="group">
+                    <div class="flex justify-between items-end mb-2">
+                      <span class="text-sm font-medium text-gray-900">2. Features & User Flow</span>
+                      <span class="text-sm font-bold text-brand-decision">90%</span>
+                    </div>
+                    <div class="w-full h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div class="h-full bg-brand-decision progress-bar-fill opacity-90" style="width: 90%"></div>
+                    </div>
+                  </div>
+
+                  <!-- Bar 3 -->
+                  <div class="group">
+                    <div class="flex justify-between items-end mb-2">
+                      <div class="flex items-center gap-2">
+                        <span class="text-sm font-medium text-gray-900">3. Technical Implementation</span>
+                        <span class="px-1.5 py-0.5 rounded bg-amber-50 text-brand-warning text-[10px] font-bold uppercase tracking-wider">Active Debate</span>
+                      </div>
+                      <span class="text-sm font-bold text-brand-warning">60%</span>
+                    </div>
+                    <div class="w-full h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div class="h-full bg-brand-warning progress-bar-fill" style="width: 60%"></div>
+                    </div>
+                  </div>
+
+                  <!-- Bar 4 -->
+                  <div class="group">
+                    <div class="flex justify-between items-end mb-2">
+                      <span class="text-sm font-medium text-gray-900">4. UX & Interfaces</span>
+                      <span class="text-sm font-bold text-brand-warning">40%</span>
+                    </div>
+                    <div class="w-full h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div class="h-full bg-brand-warning progress-bar-fill opacity-80" style="width: 40%"></div>
+                    </div>
+                  </div>
+
+                  <!-- Bar 5 -->
+                  <div class="group">
+                    <div class="flex justify-between items-end mb-2">
+                      <div class="flex items-center gap-2">
+                        <span class="text-sm font-medium text-gray-900">5. Risks & Security</span>
+                        <span class="px-1.5 py-0.5 rounded bg-red-50 text-brand-danger text-[10px] font-bold uppercase tracking-wider">Blocked</span>
+                      </div>
+                      <span class="text-sm font-bold text-brand-danger">15%</span>
+                    </div>
+                    <div class="w-full h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div class="h-full bg-brand-danger progress-bar-fill" style="width: 15%"></div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <!-- Sub-Grid: Questions & Blockers -->
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                
+                <!-- Open Questions -->
+                <section class="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
+                  <h2 class="font-display font-bold text-lg text-gray-900 mb-6 flex items-center justify-between">
+                    Open Questions
+                    <span class="bg-gray-100 text-gray-600 text-xs py-1 px-2 rounded-md font-medium">3 Total</span>
+                  </h2>
+                  
+                  <div class="space-y-4">
+                    <!-- Tech Category -->
+                    <div class="flex items-center justify-between p-3 rounded-xl bg-amber-50/50 border border-amber-100">
+                      <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center text-brand-warning">
+                          <iconify-icon icon="lucide:code-2"></iconify-icon>
+                        </div>
+                        <div>
+                          <div class="text-sm font-medium text-gray-900">Technical</div>
+                          <div class="text-xs text-brand-warning">High Severity</div>
+                        </div>
+                      </div>
+                      <div class="text-xl font-display font-bold text-brand-warning">2</div>
+                    </div>
+
+                    <!-- Business Category -->
+                    <div class="flex items-center justify-between p-3 rounded-xl bg-amber-50/30 border border-amber-100/50">
+                      <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-lg bg-orange-100 flex items-center justify-center text-orange-600">
+                          <iconify-icon icon="lucide:briefcase"></iconify-icon>
+                        </div>
+                        <div>
+                          <div class="text-sm font-medium text-gray-900">Business</div>
+                          <div class="text-xs text-orange-600">Medium Severity</div>
+                        </div>
+                      </div>
+                      <div class="text-xl font-display font-bold text-orange-600">1</div>
+                    </div>
+
+                    <!-- UX Category (Empty) -->
+                    <div class="flex items-center justify-between p-3 rounded-xl bg-gray-50 border border-gray-100 opacity-60">
+                      <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-lg bg-gray-200 flex items-center justify-center text-gray-500">
+                          <iconify-icon icon="lucide:pen-tool"></iconify-icon>
+                        </div>
+                        <div>
+                          <div class="text-sm font-medium text-gray-600">UX / Design</div>
+                          <div class="text-xs text-gray-400">All Clear</div>
+                        </div>
+                      </div>
+                      <div class="text-xl font-display font-bold text-gray-400">0</div>
+                    </div>
+                  </div>
+                </section>
+
+                <!-- Blockers & Risks -->
+                <section class="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm relative overflow-hidden">
+                  <div class="absolute top-0 left-0 w-full h-1 bg-brand-danger"></div>
+                  <h2 class="font-display font-bold text-lg text-gray-900 mb-6 flex items-center gap-2">
+                    <iconify-icon icon="lucide:shield-alert" class="text-brand-danger"></iconify-icon>
+                    Active Blockers
+                  </h2>
+
+                  <div class="space-y-4">
+                    <!-- Blocker Item -->
+                    <div class="p-4 rounded-xl bg-red-50 border border-red-100 relative">
+                      <div class="flex items-start gap-3">
+                         <iconify-icon icon="lucide:alert-octagon" class="text-brand-danger mt-0.5"></iconify-icon>
+                         <div>
+                           <h4 class="text-sm font-medium text-gray-900 mb-1">Payment integration timeline dependency</h4>
+                           <p class="text-xs text-gray-700 leading-relaxed mb-3">
+                             Cannot finalize auth flow without confirming if Stripe identity verification will be required in Phase 1.
+                           </p>
+                           <div class="flex items-center justify-between">
+                             <span class="text-[10px] font-bold uppercase tracking-wider text-brand-danger bg-red-100 px-2 py-1 rounded">
+                               Critical Priority
+                             </span>
+                             <button class="text-xs font-medium text-gray-600 hover:text-gray-900 underline">
+                               Discuss
+                             </button>
+                           </div>
+                         </div>
+                      </div>
+                    </div>
+
+                    <!-- Risk Item -->
+                    <div class="p-4 rounded-xl border border-gray-200 relative">
+                      <div class="flex items-start gap-3">
+                         <iconify-icon icon="lucide:flag" class="text-brand-warning mt-0.5"></iconify-icon>
+                         <div>
+                           <h4 class="text-sm font-medium text-gray-900 mb-1">Email provider latency</h4>
+                           <p class="text-xs text-gray-500 leading-relaxed">
+                             Monitored risk: SendGrid delays could increase bounce rate if magic links take >10s to arrive.
+                           </p>
+                         </div>
+                      </div>
+                    </div>
+
+                  </div>
+                </section>
+              </div>
+
+            </div>
+
+            <!-- RIGHT COLUMN (Span 4) -->
+            <div class="lg:col-span-4 space-y-8">
+              
+              <!-- Team Status -->
+              <section class="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
+                <div class="flex items-center justify-between mb-6">
+                  <h2 class="font-display font-bold text-lg text-gray-900">
+                    Team Status
+                  </h2>
+                  <span class="flex items-center gap-1.5 text-xs font-medium text-brand-decision bg-green-50 px-2 py-1 rounded-md">
+                    <div class="w-1.5 h-1.5 rounded-full bg-brand-decision animate-pulse"></div>
+                    3 Active
+                  </span>
+                </div>
+
+                <div class="space-y-2">
+                  <!-- Team Member: Sarah -->
+                  <div class="flex items-start gap-3 p-3 rounded-xl bg-gray-50/50 border border-transparent hover:border-gray-200 transition-all">
+                    <div class="relative flex-shrink-0">
+                      <div class="w-10 h-10 rounded-full bg-gray-100 border border-gray-200 overflow-hidden">
+                        <img src="https://api.dicebear.com/7.x/notionists/svg?seed=CEO&backgroundColor=transparent" alt="Sarah" class="w-full h-full object-cover">
+                      </div>
+                      <div class="absolute -bottom-1 -right-1 w-4 h-4 bg-brand-decision border-2 border-white rounded-full flex items-center justify-center">
+                        <iconify-icon icon="lucide:check" class="text-white text-[8px] font-bold"></iconify-icon>
+                      </div>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                      <div class="flex justify-between items-baseline mb-0.5">
+                        <span class="text-sm font-medium text-gray-900 truncate">Sarah <span class="text-xs font-normal text-gray-400 ml-1">CEO</span></span>
+                        <span class="text-[10px] text-gray-400 whitespace-nowrap">5m ago</span>
+                      </div>
+                      <p class="text-xs text-gray-500 truncate">Fully aligned. No pending actions.</p>
+                    </div>
+                  </div>
+
+                  <!-- Team Member: Marcus -->
+                  <div class="flex items-start gap-3 p-3 rounded-xl bg-amber-50/30 border border-amber-100/50 transition-all">
+                    <div class="relative flex-shrink-0">
+                      <div class="w-10 h-10 rounded-full bg-blue-50 border border-blue-100 overflow-hidden">
+                        <img src="https://api.dicebear.com/7.x/notionists/svg?seed=Marcus&backgroundColor=transparent" alt="Marcus" class="w-full h-full object-cover">
+                      </div>
+                      <div class="absolute -bottom-1 -right-1 w-4 h-4 bg-white border border-gray-200 shadow-sm rounded-full flex items-center justify-center text-brand-warning">
+                        <iconify-icon icon="lucide:loader-2" class="animate-spin text-[10px]"></iconify-icon>
+                      </div>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                      <div class="flex justify-between items-baseline mb-1">
+                        <span class="text-sm font-medium text-gray-900 truncate">Marcus <span class="text-xs font-normal text-gray-400 ml-1">Lead Eng</span></span>
+                        <span class="text-[10px] text-brand-warning font-medium whitespace-nowrap flex items-center gap-1">
+                          <div class="w-1.5 h-1.5 rounded-full bg-brand-warning"></div> Active
+                        </span>
+                      </div>
+                      <div class="inline-block max-w-full">
+                        <span class="text-xs font-medium text-brand-warning bg-white border border-amber-200 rounded px-2 py-0.5 block truncate shadow-sm">
+                          Pending: Review email fallback strategy
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Agent Status -->
+                  <div class="flex items-start gap-3 p-3 rounded-xl border border-purple-100 bg-purple-50/30 transition-all mt-4">
+                    <div class="relative flex-shrink-0">
+                      <div class="w-10 h-10 rounded-xl bg-purple-100 border border-purple-200 flex items-center justify-center text-brand-agent">
+                        <iconify-icon icon="lucide:bot" class="text-lg"></iconify-icon>
+                      </div>
+                      <div class="absolute -top-1 -right-1 w-3 h-3 bg-brand-agent border-2 border-white rounded-full animate-pulse-soft"></div>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                      <div class="flex justify-between items-baseline mb-0.5">
+                        <span class="text-sm font-medium text-brand-agent">Align Agent</span>
+                        <span class="text-[10px] text-purple-400">Always</span>
+                      </div>
+                      <p class="text-xs text-gray-600">Monitoring chat for unaddressed technical risks.</p>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <!-- Decision Timeline -->
+              <section class="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
+                <div class="flex items-center justify-between mb-6">
+                  <h2 class="font-display font-bold text-lg text-gray-900">
+                    Decision Timeline
+                  </h2>
+                  <button class="p-1.5 text-gray-400 hover:bg-gray-100 rounded-md transition-colors">
+                    <iconify-icon icon="lucide:more-horizontal"></iconify-icon>
+                  </button>
+                </div>
+
+                <!-- Vertical Timeline -->
+                <div class="relative pl-3 space-y-6 before:absolute before:inset-0 before:ml-4 before:h-full before:w-px before:bg-gradient-to-b before:from-gray-300 before:via-gray-200 before:to-transparent">
+                  
+                  <!-- Item 1 -->
+                  <div class="relative flex gap-4">
+                    <div class="absolute left-[1px] top-1.5 w-2 h-2 rounded-full bg-brand-decision ring-4 ring-white z-10"></div>
+                    <div class="ml-5 flex-1">
+                      <div class="flex items-baseline justify-between mb-1">
+                        <span class="text-[10px] font-bold uppercase tracking-wider text-gray-400">11:10 AM today</span>
+                      </div>
+                      <h4 class="text-sm font-medium text-gray-900 mb-1">Retain SSO, Migrate Passwords</h4>
+                      <div class="flex items-center gap-1.5 text-xs text-gray-500">
+                        <img src="https://api.dicebear.com/7.x/notionists/svg?seed=CEO&backgroundColor=transparent" class="w-4 h-4 rounded-full bg-gray-100" alt="">
+                        Decided by Sarah
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Item 2 -->
+                  <div class="relative flex gap-4">
+                    <div class="absolute left-[1px] top-1.5 w-2 h-2 rounded-full bg-brand-decision ring-4 ring-white z-10"></div>
+                    <div class="ml-5 flex-1">
+                      <div class="flex items-baseline justify-between mb-1">
+                        <span class="text-[10px] font-bold uppercase tracking-wider text-gray-400">10:42 AM today</span>
+                      </div>
+                      <h4 class="text-sm font-medium text-gray-900 mb-1">Shift to Magic Links exclusively</h4>
+                      <div class="flex items-center gap-1.5 text-xs text-gray-500">
+                        <img src="https://api.dicebear.com/7.x/notionists/svg?seed=CEO&backgroundColor=transparent" class="w-4 h-4 rounded-full bg-gray-100" alt="">
+                        Decided by Sarah
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Item 3 (Older) -->
+                  <div class="relative flex gap-4 opacity-60">
+                    <div class="absolute left-[1px] top-1.5 w-2 h-2 rounded-full bg-gray-300 ring-4 ring-white z-10"></div>
+                    <div class="ml-5 flex-1">
+                      <div class="flex items-baseline justify-between mb-1">
+                        <span class="text-[10px] font-bold uppercase tracking-wider text-gray-400">Yesterday</span>
+                      </div>
+                      <h4 class="text-sm font-medium text-gray-600 mb-1">Kill Q2 scope to focus on Auth</h4>
+                      <div class="flex items-center gap-1.5 text-xs text-gray-500">
+                        <img src="https://api.dicebear.com/7.x/notionists/svg?seed=Marcus&backgroundColor=transparent" class="w-4 h-4 rounded-full bg-gray-100" alt="">
+                        Proposed by Marcus
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+                
+                <button class="w-full mt-6 py-2 border border-gray-200 rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors">
+                  View Full History
+                </button>
+              </section>
+
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

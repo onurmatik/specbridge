@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+
+{% block title %}SpecBridge · Assumptions{% endblock %}
+
+{% block content %}
+<div class="app-shell">
+  {% include "components/global_sidebar.html" %}
+  <main class="flex min-w-0 flex-1 flex-col bg-gray-50">
+    {% include "components/page_header.html" %}
+    <div class="flex-1 overflow-y-auto">
+      <div class="mx-auto max-w-7xl px-8 py-8 pb-24">
+        <div class="mb-8 flex items-end justify-between">
+          <div>
+            <span class="workspace-badge border-purple-100 bg-purple-50 text-brand-agent">Gap-closing surface</span>
+            <h1 class="mt-4 font-display text-3xl font-bold tracking-tight text-gray-900">Assumptions Register</h1>
+            <p class="mt-2 text-sm text-gray-500">Make hidden bets explicit, then validate or invalidate them against the evolving spec.</p>
+            {% if not request.user.is_authenticated %}
+              <p class="mt-2 text-xs font-medium uppercase tracking-wider text-gray-400">Public preview. Sign in to add or review assumptions.</p>
+            {% endif %}
+          </div>
+          {% if request.user.is_authenticated %}
+            <button class="primary-button">
+              <iconify-icon icon="lucide:plus"></iconify-icon>
+              Add Assumption
+            </button>
+          {% else %}
+            <button type="button" class="primary-button" data-auth-modal-trigger data-auth-mode="signup">
+              <iconify-icon icon="lucide:user-plus"></iconify-icon>
+              Sign In to Add
+            </button>
+          {% endif %}
+        </div>
+
+        <section class="grid grid-cols-1 gap-6 md:grid-cols-3">
+          <div class="metric-card">
+            <div class="text-sm font-medium text-gray-500">Open</div>
+            <div class="mt-4 font-display text-4xl font-bold text-gray-900">{{ assumption_counts.open }}</div>
+          </div>
+          <div class="metric-card">
+            <div class="text-sm font-medium text-gray-500">Validated</div>
+            <div class="mt-4 font-display text-4xl font-bold text-gray-900">{{ assumption_counts.validated }}</div>
+          </div>
+          <div class="metric-card">
+            <div class="text-sm font-medium text-gray-500">Invalidated</div>
+            <div class="mt-4 font-display text-4xl font-bold text-gray-900">{{ assumption_counts.invalidated }}</div>
+          </div>
+        </section>
+
+        <div class="mt-8 space-y-5">
+          {% for assumption in assumptions %}
+            <section class="workspace-panel p-6">
+              <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div class="min-w-0 flex-1">
+                  <div class="mb-3 flex flex-wrap items-center gap-2">
+                    <span class="workspace-badge {% if assumption.status == 'validated' %}border-green-100 bg-green-50 text-green-700{% elif assumption.status == 'invalidated' %}border-red-100 bg-red-50 text-red-700{% else %}border-amber-100 bg-amber-50 text-amber-700{% endif %}">
+                      {{ assumption.get_status_display }}
+                    </span>
+                    <span class="workspace-badge border-gray-200 bg-gray-50 text-gray-600">{{ assumption.impact|title }} impact</span>
+                    {% if assumption.section %}
+                      <a href="{% url 'project-workspace' project.slug %}" class="workspace-badge border-blue-100 bg-blue-50 text-blue-700">{{ assumption.section.title }}</a>
+                    {% endif %}
+                  </div>
+                  <h2 class="font-display text-2xl font-bold text-gray-900">{{ assumption.title }}</h2>
+                  <p class="mt-3 max-w-3xl text-sm leading-relaxed text-gray-600">{{ assumption.description }}</p>
+                  <div class="mt-4 text-xs text-gray-500">
+                    Created by {{ assumption.created_by.display_name }}{% if assumption.validated_by %} · Reviewed by {{ assumption.validated_by.display_name }}{% endif %}
+                  </div>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                  {% if request.user.is_authenticated %}
+                    {% if assumption.status != 'validated' %}
+                      <button class="secondary-button !px-3 !py-1.5 text-xs" data-api-post="/api/projects/{{ project.slug }}/assumptions/{{ assumption.id }}/validate">Validate</button>
+                    {% endif %}
+                    {% if assumption.status != 'invalidated' %}
+                      <button class="secondary-button !px-3 !py-1.5 text-xs" data-api-post="/api/projects/{{ project.slug }}/assumptions/{{ assumption.id }}/invalidate">Invalidate</button>
+                    {% endif %}
+                  {% else %}
+                    <button type="button" class="secondary-button !px-3 !py-1.5 text-xs" data-auth-modal-trigger data-auth-mode="login">Sign In to Review</button>
+                  {% endif %}
+                </div>
+              </div>
+            </section>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+{% endblock %}

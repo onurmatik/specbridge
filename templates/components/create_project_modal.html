@@ -1,0 +1,121 @@
+<div data-project-modal class="fixed inset-0 z-50 hidden bg-gray-900/60 px-4 py-8 backdrop-blur-sm">
+  <div class="flex min-h-full items-center justify-center">
+    <div class="workspace-panel relative max-h-[calc(100vh-4rem)] w-full max-w-4xl overflow-y-auto shadow-paper">
+      <button
+        type="button"
+        data-project-modal-close
+        class="absolute right-5 top-5 z-10 rounded-full p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-900"
+        aria-label="Close create project dialog"
+      >
+        <iconify-icon icon="lucide:x" class="text-xl"></iconify-icon>
+      </button>
+
+      <div class="grid lg:grid-cols-[1.05fr,0.95fr]">
+        <section class="border-b border-gray-200 bg-gradient-to-br from-white via-gray-50 to-purple-50/50 p-8 sm:p-10 lg:border-b-0 lg:border-r">
+          <span class="workspace-badge border-purple-200 bg-purple-50 text-brand-agent">
+            <iconify-icon icon="lucide:folder-plus"></iconify-icon>
+            New Workspace
+          </span>
+          <h3 class="mt-5 max-w-lg font-display text-4xl font-bold tracking-tight text-gray-900">Create Project</h3>
+          <p class="mt-4 max-w-xl text-base leading-relaxed text-gray-600">
+            Start a new revisable source of truth with a ready-to-edit spec scaffold, creator access, and an initial version snapshot.
+          </p>
+
+          <div class="mt-8 space-y-4">
+            <div class="rounded-2xl border border-gray-200 bg-white/80 p-4 shadow-card">
+              <div class="flex items-start gap-3">
+                <div class="rounded-xl bg-purple-100 p-2 text-brand-agent">
+                  <iconify-icon icon="lucide:layers-3"></iconify-icon>
+                </div>
+                <div>
+                  <div class="text-sm font-medium text-gray-900">Spec scaffold included</div>
+                  <p class="mt-1 text-xs leading-relaxed text-gray-500">Problem framing, solution, technical implementation, UX, and risks sections are created automatically.</p>
+                </div>
+              </div>
+            </div>
+            <div class="rounded-2xl border border-gray-200 bg-white/80 p-4 shadow-card">
+              <div class="flex items-start gap-3">
+                <div class="rounded-xl bg-blue-100 p-2 text-blue-600">
+                  <iconify-icon icon="lucide:history"></iconify-icon>
+                </div>
+                <div>
+                  <div class="text-sm font-medium text-gray-900">Version history starts at v1</div>
+                  <p class="mt-1 text-xs leading-relaxed text-gray-500">The first snapshot is captured immediately so history and diff views are available from the start.</p>
+                </div>
+              </div>
+            </div>
+            <div class="rounded-2xl border border-gray-200 bg-white/80 p-4 shadow-card">
+              <div class="flex items-start gap-3">
+                <div class="rounded-xl bg-green-100 p-2 text-brand-decision">
+                  <iconify-icon icon="lucide:users"></iconify-icon>
+                </div>
+                <div>
+                  <div class="text-sm font-medium text-gray-900">You are added automatically</div>
+                  <p class="mt-1 text-xs leading-relaxed text-gray-500">The creator becomes the first active workspace member and can start refining immediately.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="bg-white p-8 sm:p-10">
+          <div class="mb-6">
+            <h4 class="font-display text-2xl font-bold tracking-tight text-gray-900">Workspace Details</h4>
+            <p class="mt-2 text-sm text-gray-500">Keep it lean for now. We only need a project name, and you can optionally add a tagline for a bit more context.</p>
+            {% if not request.user.is_authenticated %}
+              <p class="mt-3 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs font-medium leading-relaxed text-blue-700">
+                You can draft the project here first. We will ask you to sign in before the workspace is created.
+              </p>
+            {% endif %}
+          </div>
+
+          <div data-project-errors class="mb-5 hidden rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700"></div>
+
+          <form
+            method="post"
+            action="/api/projects/create"
+            data-project-create-form
+            class="space-y-4"
+          >
+            <div>
+              <label class="mb-2 block text-sm font-medium text-gray-700">Project name</label>
+              <input
+                type="text"
+                name="project_name"
+                placeholder="Launch Operations Console"
+                class="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-200"
+              >
+              <p data-project-field-error="project_name" class="mt-2 hidden text-sm text-red-600"></p>
+            </div>
+
+            <div>
+              <label class="mb-2 block text-sm font-medium text-gray-700">Tagline</label>
+              <input
+                type="text"
+                name="tagline"
+                placeholder="Optional. A short line that gives the workspace context."
+                class="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-200"
+              >
+              <p data-project-field-error="tagline" class="mt-2 hidden text-sm text-red-600"></p>
+            </div>
+
+            <div class="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+              <div class="text-sm font-medium text-gray-900">What gets created</div>
+              <p class="mt-1 text-xs leading-relaxed text-gray-500">
+                Project record, a default workspace org, your first membership, five starter sections, and version <span class="font-medium text-gray-900">v1</span>.
+              </p>
+            </div>
+
+            <div class="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button type="button" data-project-modal-close class="secondary-button">Cancel</button>
+              <button type="submit" data-project-submit class="primary-button">
+                <iconify-icon icon="lucide:folder-plus"></iconify-icon>
+                Create Project
+              </button>
+            </div>
+          </form>
+        </section>
+      </div>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,25 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en" class="antialiased">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}SpecBridge{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'dist/app.css' %}">
+  <script defer src="https://code.iconify.design/iconify-icon/1.0.7/iconify-icon.min.js"></script>
+  {% block extra_head %}{% endblock %}
+</head>
+<body
+  class="bg-gray-50 text-gray-900"
+  data-auto-refresh="{% block auto_refresh_ms %}45000{% endblock %}"
+  data-authenticated="{% if request.user.is_authenticated %}true{% else %}false{% endif %}"
+  data-current-path="{{ request.get_full_path }}"
+>
+  {% block content %}{% endblock %}
+  {% if request.resolver_match.url_name != "login" and request.resolver_match.url_name != "signup" %}
+    {% include "accounts/auth_modal.html" %}
+  {% endif %}
+  <script src="{% static 'js/app.js' %}"></script>
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

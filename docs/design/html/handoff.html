@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="en" class="antialiased">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Align - Export & Handoff</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://code.iconify.design/iconify-icon/1.0.7/iconify-icon.min.js"></script>
+  <style>
+    @import url('https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@800,500,700&f[]=satoshi@400,500,700&display=swap');
+    
+    :root {
+      --font-sans: 'Satoshi', sans-serif;
+      --font-display: 'Cabinet Grotesk', sans-serif;
+    }
+    
+    body {
+      font-family: var(--font-sans);
+      background-color: #FAFAFA;
+      color: #18181B;
+      margin: 0;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    h1, h2, h3, h4, h5, h6, .font-display {
+      font-family: var(--font-display);
+    }
+
+    /* Custom scrollbar for a cleaner look */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #E4E4E7;
+      border-radius: 10px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #D4D4D8;
+    }
+
+    /* Subtle pulse for agent indicators */
+    @keyframes pulse-soft {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.6; }
+    }
+    .animate-pulse-soft {
+      animation: pulse-soft 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+
+    /* Custom Checkbox */
+    .custom-checkbox input:checked + div {
+      background-color: #18181B;
+      border-color: #18181B;
+    }
+    .custom-checkbox input:checked + div svg {
+      display: block;
+    }
+  </style>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            gray: {
+              50: '#FAFAFA',
+              100: '#F4F4F5',
+              200: '#E4E4E7',
+              300: '#D4D4D8',
+              400: '#A1A1AA',
+              500: '#71717A',
+              600: '#52525B',
+              700: '#3F3F46',
+              800: '#27272A',
+              900: '#18181B',
+            },
+            brand: {
+              agent: '#8B5CF6',
+              decision: '#10B981',
+              warning: '#F59E0B',
+              danger: '#EF4444',
+            }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body>
+  <!-- ROOT CONTAINER -->
+  <div class="flex h-screen w-full bg-gray-50 overflow-hidden">
+    
+    <!-- SLIM GLOBAL SIDEBAR -->
+    <sd-component componentId="c499c3eb-6f50-46ff-9945-e4011f25ff54" name="GlobalSidebar" props='{"activeItem":"projects"}'></sd-component>
+
+    <!-- MAIN WORKSPACE -->
+    <main class="flex-1 flex flex-col min-w-0">
+      
+      <!-- TOP HEADER -->
+      <sd-component componentId="d1c411f2-4007-453c-ac17-8de1723af111" name="PageHeader" props='{"projectsHref":"https://draft-1f49067a-c64b-4ffe-94be-8aa717bddd1e.preview.superdesign.dev","currentProjectHref":"#","statusLabel":"Ready for Handoff","unresolvedCount":0}'></sd-component>
+
+      <!-- WORKSPACE AREA -->
+      <div class="flex-1 flex flex-col overflow-hidden">
+        
+        <!-- TOP SPLIT VIEW (Builder & Preview) -->
+        <div class="flex-1 flex overflow-hidden">
+          
+          <!-- LEFT: EXPORT FORMAT SELECTION -->
+          <aside class="w-72 border-r border-gray-200 bg-white flex flex-col flex-shrink-0 z-10">
+            <div class="px-6 py-5 border-b border-gray-100">
+              <h2 class="font-display font-bold text-lg text-gray-900">Export Format</h2>
+              <p class="text-xs text-gray-500 mt-1">Select how you want to package this spec.</p>
+            </div>
+
+            <div class="p-4 flex flex-col gap-2 overflow-y-auto">
+              <!-- Format Option: PRD (Active) -->
+              <button id="format-prd-btn" class="text-left w-full p-4 rounded-xl bg-gray-50 border border-gray-200 relative overflow-hidden ring-1 ring-gray-900">
+                <div class="absolute left-0 top-0 bottom-0 w-1 bg-gray-900"></div>
+                <div class="flex items-start gap-3">
+                  <div class="mt-1 p-2 bg-white rounded-lg border border-gray-200 text-gray-900 shadow-sm">
+                    <iconify-icon icon="lucide:file-text" class="text-lg"></iconify-icon>
+                  </div>
+                  <div>
+                    <h3 class="text-sm font-semibold text-gray-900">Product Requirements</h3>
+                    <p class="text-xs text-gray-500 mt-1 leading-relaxed">Comprehensive PRD including context, goals, features, and UX guidelines.</p>
+                  </div>
+                </div>
+              </button>
+
+              <!-- Format Option: Tech Spec -->
+              <button id="format-tech-btn" class="text-left w-full p-4 rounded-xl bg-white border border-gray-100 hover:border-gray-300 hover:bg-gray-50 transition-all">
+                <div class="flex items-start gap-3">
+                  <div class="mt-1 p-2 bg-gray-50 rounded-lg border border-gray-100 text-gray-500">
+                    <iconify-icon icon="lucide:file-code" class="text-lg"></iconify-icon>
+                  </div>
+                  <div>
+                    <h3 class="text-sm font-semibold text-gray-700">Technical Spec</h3>
+                    <p class="text-xs text-gray-500 mt-1 leading-relaxed">Focused on architecture, data models, APIs, and engineering constraints.</p>
+                  </div>
+                </div>
+              </button>
+
+              <!-- Format Option: Task Breakdown -->
+              <button id="format-tasks-btn" class="text-left w-full p-4 rounded-xl bg-white border border-gray-100 hover:border-gray-300 hover:bg-gray-50 transition-all">
+                <div class="flex items-start gap-3">
+                  <div class="mt-1 p-2 bg-gray-50 rounded-lg border border-gray-100 text-gray-500">
+                    <iconify-icon icon="lucide:kanban-square" class="text-lg"></iconify-icon>
+                  </div>
+                  <div>
+                    <h3 class="text-sm font-semibold text-gray-700">Task Breakdown</h3>
+                    <p class="text-xs text-gray-500 mt-1 leading-relaxed">Actionable user stories and engineering tickets ready for Jira/Linear.</p>
+                  </div>
+                </div>
+              </button>
+
+              <!-- Format Option: Agent Prompt -->
+              <button id="format-agent-btn" class="text-left w-full p-4 rounded-xl bg-white border border-gray-100 hover:border-purple-200 hover:bg-purple-50 transition-all group">
+                <div class="flex items-start gap-3">
+                  <div class="mt-1 p-2 bg-purple-50 rounded-lg border border-purple-100 text-brand-agent group-hover:bg-white">
+                    <iconify-icon icon="lucide:bot" class="text-lg"></iconify-icon>
+                  </div>
+                  <div>
+                    <h3 class="text-sm font-semibold text-gray-700 group-hover:text-brand-agent transition-colors">Coding Agent Prompt</h3>
+                    <p class="text-xs text-gray-500 mt-1 leading-relaxed">Optimized markdown prompt for Cursor, GitHub Copilot, or Claude.</p>
+                  </div>
+                </div>
+              </button>
+            </div>
+          </aside>
+
+          <!-- CENTER: CUSTOMIZATION OPTIONS -->
+          <section class="w-80 border-r border-gray-200 bg-white flex flex-col flex-shrink-0 z-10">
+            <div class="px-6 py-5 border-b border-gray-100 flex justify-between items-center">
+              <h2 class="font-display font-bold text-lg text-gray-900">Configuration</h2>
+            </div>
+
+            <div class="flex-1 overflow-y-auto">
+              <div class="p-6 space-y-8">
+                
+                <!-- Section Inclusion -->
+                <div>
+                  <h3 class="text-sm font-bold text-gray-900 uppercase tracking-wider mb-4">Include Sections</h3>
+                  <div class="space-y-3">
+                    <label class="flex items-center gap-3 custom-checkbox cursor-pointer group">
+                      <input type="checkbox" class="hidden" checked>
+                      <div class="w-4 h-4 rounded border border-gray-300 flex items-center justify-center transition-colors group-hover:border-gray-500">
+                        <iconify-icon icon="lucide:check" class="text-white text-[10px] hidden"></iconify-icon>
+                      </div>
+                      <span class="text-sm text-gray-700 font-medium group-hover:text-gray-900">Problem & Goals</span>
+                    </label>
+                    <label class="flex items-center gap-3 custom-checkbox cursor-pointer group">
+                      <input type="checkbox" class="hidden" checked>
+                      <div class="w-4 h-4 rounded border border-gray-300 flex items-center justify-center transition-colors group-hover:border-gray-500">
+                        <iconify-icon icon="lucide:check" class="text-white text-[10px] hidden"></iconify-icon>
+                      </div>
+                      <span class="text-sm text-gray-700 font-medium group-hover:text-gray-900">Proposed Solution</span>
+                    </label>
+                    <label class="flex items-center gap-3 custom-checkbox cursor-pointer group">
+                      <input type="checkbox" class="hidden" checked>
+                      <div class="w-4 h-4 rounded border border-gray-300 flex items-center justify-center transition-colors group-hover:border-gray-500">
+                        <iconify-icon icon="lucide:check" class="text-white text-[10px] hidden"></iconify-icon>
+                      </div>
+                      <span class="text-sm text-gray-700 font-medium group-hover:text-gray-900">Technical Constraints</span>
+                    </label>
+                    <label class="flex items-center gap-3 custom-checkbox cursor-pointer group">
+                      <input type="checkbox" class="hidden" checked>
+                      <div class="w-4 h-4 rounded border border-gray-300 flex items-center justify-center transition-colors group-hover:border-gray-500">
+                        <iconify-icon icon="lucide:check" class="text-white text-[10px] hidden"></iconify-icon>
+                      </div>
+                      <span class="text-sm text-gray-700 font-medium group-hover:text-gray-900">Edge Cases & Fallbacks</span>
+                    </label>
+                    <label class="flex items-center gap-3 custom-checkbox cursor-pointer group">
+                      <input type="checkbox" class="hidden">
+                      <div class="w-4 h-4 rounded border border-gray-300 flex items-center justify-center transition-colors group-hover:border-gray-500">
+                        <iconify-icon icon="lucide:check" class="text-white text-[10px] hidden"></iconify-icon>
+                      </div>
+                      <span class="text-sm text-gray-700 font-medium group-hover:text-gray-900">Open Questions (Resolved)</span>
+                    </label>
+                    <label class="flex items-center gap-3 custom-checkbox cursor-pointer group">
+                      <input type="checkbox" class="hidden" checked>
+                      <div class="w-4 h-4 rounded border border-gray-300 flex items-center justify-center transition-colors group-hover:border-gray-500">
+                        <iconify-icon icon="lucide:check" class="text-white text-[10px] hidden"></iconify-icon>
+                      </div>
+                      <span class="text-sm text-gray-700 font-medium group-hover:text-gray-900">Decision Log / History</span>
+                    </label>
+                  </div>
+                </div>
+
+                <!-- File Output -->
+                <div>
+                  <h3 class="text-sm font-bold text-gray-900 uppercase tracking-wider mb-4">File Type</h3>
+                  <div class="grid grid-cols-2 gap-2">
+                    <button id="file-pdf-btn" class="py-2 px-3 border border-gray-900 bg-gray-900 text-white rounded-md text-sm font-medium flex justify-center items-center gap-2">
+                      PDF
+                    </button>
+                    <button id="file-md-btn" class="py-2 px-3 border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 rounded-md text-sm font-medium flex justify-center items-center gap-2 transition-colors">
+                      Markdown
+                    </button>
+                    <button id="file-notion-btn" class="py-2 px-3 border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 rounded-md text-sm font-medium flex justify-center items-center gap-2 transition-colors">
+                      Notion
+                    </button>
+                    <button id="file-docx-btn" class="py-2 px-3 border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 rounded-md text-sm font-medium flex justify-center items-center gap-2 transition-colors">
+                      DOCX
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Sharing Settings -->
+                <div>
+                  <h3 class="text-sm font-bold text-gray-900 uppercase tracking-wider mb-4">Access & Sharing</h3>
+                  <div class="bg-gray-50 rounded-xl p-4 border border-gray-200">
+                    <div class="flex items-center justify-between mb-4">
+                      <div class="flex items-center gap-2">
+                        <iconify-icon icon="lucide:link" class="text-gray-500"></iconify-icon>
+                        <span class="text-sm font-medium text-gray-900">Share Link</span>
+                      </div>
+                      <!-- Toggle switch -->
+                      <button id="toggle-share-btn" class="w-8 h-4 bg-brand-decision rounded-full relative transition-colors" aria-pressed="true">
+                         <span class="absolute right-0.5 top-0.5 w-3 h-3 bg-white rounded-full transition-transform"></span>
+                      </button>
+                    </div>
+                    <div class="flex items-center gap-2 bg-white border border-gray-200 rounded-md p-1.5">
+                      <input type="text" value="https://align.app/s/q3-auth-revamp" class="text-xs text-gray-500 bg-transparent border-none focus:ring-0 flex-1 w-full truncate" readonly>
+                      <button id="copy-link-btn" class="px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded text-xs font-medium transition-colors">Copy</button>
+                    </div>
+                    
+                    <div class="mt-4 pt-4 border-t border-gray-200">
+                      <p class="text-xs font-medium text-gray-500 mb-2">Currently Shared With:</p>
+                      <div class="flex items-center -space-x-2">
+                        <div class="w-6 h-6 rounded-full bg-gray-100 border-2 border-gray-50 shadow-sm overflow-hidden z-30" title="Sarah (CEO)">
+                           <img src="https://api.dicebear.com/7.x/notionists/svg?seed=CEO&backgroundColor=transparent" alt="CEO" class="w-full h-full object-cover">
+                        </div>
+                        <div class="w-6 h-6 rounded-full bg-blue-100 border-2 border-gray-50 shadow-sm overflow-hidden z-20" title="Marcus (Lead Eng)">
+                           <img src="https://api.dicebear.com/7.x/notionists/svg?seed=Marcus&backgroundColor=transparent" alt="Engineer" class="w-full h-full object-cover">
+                        </div>
+                        <button id="add-user-btn" class="w-6 h-6 rounded-full bg-white border-2 border-gray-200 border-dashed flex items-center justify-center z-10 hover:border-gray-400 hover:text-gray-700 text-gray-400 transition-colors">
+                           <iconify-icon icon="lucide:plus" class="text-[10px]"></iconify-icon>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- Action Area -->
+            <div class="p-6 border-t border-gray-100 bg-white mt-auto">
+              <button id="generate-export-btn" class="w-full py-3 bg-brand-decision hover:bg-emerald-600 text-white rounded-xl font-bold text-sm flex justify-center items-center gap-2 shadow-sm transition-all transform hover:-translate-y-0.5">
+                <iconify-icon icon="lucide:wand-2"></iconify-icon>
+                Generate Document
+              </button>
+            </div>
+          </section>
+
+          <!-- RIGHT: LIVE PREVIEW -->
+          <section class="flex-1 bg-gray-100 overflow-y-auto relative">
+            <!-- Top gradient for fade effect -->
+            <div class="sticky top-0 w-full h-8 bg-gradient-to-b from-gray-100 to-transparent z-10 pointer-events-none"></div>
+            
+            <!-- Preview Toolbar -->
+            <div class="absolute top-6 right-8 flex items-center gap-2 z-20">
+              <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-1 flex items-center">
+                <button id="zoom-out-btn" class="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-50 rounded transition-colors">
+                  <iconify-icon icon="lucide:zoom-out" class="text-sm"></iconify-icon>
+                </button>
+                <span class="px-2 text-xs font-medium text-gray-500">100%</span>
+                <button id="zoom-in-btn" class="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-50 rounded transition-colors">
+                  <iconify-icon icon="lucide:zoom-in" class="text-sm"></iconify-icon>
+                </button>
+              </div>
+            </div>
+
+            <div class="max-w-3xl mx-auto px-8 py-8 pb-32">
+              
+              <!-- Mock Document Paper -->
+              <div class="bg-white shadow-md border border-gray-200 rounded-lg p-12 min-h-[800px] relative">
+                
+                <!-- Watermark / Status -->
+                <div class="absolute top-0 right-0 p-6 pointer-events-none">
+                  <span class="px-2.5 py-1 border border-brand-decision text-brand-decision text-[10px] font-bold uppercase tracking-widest rounded bg-green-50/50 rotate-[15deg] inline-block opacity-70">
+                    Aligned Spec
+                  </span>
+                </div>
+
+                <!-- Document Header -->
+                <div class="border-b border-gray-200 pb-8 mb-8">
+                  <h1 class="font-display font-bold text-3xl text-gray-900 tracking-tight mb-4">
+                    Product Requirements: Authentication Revamp
+                  </h1>
+                  <div class="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span class="text-gray-500 block mb-1">Project</span>
+                      <span class="font-medium text-gray-900">Q3 Core Platform Updates</span>
+                    </div>
+                    <div>
+                      <span class="text-gray-500 block mb-1">Date Generated</span>
+                      <span class="font-medium text-gray-900">Oct 24, 2023</span>
+                    </div>
+                    <div>
+                      <span class="text-gray-500 block mb-1">Status</span>
+                      <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-green-50 border border-green-100 text-xs font-medium text-green-700">
+                        <iconify-icon icon="lucide:check-circle-2" class="text-[10px]"></iconify-icon>
+                        Ready for Engineering
+                      </span>
+                    </div>
+                    <div>
+                      <span class="text-gray-500 block mb-1">Contributors</span>
+                      <span class="font-medium text-gray-900">Sarah (CEO), Marcus (Lead Eng)</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Document Content (Mimicking generated output) -->
+                <div class="prose prose-zinc max-w-none prose-headings:font-display prose-headings:text-gray-900 prose-p:text-gray-700 prose-li:text-gray-700 prose-sm">
+                  
+                  <h2>1. Executive Summary</h2>
+                  <p>A strategic shift to remove passwords as the primary authentication method, aiming to reduce onboarding friction and improve security posture. This document outlines the transition to a magic-link first approach while maintaining support for enterprise SSO.</p>
+
+                  <h2>2. Problem & Goals</h2>
+                  <p>Current user onboarding sees a 34% drop-off at the password creation step. Additionally, support tickets related to password resets account for 20% of our daily volume.</p>
+                  <ul>
+                    <li><strong>Primary Goal:</strong> Increase initial signup conversion by 30%.</li>
+                    <li><strong>Secondary Goal:</strong> Reduce authentication-related support tickets by 50%.</li>
+                  </ul>
+
+                  <h2>3. Proposed Solution</h2>
+                  <h3>3.1 Core Flow</h3>
+                  <p>All new users will authenticate exclusively via email-based Magic Links. The login UI will be simplified to a single email input field.</p>
+
+                  <!-- Decision Highlight -->
+                  <div class="not-prose my-6 p-4 bg-gray-50 border-l-4 border-gray-900 rounded-r-lg">
+                    <div class="flex items-center gap-2 mb-2">
+                      <iconify-icon icon="lucide:gavel" class="text-gray-900"></iconify-icon>
+                      <span class="text-xs font-bold uppercase tracking-wider text-gray-900">Architectural Decision</span>
+                    </div>
+                    <h4 class="text-sm font-bold text-gray-900 mb-1">Existing User Migration</h4>
+                    <p class="text-sm text-gray-700">Existing passwords will be deprecated with a 30-day grace period. Enterprise SSO remains fully supported and bypasses magic links entirely. <em>(Agreed upon by Sarah & Marcus, Oct 24)</em></p>
+                  </div>
+
+                  <h3>3.2 Edge Cases & Fallbacks</h3>
+                  <p>If an email takes longer than expected to arrive (>10s), users will be prompted to wait or request a new link. <span class="bg-amber-100 px-1 rounded text-amber-900 font-medium border border-amber-200">[Requires further definition on UI handling]</span></p>
+
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <!-- BOTTOM: EXPORT HISTORY -->
+        <section class="h-64 border-t border-gray-200 bg-white flex flex-col flex-shrink-0 z-20">
+          <div class="px-8 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+            <div class="flex items-center gap-2">
+              <iconify-icon icon="lucide:history" class="text-gray-500"></iconify-icon>
+              <h2 class="font-display font-bold text-gray-900">Export History</h2>
+            </div>
+            <button id="view-all-history-btn" class="text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors">
+              View All
+            </button>
+          </div>
+          
+          <div class="flex-1 overflow-y-auto px-8">
+            <table class="w-full text-left border-collapse">
+              <thead>
+                <tr>
+                  <th class="py-3 text-xs font-semibold text-gray-500 border-b border-gray-100">Document</th>
+                  <th class="py-3 text-xs font-semibold text-gray-500 border-b border-gray-100">Format</th>
+                  <th class="py-3 text-xs font-semibold text-gray-500 border-b border-gray-100">Exported By</th>
+                  <th class="py-3 text-xs font-semibold text-gray-500 border-b border-gray-100">Date & Time</th>
+                  <th class="py-3 text-xs font-semibold text-gray-500 border-b border-gray-100">Status</th>
+                  <th class="py-3 text-xs font-semibold text-gray-500 border-b border-gray-100 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody class="text-sm">
+                <!-- Row 1 -->
+                <tr class="group hover:bg-gray-50 transition-colors border-b border-gray-50">
+                  <td class="py-4 font-medium text-gray-900">
+                    <div class="flex items-center gap-2">
+                      <iconify-icon icon="lucide:file-text" class="text-gray-400"></iconify-icon>
+                      PRD_AuthRevamp_v2.pdf
+                    </div>
+                  </td>
+                  <td class="py-4 text-gray-600"><span class="px-2 py-1 bg-gray-100 rounded text-xs font-mono">PDF</span></td>
+                  <td class="py-4">
+                    <div class="flex items-center gap-2">
+                      <div class="w-5 h-5 rounded-full bg-blue-100 overflow-hidden">
+                         <img src="https://api.dicebear.com/7.x/notionists/svg?seed=Marcus&backgroundColor=transparent" alt="Engineer" class="w-full h-full object-cover">
+                      </div>
+                      <span class="text-gray-600">Marcus</span>
+                    </div>
+                  </td>
+                  <td class="py-4 text-gray-500">Today, 11:45 AM</td>
+                  <td class="py-4">
+                    <span class="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-50 px-2 py-1 rounded-md">
+                      Ready
+                    </span>
+                  </td>
+                  <td class="py-4 text-right">
+                    <button id="download-row1-btn" class="text-brand-agent hover:text-purple-700 font-medium text-sm flex items-center justify-end gap-1 ml-auto">
+                      <iconify-icon icon="lucide:download"></iconify-icon>
+                      Download
+                    </button>
+                  </td>
+                </tr>
+                <!-- Row 2 -->
+                <tr class="group hover:bg-gray-50 transition-colors border-b border-gray-50">
+                  <td class="py-4 font-medium text-gray-900">
+                    <div class="flex items-center gap-2">
+                      <iconify-icon icon="lucide:kanban-square" class="text-gray-400"></iconify-icon>
+                      Tasks_AuthRevamp.md
+                    </div>
+                  </td>
+                  <td class="py-4 text-gray-600"><span class="px-2 py-1 bg-gray-100 rounded text-xs font-mono">Markdown</span></td>
+                  <td class="py-4">
+                    <div class="flex items-center gap-2">
+                      <div class="w-5 h-5 rounded-full bg-gray-100 overflow-hidden">
+                         <img src="https://api.dicebear.com/7.x/notionists/svg?seed=CEO&backgroundColor=transparent" alt="CEO" class="w-full h-full object-cover">
+                      </div>
+                      <span class="text-gray-600">Sarah</span>
+                    </div>
+                  </td>
+                  <td class="py-4 text-gray-500">Yesterday, 4:20 PM</td>
+                  <td class="py-4">
+                    <span class="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-50 px-2 py-1 rounded-md">
+                      Ready
+                    </span>
+                  </td>
+                  <td class="py-4 text-right">
+                    <button id="download-row2-btn" class="text-brand-agent hover:text-purple-700 font-medium text-sm flex items-center justify-end gap-1 ml-auto">
+                      <iconify-icon icon="lucide:download"></iconify-icon>
+                      Download
+                    </button>
+                  </td>
+                </tr>
+                <!-- Row 3 -->
+                <tr class="group hover:bg-gray-50 transition-colors">
+                  <td class="py-4 font-medium text-gray-400">
+                    <div class="flex items-center gap-2">
+                      <iconify-icon icon="lucide:file-code" class="text-gray-300"></iconify-icon>
+                      TechSpec_Auth_Draft.docx
+                    </div>
+                  </td>
+                  <td class="py-4 text-gray-400"><span class="px-2 py-1 bg-gray-50 text-gray-400 rounded text-xs font-mono">DOCX</span></td>
+                  <td class="py-4">
+                    <div class="flex items-center gap-2 opacity-50">
+                      <div class="w-5 h-5 rounded-full bg-blue-100 overflow-hidden">
+                         <img src="https://api.dicebear.com/7.x/notionists/svg?seed=Marcus&backgroundColor=transparent" alt="Engineer" class="w-full h-full object-cover">
+                      </div>
+                      <span class="text-gray-400">Marcus</span>
+                    </div>
+                  </td>
+                  <td class="py-4 text-gray-400">Oct 22, 2:10 PM</td>
+                  <td class="py-4">
+                    <span class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 bg-gray-100 px-2 py-1 rounded-md">
+                      Expired
+                    </span>
+                  </td>
+                  <td class="py-4 text-right">
+                    <span class="text-gray-400 text-sm">
+                      Link Expired
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+      </div>
+    </main>
+  </div>
+</body>
+</html>

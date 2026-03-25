@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en" class="antialiased">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Align - Decisions & Alignment Timeline</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://code.iconify.design/iconify-icon/1.0.7/iconify-icon.min.js"></script>
+  <style>
+    @import url('https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@800,500,700&f[]=satoshi@400,500,700&display=swap');
+    
+    :root {
+      --font-sans: 'Satoshi', sans-serif;
+      --font-display: 'Cabinet Grotesk', sans-serif;
+    }
+    
+    body {
+      font-family: var(--font-sans);
+      background-color: #FAFAFA;
+      color: #18181B;
+      margin: 0;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    h1, h2, h3, h4, h5, h6, .font-display {
+      font-family: var(--font-display);
+    }
+
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #E4E4E7;
+      border-radius: 10px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #D4D4D8;
+    }
+
+    @keyframes pulse-soft {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.6; }
+    }
+    .animate-pulse-soft {
+      animation: pulse-soft 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+
+    /* Timeline connection line for overridden items */
+    .override-line::before {
+      content: '';
+      position: absolute;
+      left: -29px;
+      top: 50%;
+      bottom: -150%;
+      width: 2px;
+      border-left: 2px dashed #EF4444;
+      z-index: 0;
+    }
+  </style>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            gray: {
+              50: '#FAFAFA',
+              100: '#F4F4F5',
+              200: '#E4E4E7',
+              300: '#D4D4D8',
+              400: '#A1A1AA',
+              500: '#71717A',
+              600: '#52525B',
+              700: '#3F3F46',
+              800: '#27272A',
+              900: '#18181B',
+            },
+            brand: {
+              agent: '#8B5CF6',
+              decision: '#10B981',
+              warning: '#F59E0B',
+              danger: '#EF4444',
+              info: '#3B82F6'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <!-- Vue / Component Scripts would go here in real implementation -->
+</head>
+<body>
+  <div class="flex h-screen w-full bg-gray-50 overflow-hidden">
+    
+    <!-- SLIM GLOBAL SIDEBAR -->
+    <sd-component componentId="c499c3eb-6f50-46ff-9945-e4011f25ff54" name="GlobalSidebar" props='{"activeItem":"decisions"}'></sd-component>
+
+    <!-- MAIN WORKSPACE -->
+    <main class="flex-1 flex flex-col min-w-0 bg-gray-50">
+      
+      <!-- TOP HEADER -->
+      <sd-component componentId="d1c411f2-4007-453c-ac17-8de1723af111" name="PageHeader" props='{"projectsHref":"https://p.superdesign.dev/draft/334441f1-f8fb-4716-9bd2-c5bdec4fb495","currentProjectHref":"https://p.superdesign.dev/draft/334441f1-f8fb-4716-9bd2-c5bdec4fb495","statusLabel":"Aligning","unresolvedCount":3}'></sd-component>
+
+      <!-- PAGE HEADER & FILTERS -->
+      <div class="bg-white border-b border-gray-200 z-10 flex-shrink-0">
+        <div class="px-8 pt-8 pb-4">
+          <div class="flex justify-between items-end mb-6">
+            <div>
+              <h1 class="font-display text-3xl font-bold text-gray-900 tracking-tight">Decision Timeline</h1>
+              <p class="text-sm text-gray-500 mt-1">Track all key alignment points, conflicts, and resolutions for this project.</p>
+            </div>
+            <button class="px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800 transition-colors flex items-center gap-2">
+              <iconify-icon icon="lucide:plus"></iconify-icon>
+              Record Decision
+            </button>
+          </div>
+
+          <div class="flex justify-between items-center">
+            <!-- Filter Tabs -->
+            <div class="flex gap-6 -mb-[17px]">
+              <button class="pb-4 text-sm font-medium border-b-2 border-gray-900 text-gray-900">All Decisions</button>
+              <button class="pb-4 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 transition-colors flex items-center gap-1.5">
+                Pending
+                <span class="px-1.5 py-0.5 rounded-full bg-gray-100 text-[10px] font-bold text-gray-600">2</span>
+              </button>
+              <button class="pb-4 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 transition-colors flex items-center gap-1.5">
+                Approved
+              </button>
+              <button class="pb-4 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 transition-colors flex items-center gap-1.5">
+                Implemented
+              </button>
+            </div>
+
+            <!-- Search & Sort -->
+            <div class="flex items-center gap-3 pb-2">
+              <div class="relative">
+                <iconify-icon icon="lucide:search" class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></iconify-icon>
+                <input type="text" placeholder="Search decisions..." class="pl-9 pr-4 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-gray-200 focus:border-gray-400 w-64 bg-gray-50">
+              </div>
+              <button class="p-1.5 text-gray-500 hover:text-gray-900 border border-gray-200 rounded-md bg-gray-50 hover:bg-gray-100 transition-colors" title="Sort">
+                <iconify-icon icon="lucide:arrow-down-up"></iconify-icon>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TIMELINE CONTENT -->
+      <div class="flex-1 overflow-y-auto px-8 py-10 relative">
+        
+        <div class="max-w-4xl mx-auto relative">
+          <!-- Master vertical line -->
+          <div class="absolute left-[19px] top-6 bottom-8 w-px bg-gray-200 z-0"></div>
+
+          <div class="space-y-10">
+
+            <!-- DECISION: PENDING -->
+            <div class="relative pl-14 z-10">
+              <!-- Timeline dot -->
+              <div class="absolute left-[15px] top-6 w-[10px] h-[10px] rounded-full border-2 border-brand-warning bg-white z-10 ring-4 ring-gray-50"></div>
+              
+              <div class="bg-white border border-brand-warning/30 rounded-2xl p-6 shadow-sm hover:shadow-md transition-shadow">
+                <!-- Header -->
+                <div class="flex items-start justify-between mb-4">
+                  <div>
+                    <div class="flex items-center gap-2 mb-1">
+                      <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-orange-50 text-brand-warning border border-orange-100 flex items-center gap-1">
+                        <iconify-icon icon="lucide:clock-4"></iconify-icon> Pending Review
+                      </span>
+                      <span class="text-xs text-gray-400 font-medium">Today, 11:24 AM</span>
+                    </div>
+                    <h3 class="font-display font-bold text-xl text-gray-900">Fallback mechanism for delayed Magic Links</h3>
+                  </div>
+                  <!-- Action menu -->
+                  <button class="text-gray-400 hover:text-gray-900"><iconify-icon icon="lucide:more-vertical"></iconify-icon></button>
+                </div>
+
+                <!-- Author & Content -->
+                <div class="mb-6">
+                  <div class="flex items-center gap-2 mb-3">
+                    <div class="w-6 h-6 rounded-full bg-blue-100 border border-gray-200 overflow-hidden">
+                      <img src="https://api.dicebear.com/7.x/notionists/svg?seed=Marcus&backgroundColor=transparent" alt="Marcus" class="w-full h-full object-cover">
+                    </div>
+                    <span class="text-sm font-medium text-gray-900">Marcus</span>
+                    <span class="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">Lead Eng</span>
+                    <span class="text-sm text-gray-400">proposed this decision</span>
+                  </div>
+                  <p class="text-gray-700 text-sm leading-relaxed">
+                    If an email takes longer than 15 seconds to deliver, we will implement a polling fallback that allows the user to click "Verify via SMS instead" utilizing a temporary Twilio integration. This mitigates the risk of users bouncing due to slow email delivery providers.
+                  </p>
+                </div>
+
+                <!-- Alignment & Conflict Warning -->
+                <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6 flex items-start gap-3">
+                  <iconify-icon icon="lucide:alert-triangle" class="text-brand-warning mt-0.5"></iconify-icon>
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-900 mb-1">Alignment Warning</h4>
+                    <p class="text-xs text-gray-700 mb-2">
+                      This introduces a new third-party dependency (Twilio) not previously budgeted for. Requires product owner approval before implementation.
+                    </p>
+                    <div class="flex gap-2">
+                       <button class="px-3 py-1.5 bg-white border border-amber-300 rounded text-xs font-medium text-gray-800 hover:bg-amber-100 transition-colors">Approve Scope Change</button>
+                       <button class="px-3 py-1.5 bg-white border border-amber-300 rounded text-xs font-medium text-gray-800 hover:bg-amber-100 transition-colors">Reject</button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Footer Metadata -->
+                <div class="flex items-center justify-between pt-4 border-t border-gray-100">
+                  <div class="flex items-center gap-4">
+                    <div class="flex items-center gap-2">
+                      <span class="text-xs font-medium text-gray-500">Approvals:</span>
+                      <div class="flex -space-x-1">
+                         <div class="w-5 h-5 rounded-full bg-gray-200 border border-white flex items-center justify-center" title="Awaiting Sarah">
+                           <iconify-icon icon="lucide:help-circle" class="text-gray-400 text-[10px]"></iconify-icon>
+                         </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-3">
+                    <a href="https://draft-f5f68b8f-5586-46b6-93d1-875476e48104.preview.superdesign.dev" class="text-xs font-medium text-gray-500 hover:text-gray-900 flex items-center gap-1 transition-colors">
+                      <iconify-icon icon="lucide:message-square"></iconify-icon> View Origin Thread
+                    </a>
+                    <span class="w-1 h-1 rounded-full bg-gray-300"></span>
+                    <button class="text-xs font-medium text-brand-info hover:text-blue-700 flex items-center gap-1 transition-colors">
+                      <iconify-icon icon="lucide:file-text"></iconify-icon> See in Spec 2.3
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- DECISION: APPROVED (OVERRIDES PREVIOUS) -->
+            <div class="relative pl-14 z-10 override-line">
+              <div class="absolute left-[15px] top-6 w-[10px] h-[10px] rounded-full bg-brand-decision ring-4 ring-gray-50 z-10 flex items-center justify-center">
+                <iconify-icon icon="lucide:check" class="text-white text-[8px]"></iconify-icon>
+              </div>
+              
+              <div class="bg-white border border-brand-decision/40 rounded-2xl p-6 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden">
+                <!-- Subtle gradient for approved -->
+                <div class="absolute top-0 left-0 w-1 h-full bg-brand-decision"></div>
+
+                <!-- Header -->
+                <div class="flex items-start justify-between mb-4">
+                  <div>
+                    <div class="flex items-center gap-2 mb-1">
+                      <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-green-50 text-brand-decision border border-green-100 flex items-center gap-1">
+                        <iconify-icon icon="lucide:check-circle-2"></iconify-icon> Approved
+                      </span>
+                      <span class="text-xs text-gray-400 font-medium">Today, 11:10 AM</span>
+                      <!-- Override Badge -->
+                      <span class="ml-2 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-red-50 text-brand-danger border border-red-100 flex items-center gap-1">
+                        <iconify-icon icon="lucide:corner-down-right"></iconify-icon> Overrides #DEC-02
+                      </span>
+                    </div>
+                    <h3 class="font-display font-bold text-xl text-gray-900">Retain SSO, Migrate Passwords</h3>
+                  </div>
+                  <button class="text-gray-400 hover:text-gray-900"><iconify-icon icon="lucide:more-vertical"></iconify-icon></button>
+                </div>
+
+                <!-- Author & Content -->
+                <div class="mb-6">
+                  <div class="flex items-center gap-2 mb-3">
+                    <div class="w-6 h-6 rounded-full bg-gray-100 border border-gray-200 overflow-hidden">
+                      <img src="https://api.dicebear.com/7.x/notionists/svg?seed=CEO&backgroundColor=transparent" alt="Sarah" class="w-full h-full object-cover">
+                    </div>
+                    <span class="text-sm font-medium text-gray-900">Sarah</span>
+                    <span class="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">CEO</span>
+                    <span class="text-sm text-gray-400">recorded this decision</span>
+                  </div>
+                  <p class="text-gray-700 text-sm leading-relaxed">
+                    We will implement magic links as the default for all individual users. Existing passwords will be deprecated with a 30-day grace period. Enterprise SSO remains fully supported and bypasses magic links entirely. This reverses our earlier decision to force-migrate everyone.
+                  </p>
+                </div>
+
+                <!-- Footer Metadata -->
+                <div class="flex items-center justify-between pt-4 border-t border-gray-100">
+                  <div class="flex items-center gap-6">
+                    <div class="flex items-center gap-2">
+                      <span class="text-xs font-medium text-gray-500">Approvals:</span>
+                      <div class="flex -space-x-1">
+                         <div class="w-6 h-6 rounded-full bg-gray-100 border-2 border-white overflow-hidden" title="Approved by Sarah">
+                           <img src="https://api.dicebear.com/7.x/notionists/svg?seed=CEO&backgroundColor=transparent" class="w-full h-full object-cover">
+                         </div>
+                         <div class="w-6 h-6 rounded-full bg-blue-100 border-2 border-white overflow-hidden" title="Approved by Marcus">
+                           <img src="https://api.dicebear.com/7.x/notionists/svg?seed=Marcus&backgroundColor=transparent" class="w-full h-full object-cover">
+                         </div>
+                      </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <span class="text-xs font-medium text-gray-500">Implementation:</span>
+                      <div class="w-24 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                        <div class="w-[10%] h-full bg-blue-500 rounded-full"></div>
+                      </div>
+                      <span class="text-xs font-medium text-blue-600">10%</span>
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-3">
+                    <a href="https://draft-f5f68b8f-5586-46b6-93d1-875476e48104.preview.superdesign.dev" class="text-xs font-medium text-gray-500 hover:text-gray-900 flex items-center gap-1 transition-colors">
+                      <iconify-icon icon="lucide:message-square"></iconify-icon> View Origin Thread
+                    </a>
+                    <span class="w-1 h-1 rounded-full bg-gray-300"></span>
+                    <button class="text-xs font-medium text-brand-info hover:text-blue-700 flex items-center gap-1 transition-colors">
+                      <iconify-icon icon="lucide:file-text"></iconify-icon> See in Spec 2.2
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- DECISION: REJECTED / OVERRIDDEN -->
+            <div class="relative pl-14 z-10">
+              <div class="absolute left-[15px] top-6 w-[10px] h-[10px] rounded-full bg-brand-danger ring-4 ring-gray-50 z-10 flex items-center justify-center">
+                 <iconify-icon icon="lucide:x" class="text-white text-[8px]"></iconify-icon>
+              </div>
+              
+              <!-- Dimmed opacity to indicate it's no longer active -->
+              <div class="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm opacity-60 hover:opacity-100 transition-opacity">
+                <!-- Header -->
+                <div class="flex items-start justify-between mb-4">
+                  <div>
+                    <div class="flex items-center gap-2 mb-1">
+                      <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-red-50 text-brand-danger border border-red-100 flex items-center gap-1">
+                        <iconify-icon icon="lucide:x-circle"></iconify-icon> Rejected / Overridden
+                      </span>
+                      <span class="text-xs text-gray-400 font-medium">Yesterday, 4:30 PM</span>
+                    </div>
+                    <h3 class="font-display font-bold text-xl text-gray-500 line-through">Force migrate everyone immediately</h3>
+                  </div>
+                  <span class="text-xs font-mono text-gray-400">DEC-02</span>
+                </div>
+
+                <!-- Author & Content -->
+                <div class="mb-4">
+                  <p class="text-gray-500 text-sm leading-relaxed">
+                    All existing users will have their passwords deleted on launch day and must use magic links on their next login attempt. No exceptions.
+                  </p>
+                </div>
+
+                <!-- Superseded notice -->
+                <div class="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-4 flex items-center justify-between">
+                   <div class="flex items-center gap-2 text-sm text-gray-600">
+                     <iconify-icon icon="lucide:info" class="text-gray-400"></iconify-icon>
+                     Superseded by <strong>Retain SSO, Migrate Passwords</strong>
+                   </div>
+                   <button class="text-xs font-medium text-gray-500 hover:text-gray-900 underline">View new decision</button>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- DECISION: IMPLEMENTED -->
+            <div class="relative pl-14 z-10">
+              <div class="absolute left-[15px] top-6 w-[10px] h-[10px] rounded-full bg-blue-500 ring-4 ring-gray-50 z-10 flex items-center justify-center">
+                 <iconify-icon icon="lucide:check-check" class="text-white text-[7px]"></iconify-icon>
+              </div>
+              
+              <div class="bg-white border border-blue-100 rounded-2xl p-6 shadow-sm">
+                <!-- Header -->
+                <div class="flex items-start justify-between mb-4">
+                  <div>
+                    <div class="flex items-center gap-2 mb-1">
+                      <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-blue-600 border border-blue-100 flex items-center gap-1">
+                        <iconify-icon icon="lucide:blocks"></iconify-icon> Implemented
+                      </span>
+                      <span class="text-xs text-gray-400 font-medium">Oct 12, 9:00 AM</span>
+                    </div>
+                    <h3 class="font-display font-bold text-xl text-gray-900">Use Magic Links as primary auth</h3>
+                  </div>
+                  <button class="text-gray-400 hover:text-gray-900"><iconify-icon icon="lucide:more-vertical"></iconify-icon></button>
+                </div>
+
+                <!-- Author & Content -->
+                <div class="mb-6">
+                  <div class="flex items-center gap-2 mb-3">
+                    <div class="w-6 h-6 rounded-full bg-gray-100 border border-gray-200 overflow-hidden">
+                      <img src="https://api.dicebear.com/7.x/notionists/svg?seed=CEO&backgroundColor=transparent" alt="Sarah" class="w-full h-full object-cover">
+                    </div>
+                    <span class="text-sm font-medium text-gray-900">Sarah</span>
+                    <span class="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">CEO</span>
+                  </div>
+                  <p class="text-gray-700 text-sm leading-relaxed">
+                    We are moving away from passwords as the primary authentication method to reduce onboarding friction. The default login/signup screen will only ask for an email address.
+                  </p>
+                </div>
+
+                <!-- Footer Metadata -->
+                <div class="flex items-center justify-between pt-4 border-t border-gray-100">
+                  <div class="flex items-center gap-6">
+                    <div class="flex items-center gap-2">
+                      <span class="text-xs font-medium text-gray-500">Implementation:</span>
+                      <span class="flex items-center gap-1.5 text-xs font-medium text-green-600 bg-green-50 px-2 py-1 rounded-md">
+                        <iconify-icon icon="lucide:check-circle"></iconify-icon> Completed by Frontend Team
+                      </span>
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-3">
+                    <button class="text-xs font-medium text-brand-info hover:text-blue-700 flex items-center gap-1 transition-colors">
+                      <iconify-icon icon="lucide:file-text"></iconify-icon> See in Spec 2.1
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- End of timeline marker -->
+          <div class="flex items-center justify-center mt-12 mb-8">
+            <div class="w-2 h-2 rounded-full bg-gray-300"></div>
+          </div>
+
+        </div>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

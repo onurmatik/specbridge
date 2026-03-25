@@ -1,0 +1,23 @@
+[project]
+name = "specbridge"
+version = "0.1.0"
+description = "Collaborative, agent-driven product spec platform built with Django and Django Ninja."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "Django>=5.2,<5.3",
+    "django-ninja>=1.4,<1.5",
+    "dj-database-url>=2.3,<3",
+    "whitenoise>=6.9,<7",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B"]
+

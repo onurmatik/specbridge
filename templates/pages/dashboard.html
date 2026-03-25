@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+
+{% block title %}SpecBridge · Dashboard{% endblock %}
+
+{% block content %}
+<div class="app-shell">
+  {% include "components/global_sidebar.html" %}
+  <main class="flex min-w-0 flex-1 flex-col bg-gray-50">
+    {% include "components/page_header.html" %}
+    <div class="flex-1 overflow-y-auto">
+      <div class="mx-auto max-w-7xl px-8 py-6 pb-24">
+        <div class="mb-6 flex items-end justify-between">
+          <div>
+            <div class="mb-2 flex items-center gap-2">
+              <span class="workspace-badge border-gray-200 bg-white text-gray-600">
+                <iconify-icon icon="lucide:layout-dashboard" class="text-brand-agent"></iconify-icon>
+                Project Pulse
+              </span>
+            </div>
+            <h1 class="font-display text-3xl font-bold tracking-tight text-gray-900">Team Alignment Dashboard</h1>
+          </div>
+          <div class="flex items-center gap-1.5 text-sm text-gray-500">
+            <iconify-icon icon="lucide:refresh-cw" class="text-xs"></iconify-icon>
+            Live sync active
+          </div>
+        </div>
+
+        <section class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
+          <div class="metric-card">
+            <div class="mb-4 flex items-center justify-between">
+              <div class="text-sm font-medium text-gray-500">Overall Alignment</div>
+              <div class="flex h-8 w-8 items-center justify-center rounded-full bg-green-50 text-brand-decision">
+                <iconify-icon icon="lucide:users"></iconify-icon>
+              </div>
+            </div>
+            <div class="flex items-baseline gap-2">
+              <div class="font-display text-4xl font-bold text-gray-900">{{ dashboard_metrics.alignment_percentage }}<span class="text-2xl text-gray-400">%</span></div>
+            </div>
+          </div>
+          <div class="metric-card">
+            <div class="mb-4 flex items-center justify-between">
+              <div class="text-sm font-medium text-gray-500">Spec Maturity Score</div>
+              <div class="flex h-8 w-8 items-center justify-center rounded-full bg-purple-50 text-brand-agent">
+                <iconify-icon icon="lucide:file-check-2"></iconify-icon>
+              </div>
+            </div>
+            <div class="flex items-baseline gap-2">
+              <div class="font-display text-4xl font-bold text-gray-900">{{ dashboard_metrics.maturity_score }}<span class="text-2xl text-gray-400">/100</span></div>
+            </div>
+          </div>
+          <div class="metric-card">
+            <div class="mb-4 flex items-center justify-between">
+              <div class="text-sm font-medium text-gray-500">Decision Velocity</div>
+              <div class="flex h-8 w-8 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+                <iconify-icon icon="lucide:zap"></iconify-icon>
+              </div>
+            </div>
+            <div class="flex items-baseline gap-2">
+              <div class="font-display text-4xl font-bold text-gray-900">{{ dashboard_metrics.decision_velocity }}</div>
+              <div class="text-xs font-medium text-gray-500">decisions / day</div>
+            </div>
+          </div>
+          <div class="metric-card relative overflow-hidden border-brand-danger/30">
+            <div class="absolute inset-y-0 left-0 w-1 bg-brand-danger"></div>
+            <div class="mb-4 flex items-center justify-between">
+              <div class="text-sm font-medium text-brand-danger">Critical Blockers</div>
+              <div class="flex h-8 w-8 items-center justify-center rounded-full bg-red-50 text-brand-danger">
+                <iconify-icon icon="lucide:shield-alert"></iconify-icon>
+              </div>
+            </div>
+            <div class="font-display text-4xl font-bold text-gray-900">{{ dashboard_metrics.critical_blockers }}</div>
+          </div>
+        </section>
+
+        <div class="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-12">
+          <div class="space-y-8 lg:col-span-8">
+            <section class="workspace-panel p-8">
+              <div class="mb-8 flex items-center justify-between">
+                <h2 class="flex items-center gap-2 font-display text-xl font-bold text-gray-900">
+                  <iconify-icon icon="lucide:bar-chart-3" class="text-gray-400"></iconify-icon>
+                  Alignment by Spec Section
+                </h2>
+                <a href="{% url 'project-workspace' project.slug %}" class="text-sm font-medium text-brand-agent hover:underline">View Full Spec →</a>
+              </div>
+              <div class="space-y-6">
+                {% for section in sections %}
+                  <div>
+                    <div class="mb-2 flex items-end justify-between">
+                      <div class="flex items-center gap-2">
+                        <span class="text-sm font-medium text-gray-900">{{ section.order }}. {{ section.title }}</span>
+                        {% if section.status == "blocked" %}
+                          <span class="rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-brand-danger">Blocked</span>
+                        {% elif section.status == "iterating" %}
+                          <span class="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-brand-warning">Active Debate</span>
+                        {% endif %}
+                      </div>
+                      <span class="text-sm font-bold {% if section.status == 'aligned' %}text-brand-decision{% elif section.status == 'blocked' %}text-brand-danger{% else %}text-brand-warning{% endif %}">
+                        {% if section.status == 'aligned' %}100{% elif section.status == 'blocked' %}15{% else %}60{% endif %}%
+                      </span>
+                    </div>
+                    <div class="h-2.5 w-full overflow-hidden rounded-full bg-gray-100">
+                      <div class="h-full {% if section.status == 'aligned' %}bg-brand-decision{% elif section.status == 'blocked' %}bg-brand-danger{% else %}bg-brand-warning{% endif %}" style="width:{% if section.status == 'aligned' %}100{% elif section.status == 'blocked' %}15{% else %}60{% endif %}%"></div>
+                    </div>
+                  </div>
+                {% endfor %}
+              </div>
+            </section>
+
+            <div class="grid grid-cols-1 gap-8 md:grid-cols-2">
+              <section class="workspace-panel p-6">
+                <h2 class="mb-6 flex items-center justify-between font-display text-lg font-bold text-gray-900">
+                  Open Questions
+                  <span class="rounded-md bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600">{{ questions|length }} Total</span>
+                </h2>
+                <div class="space-y-4">
+                  {% for question in questions %}
+                    <div class="flex items-center justify-between rounded-xl border p-3 {% if question.status == 'resolved' %}border-gray-100 bg-gray-50 opacity-60{% else %}border-amber-100 bg-amber-50/40{% endif %}">
+                      <div class="flex items-center gap-3">
+                        <div class="flex h-8 w-8 items-center justify-center rounded-lg {% if question.status == 'resolved' %}bg-gray-200 text-gray-500{% else %}bg-amber-100 text-brand-warning{% endif %}">
+                          <iconify-icon icon="{% if question.status == 'resolved' %}lucide:check-circle{% else %}lucide:help-circle{% endif %}"></iconify-icon>
+                        </div>
+                        <div>
+                          <div class="text-sm font-medium text-gray-900">{{ question.title }}</div>
+                          <div class="text-xs {% if question.status == 'resolved' %}text-gray-400{% else %}text-brand-warning{% endif %}">{{ question.get_status_display }}</div>
+                        </div>
+                      </div>
+                    </div>
+                  {% endfor %}
+                </div>
+              </section>
+
+              <section class="workspace-panel relative overflow-hidden p-6">
+                <div class="absolute left-0 top-0 h-1 w-full bg-brand-danger"></div>
+                <h2 class="mb-6 flex items-center gap-2 font-display text-lg font-bold text-gray-900">
+                  <iconify-icon icon="lucide:shield-alert" class="text-brand-danger"></iconify-icon>
+                  Active Blockers
+                </h2>
+                <div class="space-y-4">
+                  {% for blocker in blockers %}
+                    <div class="rounded-xl border p-4 {% if blocker.severity == 'critical' %}border-red-100 bg-red-50{% else %}border-gray-200{% endif %}">
+                      <div class="flex items-start gap-3">
+                        <iconify-icon icon="{% if blocker.severity == 'critical' %}lucide:alert-octagon{% else %}lucide:flag{% endif %}" class="{% if blocker.severity == 'critical' %}text-brand-danger{% else %}text-brand-warning{% endif %} mt-0.5"></iconify-icon>
+                        <div>
+                          <h4 class="text-sm font-medium text-gray-900">{{ blocker.title }}</h4>
+                          <p class="mt-1 text-xs leading-relaxed text-gray-600">{{ blocker.details }}</p>
+                        </div>
+                      </div>
+                    </div>
+                  {% endfor %}
+                </div>
+              </section>
+            </div>
+          </div>
+
+          <div class="space-y-8 lg:col-span-4">
+            <section class="workspace-panel p-6">
+              <div class="mb-6 flex items-center justify-between">
+                <h2 class="font-display text-lg font-bold text-gray-900">Team Status</h2>
+                <span class="inline-flex items-center gap-1.5 rounded-md bg-green-50 px-2 py-1 text-xs font-medium text-brand-decision">
+                  <div class="h-1.5 w-1.5 rounded-full bg-brand-decision"></div>
+                  {{ active_members_count }} Active
+                </span>
+              </div>
+              <div class="space-y-3">
+                {% for membership in memberships %}
+                  <div class="flex items-start gap-3 rounded-xl border p-3 {% if membership.role == 'engineering' %}border-amber-100 bg-amber-50/30{% elif membership.role == 'ceo' %}border-transparent bg-gray-50/50{% else %}border-purple-100 bg-purple-50/20{% endif %}">
+                    <div class="relative flex-shrink-0">
+                      <div class="h-10 w-10 overflow-hidden rounded-full border border-gray-200 bg-gray-100">
+                        <img src="{{ membership.user.avatar_url }}" alt="{{ membership.user.display_name }}" class="h-full w-full object-cover">
+                      </div>
+                    </div>
+                    <div class="min-w-0 flex-1">
+                      <div class="mb-1 flex items-baseline justify-between">
+                        <span class="text-sm font-medium text-gray-900">{{ membership.user.display_name }} <span class="ml-1 text-xs font-normal text-gray-400">{{ membership.title|default:membership.user.title }}</span></span>
+                        <span class="text-[10px] text-gray-400">{% if membership.role == 'engineering' %}Active{% else %}5m ago{% endif %}</span>
+                      </div>
+                      <p class="text-xs text-gray-500">
+                        {% if membership.role == 'engineering' %}
+                          Pending: review email fallback strategy
+                        {% elif membership.role == 'ceo' %}
+                          Fully aligned. No pending actions.
+                        {% else %}
+                          Keeping the structured spec and decision log in sync.
+                        {% endif %}
+                      </p>
+                    </div>
+                  </div>
+                {% endfor %}
+              </div>
+            </section>
+
+            <section class="workspace-panel p-6">
+              <div class="mb-6 flex items-center justify-between">
+                <h2 class="font-display text-lg font-bold text-gray-900">Decision Timeline</h2>
+                <a href="{% url 'project-decisions' project.slug %}" class="icon-button"><iconify-icon icon="lucide:more-horizontal"></iconify-icon></a>
+              </div>
+              <div class="relative space-y-6 pl-3 before:absolute before:inset-0 before:ml-4 before:h-full before:w-px before:bg-gradient-to-b before:from-gray-300 before:via-gray-200 before:to-transparent">
+                {% for decision in decisions %}
+                  <div class="relative flex gap-4 {% if decision.status == 'rejected' %}opacity-60{% endif %}">
+                    <div class="absolute left-[1px] top-1.5 z-10 h-2 w-2 rounded-full {% if decision.status == 'approved' %}bg-brand-decision{% elif decision.status == 'implemented' %}bg-blue-500{% elif decision.status == 'rejected' %}bg-brand-danger{% else %}bg-brand-warning{% endif %} ring-4 ring-white"></div>
+                    <div class="ml-5 flex-1">
+                      <div class="mb-1 flex items-baseline justify-between">
+                        <span class="text-[10px] font-bold uppercase tracking-wider text-gray-400">{{ decision.created_at|date:"M j, g:i A" }}</span>
+                      </div>
+                      <h4 class="mb-1 text-sm font-medium text-gray-900">{{ decision.title }}</h4>
+                      <div class="text-xs text-gray-500">{{ decision.get_status_display }}</div>
+                    </div>
+                  </div>
+                {% endfor %}
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+{% endblock %}

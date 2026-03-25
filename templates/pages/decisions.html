@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+
+{% block title %}SpecBridge · Decisions{% endblock %}
+
+{% block content %}
+<div class="app-shell">
+  {% include "components/global_sidebar.html" %}
+  <main class="flex min-w-0 flex-1 flex-col bg-gray-50">
+    {% include "components/page_header.html" %}
+    <div class="border-b border-gray-200 bg-white">
+      <div class="px-8 pb-4 pt-8">
+        <div class="mb-6 flex items-end justify-between">
+          <div>
+            <h1 class="font-display text-3xl font-bold tracking-tight text-gray-900">Decision Timeline</h1>
+            <p class="mt-1 text-sm text-gray-500">Track all key alignment points, conflicts, and resolutions for this project.</p>
+            {% if not request.user.is_authenticated %}
+              <p class="mt-2 text-xs font-medium uppercase tracking-wider text-gray-400">Public preview. Sign in to record or approve decisions.</p>
+            {% endif %}
+          </div>
+          {% if request.user.is_authenticated %}
+            <button class="primary-button">
+              <iconify-icon icon="lucide:plus"></iconify-icon>
+              Record Decision
+            </button>
+          {% else %}
+            <button type="button" class="primary-button" data-auth-modal-trigger data-auth-mode="signup">
+              <iconify-icon icon="lucide:user-plus"></iconify-icon>
+              Sign In to Record
+            </button>
+          {% endif %}
+        </div>
+        <div class="flex items-center justify-between">
+          <div class="flex gap-6 -mb-[17px]">
+            <button class="border-b-2 border-gray-900 pb-4 text-sm font-medium text-gray-900">All Decisions</button>
+            <button class="border-b-2 border-transparent pb-4 text-sm font-medium text-gray-500">Pending</button>
+            <button class="border-b-2 border-transparent pb-4 text-sm font-medium text-gray-500">Approved</button>
+            <button class="border-b-2 border-transparent pb-4 text-sm font-medium text-gray-500">Implemented</button>
+          </div>
+          <div class="flex items-center gap-3 pb-2">
+            <div class="relative">
+              <iconify-icon icon="lucide:search" class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></iconify-icon>
+              <input type="text" placeholder="Search decisions..." class="w-64 rounded-md border border-gray-200 bg-gray-50 py-1.5 pl-9 pr-4 text-sm focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-200">
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flex-1 overflow-y-auto px-8 py-10">
+      <div class="relative mx-auto max-w-4xl">
+        <div class="absolute bottom-8 left-[19px] top-6 z-0 w-px bg-gray-200"></div>
+        <div class="space-y-10">
+          {% for decision in decisions %}
+            <div class="relative z-10 pl-14">
+              <div class="absolute left-[15px] top-6 z-10 flex h-[10px] w-[10px] items-center justify-center rounded-full ring-4 ring-gray-50 {% if decision.status == 'approved' %}bg-brand-decision{% elif decision.status == 'implemented' %}bg-blue-500{% elif decision.status == 'rejected' %}bg-brand-danger{% else %}border-2 border-brand-warning bg-white{% endif %}">
+                {% if decision.status != 'pending' %}
+                  <iconify-icon icon="{% if decision.status == 'approved' %}lucide:check{% elif decision.status == 'implemented' %}lucide:check-check{% else %}lucide:x{% endif %}" class="text-[8px] text-white"></iconify-icon>
+                {% endif %}
+              </div>
+
+              <div class="relative overflow-hidden rounded-2xl border bg-white p-6 shadow-card {% if decision.status == 'approved' %}border-brand-decision/40{% elif decision.status == 'implemented' %}border-blue-100{% elif decision.status == 'rejected' %}border-gray-200 opacity-60{% else %}border-brand-warning/30{% endif %}">
+                {% if decision.status == 'approved' %}
+                  <div class="absolute inset-y-0 left-0 w-1 bg-brand-decision"></div>
+                {% endif %}
+                <div class="mb-4 flex items-start justify-between">
+                  <div>
+                    <div class="mb-1 flex flex-wrap items-center gap-2">
+                      <span class="rounded border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider {% if decision.status == 'approved' %}border-green-100 bg-green-50 text-brand-decision{% elif decision.status == 'implemented' %}border-blue-100 bg-blue-50 text-blue-600{% elif decision.status == 'rejected' %}border-red-100 bg-red-50 text-brand-danger{% else %}border-orange-100 bg-orange-50 text-brand-warning{% endif %}">
+                        {{ decision.get_status_display }}
+                      </span>
+                      <span class="text-xs font-medium text-gray-400">{{ decision.created_at|date:"M j, g:i A" }}</span>
+                      {% if decision.supersedes %}
+                        <span class="rounded border border-red-100 bg-red-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-brand-danger">
+                          Overrides {{ decision.supersedes.code }}
+                        </span>
+                      {% endif %}
+                    </div>
+                    <h3 class="font-display text-xl font-bold text-gray-900">{{ decision.title }}</h3>
+                  </div>
+                  <button class="icon-button"><iconify-icon icon="lucide:more-vertical"></iconify-icon></button>
+                </div>
+
+                <div class="mb-6">
+                  <div class="mb-3 flex items-center gap-2">
+                    {% if decision.proposed_by %}
+                      <div class="h-6 w-6 overflow-hidden rounded-full border border-gray-200 bg-gray-100">
+                        <img src="{{ decision.proposed_by.avatar_url }}" alt="{{ decision.proposed_by.display_name }}" class="h-full w-full object-cover">
+                      </div>
+                      <span class="text-sm font-medium text-gray-900">{{ decision.proposed_by.display_name }}</span>
+                      <span class="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">{{ decision.proposed_by.title }}</span>
+                    {% endif %}
+                  </div>
+                  <p class="text-sm leading-relaxed text-gray-700">{{ decision.summary }}</p>
+                </div>
+
+                {% if decision.status == 'pending' %}
+                  <div class="mb-6 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
+                    <iconify-icon icon="lucide:alert-triangle" class="mt-0.5 text-brand-warning"></iconify-icon>
+                    <div>
+                      <h4 class="text-sm font-semibold text-gray-900">Alignment Warning</h4>
+                      <p class="mt-1 text-xs text-gray-700">This decision still needs approval before the spec can move from discussion into committed system state.</p>
+                    </div>
+                  </div>
+                {% endif %}
+
+                {% if decision.status == 'rejected' and decision.overridden_by.first %}
+                  <div class="mb-4 flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 p-3">
+                    <div class="text-sm text-gray-600">Superseded by <strong>{{ decision.overridden_by.first.title }}</strong></div>
+                    <a href="{% url 'project-history' project.slug %}" class="text-xs font-medium text-gray-500 hover:text-gray-900">View new decision</a>
+                  </div>
+                {% endif %}
+
+                <div class="flex items-center justify-between border-t border-gray-100 pt-4">
+                  <div class="flex items-center gap-6">
+                    <div class="flex items-center gap-2">
+                      <span class="text-xs font-medium text-gray-500">Approvals:</span>
+                      <div class="flex -space-x-1">
+                        {% for approval in decision.approvals.all %}
+                          <div class="h-6 w-6 overflow-hidden rounded-full border-2 border-white bg-gray-100">
+                            <img src="{{ approval.approver.avatar_url }}" alt="{{ approval.approver.display_name }}" class="h-full w-full object-cover">
+                          </div>
+                        {% empty %}
+                          <div class="flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-gray-200 text-gray-400">
+                            <iconify-icon icon="lucide:help-circle" class="text-[10px]"></iconify-icon>
+                          </div>
+                        {% endfor %}
+                      </div>
+                    </div>
+                    <div class="hidden items-center gap-2 md:flex">
+                      <span class="text-xs font-medium text-gray-500">Implementation:</span>
+                      <div class="h-1.5 w-24 overflow-hidden rounded-full bg-gray-100">
+                        <div class="h-full rounded-full bg-blue-500" style="width: {{ decision.implementation_progress }}%"></div>
+                      </div>
+                      <span class="text-xs font-medium text-blue-600">{{ decision.implementation_progress }}%</span>
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    {% if request.user.is_authenticated %}
+                      {% if decision.status == "pending" %}
+                        <button class="secondary-button !px-3 !py-1.5 text-xs" data-api-post="/api/projects/{{ project.slug }}/decisions/{{ decision.id }}/reject">Reject</button>
+                        <button class="primary-button !px-3 !py-1.5 text-xs" data-api-post="/api/projects/{{ project.slug }}/decisions/{{ decision.id }}/approve">Approve</button>
+                      {% elif decision.status == "approved" %}
+                        <button class="secondary-button !px-3 !py-1.5 text-xs" data-api-post="/api/projects/{{ project.slug }}/decisions/{{ decision.id }}/mark-implemented">Mark Implemented</button>
+                      {% endif %}
+                    {% elif decision.status == "pending" or decision.status == "approved" %}
+                      <button type="button" class="secondary-button !px-3 !py-1.5 text-xs" data-auth-modal-trigger data-auth-mode="login">Sign In to Decide</button>
+                    {% endif %}
+                  </div>
+                </div>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+{% endblock %}

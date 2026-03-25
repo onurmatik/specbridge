@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en" class="antialiased">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Align - Spec History & Diff</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://code.iconify.design/iconify-icon/1.0.7/iconify-icon.min.js"></script>
+  <style>
+    @import url('https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@800,500,700&f[]=satoshi@400,500,700&display=swap');
+    
+    :root {
+      --font-sans: 'Satoshi', sans-serif;
+      --font-display: 'Cabinet Grotesk', sans-serif;
+    }
+    
+    body {
+      font-family: var(--font-sans);
+      background-color: #FAFAFA;
+      color: #18181B;
+      margin: 0;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    h1, h2, h3, h4, h5, h6, .font-display {
+      font-family: var(--font-display);
+    }
+
+    /* Custom scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #E4E4E7;
+      border-radius: 10px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #D4D4D8;
+    }
+
+    /* Diff specific styles */
+    .diff-add-bg {
+      background-color: rgba(16, 185, 129, 0.05);
+    }
+    .diff-remove-bg {
+      background-color: rgba(239, 68, 68, 0.03);
+    }
+    .diff-mod-bg {
+      background-color: rgba(245, 158, 11, 0.05);
+    }
+    .diff-sync-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    }
+  </style>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            gray: {
+              50: '#FAFAFA',
+              100: '#F4F4F5',
+              200: '#E4E4E7',
+              300: '#D4D4D8',
+              400: '#A1A1AA',
+              500: '#71717A',
+              600: '#52525B',
+              700: '#3F3F46',
+              800: '#27272A',
+              900: '#18181B',
+            },
+            brand: {
+              agent: '#8B5CF6',
+              decision: '#10B981',
+              warning: '#F59E0B',
+              danger: '#EF4444',
+            }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body>
+  <div class="flex h-screen w-full bg-gray-50 overflow-hidden">
+    
+    <!-- SLIM GLOBAL SIDEBAR -->
+    <sd-component componentId="c499c3eb-6f50-46ff-9945-e4011f25ff54" name="GlobalSidebar" props='{"activeItem":"decisions"}'></sd-component>
+
+    <!-- MAIN WORKSPACE -->
+    <main class="flex-1 flex flex-col min-w-0">
+      
+      <!-- TOP HEADER -->
+      <sd-component componentId="d1c411f2-4007-453c-ac17-8de1723af111" name="PageHeader" props='{"statusLabel":"Reviewing History","unresolvedCount":0}'></sd-component>
+
+      <!-- CONTENT SPLIT -->
+      <div class="flex-1 flex overflow-hidden">
+        
+        <!-- LEFT TIMELINE SIDEBAR -->
+        <aside class="w-72 border-r border-gray-200 bg-white flex flex-col z-10 flex-shrink-0">
+          <div class="p-5 border-b border-gray-100 flex items-center justify-between">
+            <h2 class="font-display font-bold text-lg text-gray-900">Version History</h2>
+          </div>
+          
+          <div class="flex-1 overflow-y-auto p-5">
+            <div class="relative">
+              <!-- Timeline Track -->
+              <div class="absolute left-[11px] top-3 bottom-4 w-[2px] bg-gray-100"></div>
+
+              <!-- Version 3 (Current) -->
+              <button class="relative w-full text-left pl-8 pb-8 group">
+                <div class="absolute left-[7px] top-1.5 w-2.5 h-2.5 bg-brand-decision rounded-full ring-4 ring-green-50 z-10"></div>
+                <div class="flex items-baseline justify-between mb-1">
+                  <span class="font-display font-bold text-gray-900">v3 (Current)</span>
+                  <span class="text-xs text-gray-500">11:15 AM</span>
+                </div>
+                <div class="text-sm text-gray-600 mb-2 flex items-center gap-1.5">
+                  <iconify-icon icon="lucide:bot" class="text-brand-agent"></iconify-icon>
+                  <span>Agent Auto-save</span>
+                </div>
+                <div class="inline-flex gap-1.5 items-center px-2 py-1 rounded bg-green-50 border border-green-100 text-xs font-medium text-green-700">
+                  <iconify-icon icon="lucide:git-commit"></iconify-icon>
+                  2 changes
+                </div>
+              </button>
+
+              <!-- Version 2 (Selected for diff) -->
+              <button class="relative w-full text-left pl-8 pb-8 group bg-blue-50/50 -mx-3 px-3 py-3 rounded-xl border border-blue-100">
+                <div class="absolute left-[19px] top-[18px] w-2.5 h-2.5 bg-blue-500 rounded-full ring-4 ring-blue-100 z-10"></div>
+                <div class="flex items-baseline justify-between mb-1">
+                  <span class="font-display font-bold text-blue-900">v2</span>
+                  <span class="text-xs text-blue-600/70">10:45 AM</span>
+                </div>
+                <div class="text-sm text-blue-800/80 mb-2">
+                  Sarah (CEO)
+                </div>
+                <p class="text-xs text-blue-700/70 truncate">
+                  Initial magic link proposal
+                </p>
+                <div class="mt-3 flex">
+                  <span class="text-xs font-medium text-blue-600 bg-white border border-blue-200 px-2 py-0.5 rounded shadow-sm">
+                    Comparing vs v3
+                  </span>
+                </div>
+              </button>
+
+              <!-- Version 1 -->
+              <button class="relative w-full text-left pl-8 pb-8 pt-5 group hover:bg-gray-50 transition-colors -mx-3 px-3 rounded-xl">
+                <div class="absolute left-[19px] top-[26px] w-2.5 h-2.5 bg-gray-300 rounded-full ring-4 ring-white z-10 group-hover:bg-gray-400 transition-colors"></div>
+                <div class="flex items-baseline justify-between mb-1">
+                  <span class="font-display font-medium text-gray-600 group-hover:text-gray-900 transition-colors">v1</span>
+                  <span class="text-xs text-gray-400">Yesterday</span>
+                </div>
+                <div class="text-sm text-gray-500">
+                  Marcus (Lead Eng)
+                </div>
+                <p class="text-xs text-gray-400 truncate mt-1">
+                  Project initialization
+                </p>
+              </button>
+
+            </div>
+          </div>
+        </aside>
+
+        <!-- RIGHT DIFF VIEWER -->
+        <section class="flex-1 flex flex-col bg-gray-50 min-w-0">
+          
+          <!-- Diff Toolbar -->
+          <div class="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-6 z-20 flex-shrink-0">
+            <div class="flex items-center gap-3">
+              <span class="text-sm font-medium text-gray-600">Comparing:</span>
+              <div class="flex items-center text-sm">
+                <span class="px-2 py-1 rounded bg-gray-100 text-gray-700 font-medium">v2 (10:45 AM)</span>
+                <iconify-icon icon="lucide:arrow-right" class="mx-2 text-gray-400"></iconify-icon>
+                <span class="px-2 py-1 rounded bg-green-50 text-green-700 font-medium border border-green-100">v3 (Current)</span>
+              </div>
+            </div>
+
+            <!-- Toggle -->
+            <div class="flex p-1 bg-gray-100 rounded-lg">
+              <button class="px-3 py-1.5 bg-white shadow-sm rounded-md text-xs font-bold text-gray-900 transition-all">
+                Full Document
+              </button>
+              <button class="px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-900 transition-all">
+                Changes Only (2)
+              </button>
+            </div>
+
+            <!-- Actions -->
+            <div class="flex items-center gap-3">
+              <button class="text-sm font-medium text-red-600 hover:text-red-700 transition-colors px-3 py-1.5 rounded hover:bg-red-50">
+                Revert to v2
+              </button>
+              <a href="https://draft-5126e137-0b4a-41b5-b985-a37d3bbac1db.preview.superdesign.dev" class="px-4 py-1.5 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800 transition-colors">
+                Exit Diff
+              </a>
+            </div>
+          </div>
+
+          <!-- Column Headers -->
+          <div class="diff-sync-grid border-b border-gray-200 bg-gray-50/80 backdrop-blur text-xs font-bold text-gray-500 uppercase tracking-wider sticky top-0 z-10 shadow-sm">
+            <div class="px-8 py-3 border-r border-gray-200 flex justify-between items-center">
+              <span>Version 2 (Previous)</span>
+              <span class="font-normal text-gray-400 normal-case">Read-only</span>
+            </div>
+            <div class="px-8 py-3 flex justify-between items-center bg-white">
+              <span class="text-gray-900">Version 3 (Current)</span>
+              <div class="flex gap-3">
+                <span class="flex items-center gap-1 normal-case font-normal text-green-700"><div class="w-2 h-2 rounded bg-brand-decision"></div> Added</span>
+                <span class="flex items-center gap-1 normal-case font-normal text-amber-600"><div class="w-2 h-2 rounded bg-brand-warning"></div> Modified</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Sync Scroll Container -->
+          <div class="flex-1 overflow-y-auto bg-gray-50/50">
+            <div class="w-full pb-32">
+              
+              <!-- ROW 1: Title & Description (Unchanged) -->
+              <div class="diff-sync-grid divide-x divide-gray-200">
+                <!-- Left -->
+                <div class="px-8 py-8 opacity-70 grayscale-[20%]">
+                  <h1 class="font-display font-bold text-3xl text-gray-900 tracking-tight mb-4">
+                    Authentication Revamp: Magic Links
+                  </h1>
+                  <p class="text-base text-gray-600 leading-relaxed">
+                    A strategic shift to remove passwords as the primary authentication method, aiming to reduce onboarding friction and improve security posture.
+                  </p>
+                </div>
+                <!-- Right -->
+                <div class="px-8 py-8 bg-white">
+                  <h1 class="font-display font-bold text-3xl text-gray-900 tracking-tight mb-4">
+                    Authentication Revamp: Magic Links
+                  </h1>
+                  <p class="text-base text-gray-600 leading-relaxed">
+                    A strategic shift to remove passwords as the primary authentication method, aiming to reduce onboarding friction and improve security posture.
+                  </p>
+                </div>
+              </div>
+
+              <!-- ROW 2: Section 1 (Unchanged) -->
+              <div class="diff-sync-grid divide-x divide-gray-200">
+                <div class="px-8 py-6 opacity-70 grayscale-[20%]">
+                  <h2 class="font-display font-bold text-xl text-gray-900 mb-3">1. Problem & Goals</h2>
+                  <div class="prose prose-sm prose-zinc text-gray-600 max-w-none">
+                    <p>Current user onboarding sees a 34% drop-off at the password creation step. Additionally, support tickets related to password resets account for 20% of our daily volume.</p>
+                    <ul>
+                      <li><strong>Primary Goal:</strong> Increase initial signup conversion by 30%.</li>
+                      <li><strong>Secondary Goal:</strong> Reduce authentication-related support tickets by 50%.</li>
+                    </ul>
+                  </div>
+                </div>
+                <div class="px-8 py-6 bg-white">
+                  <h2 class="font-display font-bold text-xl text-gray-900 mb-3">1. Problem & Goals</h2>
+                  <div class="prose prose-sm prose-zinc text-gray-700 max-w-none">
+                    <p>Current user onboarding sees a 34% drop-off at the password creation step. Additionally, support tickets related to password resets account for 20% of our daily volume.</p>
+                    <ul>
+                      <li><strong>Primary Goal:</strong> Increase initial signup conversion by 30%.</li>
+                      <li><strong>Secondary Goal:</strong> Reduce authentication-related support tickets by 50%.</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ROW 3: Section 2.1 (Unchanged) -->
+              <div class="diff-sync-grid divide-x divide-gray-200">
+                <div class="px-8 py-6 opacity-70 grayscale-[20%]">
+                  <h2 class="font-display font-bold text-xl text-gray-900 mb-4">2. Proposed Solution</h2>
+                  <h3 class="font-medium text-gray-900 mb-2">2.1 Core Authentication Flow</h3>
+                  <p class="text-gray-600 text-sm leading-relaxed">
+                    All new users will authenticate exclusively via email-based Magic Links.
+                  </p>
+                </div>
+                <div class="px-8 py-6 bg-white">
+                  <h2 class="font-display font-bold text-xl text-gray-900 mb-4">2. Proposed Solution</h2>
+                  <h3 class="font-medium text-gray-900 mb-2">2.1 Core Authentication Flow</h3>
+                  <p class="text-gray-700 text-sm leading-relaxed">
+                    All new users will authenticate exclusively via email-based Magic Links.
+                  </p>
+                </div>
+              </div>
+
+              <!-- ROW 4: Section 2.2 (ADDITION - GREEN DIFF) -->
+              <div class="diff-sync-grid divide-x divide-gray-200 relative">
+                <!-- Left: Empty State placeholder -->
+                <div class="px-8 py-6 diff-remove-bg flex flex-col justify-center items-center">
+                  <div class="w-full border-2 border-dashed border-gray-200 rounded-xl h-32 flex items-center justify-center opacity-50">
+                    <span class="text-sm text-gray-400 font-medium flex items-center gap-2">
+                      <iconify-icon icon="lucide:file-plus-2"></iconify-icon>
+                      Content added in version 3
+                    </span>
+                  </div>
+                </div>
+                
+                <!-- Right: The Added Content -->
+                <div class="px-8 py-6 bg-white relative">
+                  <!-- Diff background tint -->
+                  <div class="absolute inset-0 diff-add-bg pointer-events-none"></div>
+                  
+                  <div class="relative z-10">
+                    <div class="border-l-4 border-brand-decision pl-4 py-1">
+                      <h3 class="font-medium text-green-900 mb-2 text-sm flex items-center gap-2">
+                        2.2 Existing User Migration
+                        <span class="px-1.5 py-0.5 rounded bg-green-100 text-green-700 text-[10px] font-bold uppercase tracking-wider">Added</span>
+                      </h3>
+                      <p class="text-green-800/90 text-sm leading-relaxed">
+                        Existing passwords will be deprecated with a 30-day grace period. Enterprise SSO remains fully supported and bypasses magic links entirely.
+                      </p>
+                    </div>
+
+                    <!-- Inline Annotation -->
+                    <div class="mt-4 ml-4 flex gap-3 p-3 bg-white border border-gray-200 rounded-xl shadow-sm">
+                      <div class="w-6 h-6 rounded bg-purple-100 flex items-center justify-center flex-shrink-0">
+                        <iconify-icon icon="lucide:bot" class="text-brand-agent text-xs"></iconify-icon>
+                      </div>
+                      <div>
+                        <div class="text-xs font-bold text-gray-900 mb-0.5">Agent Action</div>
+                        <p class="text-xs text-gray-600">
+                          Inserted this section based on the recorded decision by Sarah at 11:10 AM resolving the existing user ambiguity.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ROW 5: Section 2.3 (MODIFICATION - YELLOW/RED DIFF) -->
+              <div class="diff-sync-grid divide-x divide-gray-200">
+                <!-- Left: Original text with strikethrough -->
+                <div class="px-8 py-6 diff-remove-bg">
+                  <h3 class="font-medium text-gray-800 mb-2 mt-2">2.3 Edge Cases & Fallbacks</h3>
+                  <p class="text-gray-600 text-sm leading-relaxed">
+                    If an email takes longer than expected to arrive, <span class="bg-red-100 text-red-900 line-through px-1 rounded-sm mx-0.5 decoration-red-500/50">the system will wait silently for delivery to complete</span>.
+                  </p>
+                </div>
+                
+                <!-- Right: Modified text with highlights -->
+                <div class="px-8 py-6 bg-white relative">
+                  <div class="absolute inset-0 diff-mod-bg pointer-events-none"></div>
+                  
+                  <div class="relative z-10">
+                    <h3 class="font-medium text-gray-900 mb-2 mt-2 flex items-center gap-2">
+                      2.3 Edge Cases & Fallbacks
+                      <span class="px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-[10px] font-bold uppercase tracking-wider">Modified</span>
+                    </h3>
+                    <p class="text-gray-800 text-sm leading-relaxed">
+                      If an email takes longer than expected to arrive, <span class="bg-amber-100 text-amber-900 px-1 rounded-sm mx-0.5 font-medium border-b border-amber-300">users will be prompted to wait or request a new link</span>.
+                    </p>
+
+                    <!-- Inline Annotation -->
+                    <div class="mt-4 flex gap-3 p-3 bg-white border border-gray-200 rounded-xl shadow-sm">
+                      <div class="w-6 h-6 rounded-full bg-gray-100 overflow-hidden flex-shrink-0">
+                        <img src="https://api.dicebear.com/7.x/notionists/svg?seed=CEO&backgroundColor=transparent" alt="Sarah" class="w-full h-full">
+                      </div>
+                      <div>
+                        <div class="text-xs font-bold text-gray-900 mb-0.5">Sarah (CEO)</div>
+                        <p class="text-xs text-gray-600">
+                          Modified fallback behavior. Waiting silently causes bounces. We still need to define the technical implementation for the prompt.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+        </section>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

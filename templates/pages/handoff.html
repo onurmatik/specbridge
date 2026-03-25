@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+
+{% block title %}SpecBridge · Handoff{% endblock %}
+
+{% block content %}
+<div class="app-shell">
+  {% include "components/global_sidebar.html" %}
+  <main class="flex min-w-0 flex-1 flex-col">
+    {% include "components/page_header.html" %}
+    <div class="flex flex-1 flex-col overflow-hidden">
+      <div class="flex flex-1 overflow-hidden">
+        <aside class="z-10 flex w-72 flex-shrink-0 flex-col border-r border-gray-200 bg-white">
+          <div class="border-b border-gray-100 px-6 py-5">
+            <h2 class="font-display text-lg font-bold text-gray-900">Export Format</h2>
+            <p class="mt-1 text-xs text-gray-500">Select how you want to package this spec.</p>
+          </div>
+          <div class="flex flex-col gap-2 overflow-y-auto p-4">
+            <button class="w-full rounded-xl border border-gray-900 bg-gray-50 p-4 text-left ring-1 ring-gray-900" data-format-button="prd">
+              <h3 class="text-sm font-semibold text-gray-900">Product Requirements</h3>
+              <p class="mt-1 text-xs leading-relaxed text-gray-500">Comprehensive PRD including context, goals, features, and UX guidelines.</p>
+            </button>
+            <button class="w-full rounded-xl border border-gray-100 bg-white p-4 text-left hover:border-gray-300 hover:bg-gray-50" data-format-button="tech_spec">
+              <h3 class="text-sm font-semibold text-gray-700">Technical Spec</h3>
+              <p class="mt-1 text-xs leading-relaxed text-gray-500">Focused on architecture, data models, APIs, and engineering constraints.</p>
+            </button>
+            <button class="w-full rounded-xl border border-gray-100 bg-white p-4 text-left hover:border-gray-300 hover:bg-gray-50" data-format-button="tasks">
+              <h3 class="text-sm font-semibold text-gray-700">Task Breakdown</h3>
+              <p class="mt-1 text-xs leading-relaxed text-gray-500">Actionable user stories and engineering tickets ready for Jira or Linear.</p>
+            </button>
+            <button class="w-full rounded-xl border border-gray-100 bg-white p-4 text-left hover:border-purple-200 hover:bg-purple-50" data-format-button="agent">
+              <h3 class="text-sm font-semibold text-gray-700">Coding Agent Prompt</h3>
+              <p class="mt-1 text-xs leading-relaxed text-gray-500">Markdown prompt optimized for agentic implementation handoff.</p>
+            </button>
+          </div>
+        </aside>
+
+        <section class="z-10 flex w-80 flex-shrink-0 flex-col border-r border-gray-200 bg-white">
+          <div class="border-b border-gray-100 px-6 py-5">
+            <h2 class="font-display text-lg font-bold text-gray-900">Configuration</h2>
+            {% if not request.user.is_authenticated %}
+              <p class="mt-1 text-xs font-medium uppercase tracking-wider text-gray-400">Read-only until you sign in</p>
+            {% endif %}
+          </div>
+          <form class="flex flex-1 flex-col overflow-y-auto" data-api-form="/api/projects/{{ project.slug }}/exports">
+            <input type="hidden" name="format" value="prd" data-format-input>
+            <div class="space-y-8 p-6">
+              <div>
+                <h3 class="mb-4 text-sm font-bold uppercase tracking-wider text-gray-900">Include Sections</h3>
+                <div class="space-y-3">
+                  {% for section in sections %}
+                    <label class="flex items-center gap-3">
+                      <input type="checkbox" checked {% if not request.user.is_authenticated %}disabled{% endif %} class="rounded border-gray-300 text-gray-900 focus:ring-gray-500">
+                      <span class="text-sm font-medium text-gray-700">{{ section.title }}</span>
+                    </label>
+                  {% endfor %}
+                </div>
+              </div>
+              <div>
+                <h3 class="mb-4 text-sm font-bold uppercase tracking-wider text-gray-900">File Type</h3>
+                <div class="grid grid-cols-2 gap-2">
+                  <label class="rounded-md border border-gray-900 bg-gray-900 px-3 py-2 text-center text-sm font-medium text-white">PDF</label>
+                  <label class="rounded-md border border-gray-200 bg-white px-3 py-2 text-center text-sm font-medium text-gray-700">Markdown</label>
+                  <label class="rounded-md border border-gray-200 bg-white px-3 py-2 text-center text-sm font-medium text-gray-700">Notion</label>
+                  <label class="rounded-md border border-gray-200 bg-white px-3 py-2 text-center text-sm font-medium text-gray-700">DOCX</label>
+                </div>
+              </div>
+              <div>
+                <h3 class="mb-4 text-sm font-bold uppercase tracking-wider text-gray-900">Access & Sharing</h3>
+                <div class="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                  <div class="mb-4 flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                      <iconify-icon icon="lucide:link" class="text-gray-500"></iconify-icon>
+                      <span class="text-sm font-medium text-gray-900">Share Link</span>
+                    </div>
+                    <input type="checkbox" name="share_enabled" value="true" checked {% if not request.user.is_authenticated %}disabled{% endif %} class="h-4 w-4 rounded border-gray-300 text-brand-decision focus:ring-brand-decision">
+                  </div>
+                  <div class="flex items-center gap-2 rounded-md border border-gray-200 bg-white p-1.5">
+                    <input id="share-link" type="text" readonly value="https://specbridge.local/s/{{ exports.0.share_token }}" class="w-full border-0 bg-transparent text-xs text-gray-500 focus:ring-0">
+                    <button type="button" class="rounded bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-200" data-copy-target="#share-link">Copy</button>
+                  </div>
+                  <div class="mt-4 border-t border-gray-200 pt-4">
+                    <p class="mb-2 text-xs font-medium text-gray-500">Currently Shared With:</p>
+                    <div class="flex items-center -space-x-2">
+                      {% for user in share_members %}
+                        <div class="z-20 h-6 w-6 overflow-hidden rounded-full border-2 border-gray-50 bg-gray-100 shadow-sm">
+                          <img src="{{ user.avatar_url }}" alt="{{ user.display_name }}" class="h-full w-full object-cover">
+                        </div>
+                      {% endfor %}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="mt-auto border-t border-gray-100 bg-white p-6">
+              {% if request.user.is_authenticated %}
+                <button type="submit" class="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-decision py-3 text-sm font-bold text-white shadow-sm transition-all hover:bg-emerald-600">
+                  <iconify-icon icon="lucide:wand-2"></iconify-icon>
+                  Generate Document
+                </button>
+              {% else %}
+                <button type="button" class="flex w-full items-center justify-center gap-2 rounded-xl bg-gray-900 py-3 text-sm font-bold text-white shadow-sm transition-all hover:bg-gray-800" data-auth-modal-trigger data-auth-mode="login">
+                  <iconify-icon icon="lucide:log-in"></iconify-icon>
+                  Sign In to Export
+                </button>
+              {% endif %}
+            </div>
+          </form>
+        </section>
+
+        <section class="relative flex-1 overflow-y-auto bg-gray-100">
+          <div class="absolute right-8 top-6 z-20 flex items-center gap-2">
+            <div class="flex items-center rounded-lg border border-gray-200 bg-white p-1 shadow-sm">
+              <button class="icon-button"><iconify-icon icon="lucide:zoom-out" class="text-sm"></iconify-icon></button>
+              <span class="px-2 text-xs font-medium text-gray-500">100%</span>
+              <button class="icon-button"><iconify-icon icon="lucide:zoom-in" class="text-sm"></iconify-icon></button>
+            </div>
+          </div>
+          <div class="mx-auto max-w-3xl px-8 py-8 pb-32">
+            <div class="relative min-h-[800px] rounded-lg border border-gray-200 bg-white p-12 shadow-paper">
+              <div class="absolute right-0 top-0 p-6">
+                <span class="inline-block rotate-[15deg] rounded border border-brand-decision bg-green-50/50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-brand-decision opacity-70">Aligned Spec</span>
+              </div>
+              <div class="mb-8 border-b border-gray-200 pb-8">
+                <h1 class="mb-4 font-display text-3xl font-bold tracking-tight text-gray-900">Product Requirements: {{ project.name }}</h1>
+                <div class="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span class="mb-1 block text-gray-500">Project</span>
+                    <span class="font-medium text-gray-900">{{ project.tagline }}</span>
+                  </div>
+                  <div>
+                    <span class="mb-1 block text-gray-500">Date Generated</span>
+                    <span class="font-medium text-gray-900">{{ exports.0.created_at|date:"M j, Y" }}</span>
+                  </div>
+                  <div>
+                    <span class="mb-1 block text-gray-500">Status</span>
+                    <span class="inline-flex items-center gap-1.5 rounded-md border border-green-100 bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">
+                      <iconify-icon icon="lucide:check-circle-2" class="text-[10px]"></iconify-icon>
+                      Ready for Engineering
+                    </span>
+                  </div>
+                  <div>
+                    <span class="mb-1 block text-gray-500">Contributors</span>
+                    <span class="font-medium text-gray-900">
+                      {% for membership in memberships %}{{ membership.user.display_name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div class="prose prose-zinc max-w-none prose-sm prose-headings:font-display prose-headings:text-gray-900 prose-p:text-gray-700 prose-li:text-gray-700">
+                {% for section in sections %}
+                  <h2>{{ section.order }}. {{ section.title }}</h2>
+                  <p>{{ section.body }}</p>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <section class="z-20 flex h-64 flex-shrink-0 flex-col border-t border-gray-200 bg-white">
+        <div class="flex items-center justify-between border-b border-gray-100 bg-gray-50/50 px-8 py-4">
+          <div class="flex items-center gap-2">
+            <iconify-icon icon="lucide:history" class="text-gray-500"></iconify-icon>
+            <h2 class="font-display font-bold text-gray-900">Export History</h2>
+          </div>
+        </div>
+        <div class="flex-1 overflow-y-auto px-8">
+          <table class="w-full border-collapse text-left">
+            <thead>
+              <tr>
+                <th class="border-b border-gray-100 py-3 text-xs font-semibold text-gray-500">Document</th>
+                <th class="border-b border-gray-100 py-3 text-xs font-semibold text-gray-500">Format</th>
+                <th class="border-b border-gray-100 py-3 text-xs font-semibold text-gray-500">Exported By</th>
+                <th class="border-b border-gray-100 py-3 text-xs font-semibold text-gray-500">Date & Time</th>
+                <th class="border-b border-gray-100 py-3 text-xs font-semibold text-gray-500">Status</th>
+              </tr>
+            </thead>
+            <tbody class="text-sm">
+              {% for export in exports %}
+                <tr class="border-b border-gray-50 transition-colors hover:bg-gray-50">
+                  <td class="py-4 font-medium {% if export.status == 'expired' %}text-gray-400{% else %}text-gray-900{% endif %}">{{ export.filename }}</td>
+                  <td class="py-4 text-gray-600"><span class="rounded bg-gray-100 px-2 py-1 text-xs font-mono">{{ export.get_format_display }}</span></td>
+                  <td class="py-4 text-gray-600">{{ export.generated_by.display_name }}</td>
+                  <td class="py-4 text-gray-500">{{ export.created_at|date:"M j, g:i A" }}</td>
+                  <td class="py-4">
+                    <span class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium {% if export.status == 'ready' %}bg-green-50 text-green-700{% elif export.status == 'expired' %}bg-gray-100 text-gray-500{% else %}bg-red-50 text-red-700{% endif %}">
+                      {{ export.get_status_display }}
+                    </span>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+{% endblock %}

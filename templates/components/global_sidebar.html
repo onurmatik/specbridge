@@ -1,0 +1,33 @@
+{% with sidebar_project=project sidebar_user=request.user %}
+<aside class="flex w-20 flex-col items-center border-r border-gray-200 bg-white py-4">
+  <a href="{% url 'project-directory' %}" class="mb-5 flex h-11 w-11 items-center justify-center rounded-2xl bg-gray-900 text-sm font-display font-bold text-white shadow-sm">
+    SB
+  </a>
+  <nav class="flex flex-1 flex-col items-center gap-3">
+    {% for item in navigation_items %}
+      <a
+        href="{{ item.url }}"
+        title="{{ item.label }}"
+        class="flex h-11 w-11 items-center justify-center rounded-2xl border text-lg transition-all {% if active_item == item.key %}border-gray-900 bg-gray-900 text-white shadow-sm{% else %}border-transparent bg-gray-50 text-gray-500 hover:border-gray-200 hover:bg-white hover:text-gray-900{% endif %}"
+      >
+        <iconify-icon icon="{{ item.icon }}"></iconify-icon>
+      </a>
+    {% endfor %}
+  </nav>
+  {% if sidebar_user.is_authenticated %}
+    <div class="mt-4 flex h-12 w-12 items-center justify-center overflow-hidden rounded-full border border-gray-200 bg-gray-100">
+      <img src="{{ sidebar_user.avatar_url }}" alt="{{ sidebar_user.display_name }}" class="h-full w-full object-cover">
+    </div>
+  {% else %}
+    <a
+      href="{% url 'login' %}?next={{ request.get_full_path|urlencode }}"
+      data-auth-modal-trigger
+      data-auth-mode="login"
+      class="mt-4 flex h-12 w-12 items-center justify-center overflow-hidden rounded-full border border-gray-200 bg-gray-100 text-gray-400 transition-colors hover:bg-gray-200 hover:text-gray-700"
+      aria-label="Sign in"
+    >
+      <iconify-icon icon="lucide:user"></iconify-icon>
+    </a>
+  {% endif %}
+</aside>
+{% endwith %}

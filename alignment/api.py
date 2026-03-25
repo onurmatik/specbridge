@@ -1,0 +1,125 @@
+from ninja import Router, Schema
+from ninja.security import django_auth
+
+from alignment.models import Blocker, Decision, OpenQuestion, StreamPost
+from alignment.services import approve_decision, mark_decision_implemented, reject_decision, reopen_issue, resolve_issue
+from projects.services import get_project_or_404, resolve_actor
+
+router = Router(tags=["alignment"])
+
+
+class StreamPayload(Schema):
+    body: str
+
+
+class DecisionPayload(Schema):
+    title: str
+    summary: str
+    related_section_key: str = ""
+
+
+@router.get("/{slug}/stream")
+def list_stream(request, slug: str):
+    project = get_project_or_404(slug)
+    return {
+        "items": [
+            {
+                "id": post.id,
+                "actor_name": post.actor_name,
+                "actor_title": post.actor_title,
+                "kind": post.kind,
+                "body": post.body,
+                "created_at": post.created_at.isoformat(),
+            }
+            for post in project.stream_posts.all()
+        ]
+    }
+
+
+@router.post("/{slug}/stream", auth=django_auth)
+def create_stream_post(request, slug: str, payload: StreamPayload):
+    project = get_project_or_404(slug)
+    actor = resolve_actor(request, project)
+    post = StreamPost.objects.create(
+        project=project,
+        author=actor,
+        actor_name=actor.display_name,
+        actor_title=actor.title,
+        body=payload.body,
+    )
+    return {"id": post.id, "body": post.body, "actor_name": post.actor_name}
+
+
+@router.post("/{slug}/questions/{question_id}/resolve", auth=django_auth)
+def resolve_question(request, slug: str, question_id: int):
+    project = get_project_or_404(slug)
+    actor = resolve_actor(request, project)
+    question = project.questions.get(pk=question_id)
+    resolve_issue(question, actor)
+    return {"ok": True, "status": question.status}
+
+
+@router.post("/{slug}/questions/{question_id}/reopen", auth=django_auth)
+def reopen_question(request, slug: str, question_id: int):
+    project = get_project_or_404(slug)
+    question = project.questions.get(pk=question_id)
+    reopen_issue(question)
+    return {"ok": True, "status": question.status}
+
+
+@router.post("/{slug}/blockers/{blocker_id}/resolve", auth=django_auth)
+def resolve_blocker(request, slug: str, blocker_id: int):
+    project = get_project_or_404(slug)
+    actor = resolve_actor(request, project)
+    blocker = project.blockers.get(pk=blocker_id)
+    resolve_issue(blocker, actor)
+    return {"ok": True, "status": blocker.status}
+
+
+@router.post("/{slug}/blockers/{blocker_id}/reopen", auth=django_auth)
+def reopen_blocker(request, slug: str, blocker_id: int):
+    project = get_project_or_404(slug)
+    blocker = project.blockers.get(pk=blocker_id)
+    reopen_issue(blocker)
+    return {"ok": True, "status": blocker.status}
+
+
+@router.post("/{slug}/decisions", auth=django_auth)
+def create_decision(request, slug: str, payload: DecisionPayload):
+    project = get_project_or_404(slug)
+    actor = resolve_actor(request, project)
+    decision = Decision.objects.create(
+        project=project,
+        title=payload.title,
+        summary=payload.summary,
+        proposed_by=actor,
+        related_section_key=payload.related_section_key,
+    )
+    return {"id": decision.id, "code": decision.code, "title": decision.title, "status": decision.status}
+
+
+@router.post("/{slug}/decisions/{decision_id}/approve", auth=django_auth)
+def approve_decision_endpoint(request, slug: str, decision_id: int):
+    project = get_project_or_404(slug)
+    actor = resolve_actor(request, project)
+    decision = project.decisions.get(pk=decision_id)
+    approve_decision(decision, actor)
+    return {"ok": True, "status": decision.status}
+
+
+@router.post("/{slug}/decisions/{decision_id}/reject", auth=django_auth)
+def reject_decision_endpoint(request, slug: str, decision_id: int):
+    project = get_project_or_404(slug)
+    actor = resolve_actor(request, project)
+    decision = project.decisions.get(pk=decision_id)
+    reject_decision(decision, actor)
+    return {"ok": True, "status": decision.status}
+
+
+@router.post("/{slug}/decisions/{decision_id}/mark-implemented", auth=django_auth)
+def mark_implemented_endpoint(request, slug: str, decision_id: int):
+    project = get_project_or_404(slug)
+    actor = resolve_actor(request, project)
+    decision = project.decisions.get(pk=decision_id)
+    mark_decision_implemented(decision, actor)
+    return {"ok": True, "status": decision.status}
