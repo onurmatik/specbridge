@@ -35,13 +35,13 @@ class AuthenticationFlowTests(TestCase):
             follow=True,
         )
 
-        self.assertRedirects(response, reverse("project-directory"))
+        self.assertRedirects(response, reverse("project-create"))
         user = User.objects.get(username="ada")
         organization = Organization.objects.get(name="Analogue Labs")
         self.assertFalse(ProjectMembership.objects.filter(user=user).exists())
         self.assertEqual(organization.slug, "analogue-labs")
         self.assertEqual(int(self.client.session["_auth_user_id"]), user.pk)
-        self.assertContains(response, "No projects yet")
+        self.assertContains(response, "Workspace Details")
         self.assertNotContains(response, "Authentication Revamp")
 
     def test_login_accepts_email_and_honors_next_redirect(self):
@@ -81,7 +81,7 @@ class AuthenticationFlowTests(TestCase):
             },
         )
 
-        self.assertRedirects(response, reverse("project-directory"))
+        self.assertRedirects(response, reverse("project-create"))
 
     def test_ajax_login_returns_json_and_logs_user_in(self):
         ensure_demo_workspace()

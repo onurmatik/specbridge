@@ -145,14 +145,28 @@ def _default_tagline(project_name: str) -> str:
 
 def _default_summary(project_name: str, tagline: str) -> str:
     if tagline:
+        lead = tagline if tagline.endswith((".", "!", "?")) else f"{tagline}."
         return (
-            f"{tagline} This workspace keeps the spec, decisions, assumptions, and delivery plan "
+            f"{lead} This workspace keeps the spec, decisions, assumptions, and delivery plan "
             f"for {project_name} aligned from the first draft onward."
         )
     return (
         f"A structured workspace for refining the {project_name} specification, decisions, "
         "assumptions, and delivery plan."
     )
+
+
+def split_project_summary(project) -> tuple[str, str]:
+    tagline = (project.tagline or "").strip()
+    summary = (project.summary or "").strip()
+    if not tagline:
+        return "", summary
+    if summary.startswith(tagline):
+        detail = summary[len(tagline):].lstrip()
+        if detail.startswith("."):
+            detail = detail[1:].lstrip()
+        return tagline, detail
+    return tagline, summary
 
 
 def _bootstrap_sections(project, tagline: str, summary: str) -> None:
@@ -283,6 +297,7 @@ def page_context(project, active_item):
 
 def workspace_context(project):
     context = page_context(project, "workspace")
+    workspace_tagline, workspace_summary_detail = split_project_summary(project)
     context.update(
         {
             "stream_entries": build_workspace_entries(project),
@@ -290,6 +305,8 @@ def workspace_context(project):
             "questions": list(project.questions.all()),
             "assumptions": list(project.assumptions.select_related("section")),
             "agent_suggestions": list(project.agent_suggestions.all()),
+            "workspace_tagline": workspace_tagline,
+            "workspace_summary_detail": workspace_summary_detail,
         }
     )
     return context

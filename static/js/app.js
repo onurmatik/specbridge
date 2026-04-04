@@ -6,6 +6,15 @@ function getCookie(name) {
   return cookieValue ? decodeURIComponent(cookieValue.split("=")[1]) : "";
 }
 
+function csrfToken(form = null) {
+  return (
+    getCookie("csrftoken") ||
+    form?.querySelector?.("input[name='csrfmiddlewaretoken']")?.value ||
+    document.querySelector("input[name='csrfmiddlewaretoken']")?.value ||
+    ""
+  );
+}
+
 function serializeForm(form) {
   const data = {};
   const formData = new FormData(form);
@@ -16,6 +25,9 @@ function serializeForm(form) {
     data[checkbox.name] = checkbox.checked;
   });
   formData.forEach((value, key) => {
+    if (key === "csrfmiddlewaretoken") {
+      return;
+    }
     if (data[key] === undefined) {
       data[key] = value;
     }
@@ -39,8 +51,29 @@ function projectModalNode() {
   return document.querySelector("[data-project-modal]");
 }
 
-function projectCreateFormNode() {
-  return document.querySelector("[data-project-create-form]");
+function projectCreateInlineSurface() {
+  return document.querySelector("[data-project-create-inline] [data-project-create-surface]");
+}
+
+function projectCreateSurface(node = null) {
+  return (
+    node?.closest?.("[data-project-create-surface]") ||
+    projectCreateInlineSurface() ||
+    projectModalNode()?.querySelector("[data-project-create-surface]") ||
+    document.querySelector("[data-project-create-surface]")
+  );
+}
+
+function projectCreateFormNode(root = document) {
+  return root?.querySelector?.("[data-project-create-form]") || null;
+}
+
+function projectCreateErrorsNode(surface) {
+  return surface?.querySelector?.("[data-project-errors]") || null;
+}
+
+function projectCreateSubmitNode(surface) {
+  return surface?.querySelector?.("[data-project-submit]") || null;
 }
 
 const PROJECT_CREATE_DRAFT_KEY = "specbridge:create-project-draft";
@@ -71,8 +104,7 @@ function clearProjectCreateDraft() {
   }
 }
 
-function hydrateProjectCreateForm(payload = {}) {
-  const form = projectCreateFormNode();
+function hydrateProjectCreateForm(form, payload = {}) {
   if (!form || !payload) {
     return;
   }
@@ -162,25 +194,25 @@ function closeAuthModal() {
   document.body.classList.remove("overflow-hidden");
 }
 
-function clearProjectCreateErrors() {
-  const summary = document.querySelector("[data-project-errors]");
+function clearProjectCreateErrorsForSurface(surface) {
+  const summary = projectCreateErrorsNode(surface);
   if (summary) {
     summary.textContent = "";
     summary.classList.add("hidden");
   }
-  document.querySelectorAll("[data-project-field-error]").forEach((fieldError) => {
+  surface?.querySelectorAll("[data-project-field-error]").forEach((fieldError) => {
     fieldError.textContent = "";
     fieldError.classList.add("hidden");
   });
 }
 
-function showProjectCreateErrors(errors = {}) {
-  clearProjectCreateErrors();
+function showProjectCreateErrors(surface, errors = {}) {
+  clearProjectCreateErrorsForSurface(surface);
   const summaryMessages = [];
 
   Object.entries(errors).forEach(([field, messages]) => {
     const normalized = Array.isArray(messages) ? messages : [messages];
-    const fieldError = document.querySelector(`[data-project-field-error='${field}']`);
+    const fieldError = surface?.querySelector?.(`[data-project-field-error='${field}']`);
     if (fieldError && normalized.length) {
       fieldError.textContent = normalized.join(" ");
       fieldError.classList.remove("hidden");
@@ -190,7 +222,7 @@ function showProjectCreateErrors(errors = {}) {
   });
 
   if (summaryMessages.length) {
-    const summary = document.querySelector("[data-project-errors]");
+    const summary = projectCreateErrorsNode(surface);
     if (summary) {
       summary.textContent = summaryMessages.join(" ");
       summary.classList.remove("hidden");
@@ -198,8 +230,8 @@ function showProjectCreateErrors(errors = {}) {
   }
 }
 
-function setProjectCreateSubmitting(isSubmitting) {
-  const submitButton = document.querySelector("[data-project-submit]");
+function setProjectCreateSubmitting(surface, isSubmitting) {
+  const submitButton = projectCreateSubmitNode(surface);
   if (!submitButton) {
     return;
   }
@@ -216,12 +248,14 @@ function openProjectModal() {
   if (!modal) {
     return;
   }
+  const surface = modal.querySelector("[data-project-create-surface]");
+  const form = projectCreateFormNode(surface);
   closeAuthModal();
-  clearProjectCreateErrors();
-  hydrateProjectCreateForm(loadProjectCreateDraft());
+  clearProjectCreateErrorsForSurface(surface);
+  hydrateProjectCreateForm(form, loadProjectCreateDraft());
   modal.classList.remove("hidden");
   document.body.classList.add("overflow-hidden");
-  const activeInput = modal.querySelector("input[name='project_name']");
+  const activeInput = form?.querySelector("input[name='project_name']");
   activeInput?.focus();
 }
 
@@ -234,14 +268,20 @@ function closeProjectModal() {
   document.body.classList.remove("overflow-hidden");
 }
 
-async function postJson(url, payload = {}) {
+async function postJson(url, payload = {}, method = "POST") {
+  const form = payload && typeof payload === "object" ? payload.__form || null : null;
+  const requestPayload = payload && typeof payload === "object" && "__form" in payload
+    ? Object.fromEntries(Object.entries(payload).filter(([key]) => key !== "__form"))
+    : payload;
   const response = await fetch(url, {
-    method: "POST",
+    method,
     headers: {
       "Content-Type": "application/json",
-      "X-CSRFToken": getCookie("csrftoken")
+      "X-Requested-With": "XMLHttpRequest",
+      "X-CSRFToken": csrfToken(form)
     },
-    body: JSON.stringify(payload)
+    credentials: "same-origin",
+    body: JSON.stringify(requestPayload)
   });
   const isJson = response.headers.get("content-type")?.includes("application/json");
   const responsePayload = isJson ? await response.json().catch(() => null) : null;
@@ -287,8 +327,9 @@ document.addEventListener("submit", async (event) => {
   const projectCreateForm = event.target.closest("[data-project-create-form]");
   if (projectCreateForm) {
     event.preventDefault();
-    clearProjectCreateErrors();
-    setProjectCreateSubmitting(true);
+    const surface = projectCreateSurface(projectCreateForm);
+    clearProjectCreateErrorsForSurface(surface);
+    setProjectCreateSubmitting(surface, true);
     try {
       const payload = serializeForm(projectCreateForm);
       saveProjectCreateDraft(payload);
@@ -296,7 +337,7 @@ document.addEventListener("submit", async (event) => {
         openAuthModal("signup");
         return;
       }
-      const responsePayload = await postJson(projectCreateForm.action, payload);
+      const responsePayload = await postJson(projectCreateForm.action, { ...payload, __form: projectCreateForm });
       clearProjectCreateDraft();
       if (responsePayload?.redirect_to) {
         window.location.assign(responsePayload.redirect_to);
@@ -308,10 +349,12 @@ document.addEventListener("submit", async (event) => {
       if (error.message.startsWith("Authentication required")) {
         return;
       }
-      openProjectModal();
-      showProjectCreateErrors(error.payload?.errors || { __all__: ["Project could not be created. Please try again."] });
+      if (surface?.closest("[data-project-modal]")) {
+        openProjectModal();
+      }
+      showProjectCreateErrors(surface, error.payload?.errors || { __all__: ["Project could not be created. Please try again."] });
     } finally {
-      setProjectCreateSubmitting(false);
+      setProjectCreateSubmitting(surface, false);
     }
     return;
   }
@@ -326,8 +369,9 @@ document.addEventListener("submit", async (event) => {
     return;
   }
   const payload = serializeForm(form);
+  const method = form.dataset.apiMethod || "POST";
   try {
-    await postJson(form.dataset.apiForm, payload);
+    await postJson(form.dataset.apiForm, { ...payload, __form: form }, method);
     window.location.reload();
   } catch (error) {
     console.error(error);
@@ -413,6 +457,30 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  const aiDraftButton = event.target.closest("[data-ai-draft-request]");
+  if (aiDraftButton) {
+    event.preventDefault();
+    if (!isAuthenticated()) {
+      openAuthModal("login");
+      return;
+    }
+    const streamInput = document.querySelector("[data-stream-input]");
+    if (!streamInput) {
+      return;
+    }
+    const sectionTitle = aiDraftButton.dataset.sectionTitle || "this section";
+    const projectName = aiDraftButton.dataset.projectName || "this project";
+    const customPrompt = aiDraftButton.dataset.aiDraftPrompt || "";
+    streamInput.value = customPrompt || `Help me draft the "${sectionTitle}" section for ${projectName}. Propose a concise summary and a detailed body I can paste into the spec.`;
+    streamInput.scrollIntoView({ block: "nearest" });
+    streamInput.focus();
+    streamInput.dispatchEvent(new Event("input", { bubbles: true }));
+    if (typeof streamInput.setSelectionRange === "function") {
+      streamInput.setSelectionRange(streamInput.value.length, streamInput.value.length);
+    }
+    return;
+  }
+
   const copyButton = event.target.closest("[data-copy-target]");
   if (copyButton) {
     const target = document.querySelector(copyButton.dataset.copyTarget);
@@ -456,6 +524,14 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
+document.addEventListener("input", (event) => {
+  const projectCreateForm = event.target.closest("[data-project-create-form]");
+  if (!projectCreateForm) {
+    return;
+  }
+  saveProjectCreateDraft(serializeForm(projectCreateForm));
+});
+
 setAuthMode("login");
 
 const autoRefreshMs = Number(document.body.dataset.autoRefresh || 0);
@@ -475,6 +551,13 @@ if (autoRefreshMs > 0) {
   }, autoRefreshMs);
 }
 
-if (isAuthenticated() && loadProjectCreateDraft() && projectModalNode()) {
-  openProjectModal();
+const savedProjectCreateDraft = loadProjectCreateDraft();
+if (savedProjectCreateDraft) {
+  const inlineSurface = projectCreateInlineSurface();
+  const inlineForm = projectCreateFormNode(inlineSurface);
+  if (inlineForm) {
+    hydrateProjectCreateForm(inlineForm, savedProjectCreateDraft);
+  } else if (isAuthenticated() && projectModalNode()) {
+    openProjectModal();
+  }
 }

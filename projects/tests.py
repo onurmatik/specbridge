@@ -22,6 +22,16 @@ class ProjectPageTests(TestCase):
         self.assertContains(response, "Agent-Driven Spec System")
         self.assertContains(response, self.project.name)
         self.assertContains(response, "data-project-modal-trigger", html=False)
+        self.assertContains(response, "dist/app.css?v=", html=False)
+        self.assertContains(response, "js/app.js?v=", html=False)
+
+    def test_service_worker_stub_renders(self):
+        response = self.client.get("/service-worker.js")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/javascript")
+        self.assertEqual(response["Cache-Control"], "no-store, no-cache, must-revalidate, max-age=0")
+        self.assertContains(response, "self.registration.unregister", html=False)
 
     def test_anonymous_directory_only_shows_demo_workspace(self):
         outsider = User.objects.create_user(
@@ -56,12 +66,63 @@ class ProjectPageTests(TestCase):
             response = self.client.get(path)
             self.assertEqual(response.status_code, 200, path)
 
+    def test_authenticated_workspace_renders_editable_spec_forms_and_ai_cta(self):
+        self.client.force_login(self.project.created_by)
+
+        response = self.client.get(reverse("project-workspace", args=[self.project.slug]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-api-method="PATCH"', html=False)
+        self.assertContains(response, 'data-workspace-spec-pane', html=False)
+        self.assertContains(response, "How to use this workspace")
+        self.assertContains(response, "Ask AI to Help Draft")
+        self.assertContains(response, "Ask AI")
+        self.assertContains(response, 'data-ai-draft-prompt=', html=False)
+        self.assertContains(response, 'data-stream-input', html=False)
+        self.assertNotContains(response, "How to work in this section")
+        self.assertNotContains(response, "Section Summary")
+        self.assertNotContains(response, "Section Body")
+
+    def test_workspace_separates_tagline_from_summary_detail(self):
+        actor = User.objects.create_user(
+            username="workspace-owner",
+            email="workspace-owner@example.com",
+            password="SpecBridge!123",
+            first_name="Workspace",
+            last_name="Owner",
+            title="PM",
+        )
+        project = create_project_workspace(
+            actor=actor,
+            project_name="Stats Board",
+            tagline="AI assisted data collection and visualization",
+        )
+        project.summary = (
+            "AI assisted data collection and visualization "
+            "This workspace keeps the spec, decisions, assumptions, and delivery plan "
+            "for Stats Board aligned from the first draft onward."
+        )
+        project.save(update_fields=["summary", "updated_at"])
+        self.client.force_login(actor)
+
+        response = self.client.get(reverse("project-workspace", args=[project.slug]))
+
+        self.assertContains(response, "AI assisted data collection and visualization")
+        self.assertContains(
+            response,
+            "This workspace keeps the spec, decisions, assumptions, and delivery plan for Stats Board aligned from the first draft onward.",
+        )
+        self.assertNotContains(
+            response,
+            "AI assisted data collection and visualization This workspace keeps the spec, decisions, assumptions, and delivery plan for Stats Board aligned from the first draft onward.",
+        )
+
     def test_shortcuts_redirect_to_primary_project(self):
         response = self.client.get(reverse("dashboard-shortcut"))
         self.assertEqual(response.status_code, 302)
         self.assertIn(self.project.slug, response["Location"])
 
-    def test_shortcuts_redirect_to_directory_when_authenticated_user_has_no_projects(self):
+    def test_shortcuts_redirect_to_create_page_when_authenticated_user_has_no_projects(self):
         outsider = User.objects.create_user(
             username="grace",
             email="grace@example.com",
@@ -71,7 +132,7 @@ class ProjectPageTests(TestCase):
 
         response = self.client.get(reverse("dashboard-shortcut"))
 
-        self.assertRedirects(response, reverse("project-directory"))
+        self.assertRedirects(response, reverse("project-create"))
 
     def test_authenticated_directory_shows_only_member_projects(self):
         outsider = User.objects.create_user(
@@ -107,7 +168,7 @@ class ProjectPageTests(TestCase):
 
         self.assertEqual(response.status_code, 404)
 
-    def test_authenticated_directory_hides_demo_even_with_legacy_membership(self):
+    def test_authenticated_directory_redirects_to_create_when_user_has_no_projects(self):
         outsider = User.objects.create_user(
             username="legacy",
             email="legacy@example.com",
@@ -123,8 +184,7 @@ class ProjectPageTests(TestCase):
 
         response = self.client.get(reverse("project-directory"))
 
-        self.assertNotContains(response, self.project.name)
-        self.assertContains(response, "No projects yet")
+        self.assertRedirects(response, reverse("project-create"))
 
     def test_authenticated_legacy_demo_member_cannot_open_demo_workspace(self):
         outsider = User.objects.create_user(
@@ -143,6 +203,43 @@ class ProjectPageTests(TestCase):
         response = self.client.get(reverse("project-workspace", args=[self.project.slug]))
 
         self.assertEqual(response.status_code, 404)
+
+    def test_project_create_requires_authentication(self):
+        response = self.client.get(reverse("project-create"))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("login"), response["Location"])
+        self.assertIn("next=/projects/create/", response["Location"])
+
+    def test_project_create_renders_for_authenticated_user_without_projects(self):
+        outsider = User.objects.create_user(
+            username="new-user",
+            email="new-user@example.com",
+            password="SpecBridge!123",
+        )
+        self.client.force_login(outsider)
+
+        response = self.client.get(reverse("project-create"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Create Project")
+        self.assertContains(response, "Workspace Details")
+        self.assertContains(response, "csrfmiddlewaretoken")
+        self.assertContains(response, reverse("project-create-submit"))
+
+    def test_authenticated_user_can_create_project_via_form_submit_route(self):
+        self.client.force_login(self.project.created_by)
+
+        response = self.client.post(
+            reverse("project-create-submit"),
+            {
+                "project_name": "Delivery Control Tower",
+                "tagline": "Operations cockpit for readiness, blockers, and launches.",
+            },
+        )
+
+        created_project = Project.objects.get(slug="delivery-control-tower")
+        self.assertRedirects(response, reverse("project-workspace", args=[created_project.slug]))
 
     def test_authenticated_user_can_create_project(self):
         self.client.force_login(self.project.created_by)

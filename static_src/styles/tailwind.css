@@ -83,6 +83,10 @@
     @apply rounded-xl border border-gray-300 bg-white shadow-sm transition-all focus-within:border-gray-500 focus-within:ring-1 focus-within:ring-gray-500;
   }
 
+  .stream-composer-shell {
+    @apply focus-within:border-gray-300 focus-within:ring-0;
+  }
+
   .agent-highlight {
     background: linear-gradient(to bottom, transparent 60%, #e9d5ff 0%);
     transition: background 0.2s ease;

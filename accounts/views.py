@@ -30,6 +30,9 @@ def _redirect_target(request: HttpRequest) -> str:
 def _post_auth_redirect_target(request: HttpRequest, user) -> str:
     redirect_to = _redirect_target(request)
     resolved_path = urlparse(redirect_to).path or redirect_to
+    primary_project = get_primary_project(user)
+    if resolved_path == reverse("project-directory") and primary_project is None:
+        return reverse("project-create")
     try:
         match = resolve(resolved_path)
     except Resolver404:
@@ -37,10 +40,9 @@ def _post_auth_redirect_target(request: HttpRequest, user) -> str:
 
     slug = match.kwargs.get("slug")
     if slug and not visible_projects_for_user(user).filter(slug=slug).exists():
-        primary_project = get_primary_project(user)
         if primary_project is not None:
             return reverse("project-workspace", args=[primary_project.slug])
-        return reverse("project-directory")
+        return reverse("project-create")
     return redirect_to
 
 

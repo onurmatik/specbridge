@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block title %}SpecBridge · Create Project{% endblock %}
+{% block auto_refresh_ms %}0{% endblock %}
+
+{% block content %}
+<div class="app-shell">
+  {% include "components/global_sidebar.html" %}
+  <main class="flex min-w-0 flex-1 flex-col">
+    {% include "components/page_header.html" %}
+    <div class="flex-1 overflow-y-auto">
+      <div class="mx-auto max-w-6xl px-8 py-8 pb-24">
+        <section data-project-create-inline class="workspace-panel overflow-hidden shadow-paper">
+          {% include "components/create_project_form_surface.html" with show_project_cancel=False %}
+        </section>
+      </div>
+    </div>
+  </main>
+</div>
+{% endblock %}
