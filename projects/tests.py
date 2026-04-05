@@ -74,15 +74,19 @@ class ProjectPageTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-api-method="PATCH"', html=False)
         self.assertContains(response, 'data-workspace-document-pane', html=False)
-        self.assertContains(response, "Project Documents")
+        self.assertContains(response, 'data-document-editor-form', html=False)
+        self.assertContains(response, 'data-document-editor-input', html=False)
         self.assertContains(response, "Consistency Inbox")
         self.assertContains(response, "Add Document")
-        self.assertContains(response, "Save Document")
+        self.assertContains(response, "Markdown Canvas")
+        self.assertContains(response, self.project.name)
+        self.assertContains(response, self.project.tagline)
+        self.assertNotContains(response, "Save Document")
         self.assertContains(response, "AI + Stream Composer")
         self.assertContains(response, 'data-stream-input', html=False)
         self.assertNotContains(response, "Ask AI to Help Draft")
 
-    def test_workspace_separates_tagline_from_summary_detail(self):
+    def test_workspace_keeps_project_summary_out_of_document_canvas(self):
         actor = User.objects.create_user(
             username="workspace-owner",
             email="workspace-owner@example.com",
@@ -106,14 +110,12 @@ class ProjectPageTests(TestCase):
 
         response = self.client.get(reverse("project-workspace", args=[project.slug]))
 
+        self.assertContains(response, "Stats Board")
+        self.assertContains(response, "Markdown Canvas")
         self.assertContains(response, "AI assisted data collection and visualization")
-        self.assertContains(
-            response,
-            "This workspace keeps documents, decisions, assumptions, and delivery intent for Stats Board aligned from the first draft onward.",
-        )
         self.assertNotContains(
             response,
-            "AI assisted data collection and visualization This workspace keeps documents, decisions, assumptions, and delivery intent for Stats Board aligned from the first draft onward.",
+            "This workspace keeps documents, decisions, assumptions, and delivery intent for Stats Board aligned from the first draft onward.",
         )
 
     def test_shortcuts_redirect_to_primary_project(self):

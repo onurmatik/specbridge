@@ -2,17 +2,17 @@
   <div class="min-w-0">
     <div class="mb-1 flex items-center gap-2 text-sm text-gray-500">
       <a href="{% url 'project-directory' %}" class="hover:text-gray-900">Projects</a>
-      {% if project %}
-        <iconify-icon icon="lucide:chevron-right" class="text-xs"></iconify-icon>
-        <span class="truncate text-gray-900">{{ project.name }}</span>
-      {% elif page_breadcrumb_label %}
+      {% if page_breadcrumb_label %}
         <iconify-icon icon="lucide:chevron-right" class="text-xs"></iconify-icon>
         <span class="truncate text-gray-900">{{ page_breadcrumb_label }}</span>
+      {% elif project %}
+        <iconify-icon icon="lucide:chevron-right" class="text-xs"></iconify-icon>
+        <span class="truncate text-gray-900">{{ project.name }}</span>
       {% endif %}
     </div>
     <div class="flex items-center gap-3">
       <h1 class="font-display text-lg font-bold text-gray-900">{% if page_title %}{{ page_title }}{% elif project %}{{ project.name }}{% else %}Projects{% endif %}</h1>
-      {% if project %}
+      {% if project and not header_hide_project_identity %}
         <span class="workspace-badge border-gray-200 bg-gray-50 text-gray-600">{{ status_label }}</span>
         {% if request.user.is_authenticated %}
           <span class="inline-flex items-center gap-1.5 rounded-md bg-purple-50 px-2 py-1 text-xs font-medium text-brand-agent">
@@ -25,6 +25,7 @@
             Read-only
           </span>
         {% endif %}
+      {% elif header_hide_project_identity %}
       {% elif request.user.is_authenticated %}
         <span class="workspace-badge border-gray-200 bg-gray-50 text-gray-600">{{ page_badge_label|default:"Your workspaces" }}</span>
       {% else %}

@@ -12,31 +12,59 @@
     <div class="flex min-h-0 flex-1 overflow-hidden bg-gray-50">
       <aside class="flex w-[300px] flex-shrink-0 flex-col border-r border-gray-200 bg-white">
         <div class="border-b border-gray-100 px-6 py-5">
-          <div class="flex items-center justify-between">
-            <div>
-              <h2 class="font-display text-lg font-bold text-gray-900">Project Documents</h2>
-              <p class="mt-1 text-xs text-gray-500">Preset and custom documents live here.</p>
-            </div>
-            <span class="workspace-badge border-gray-200 bg-gray-50 text-gray-600">{{ documents|length }} docs</span>
+          <div class="mb-3 flex items-center gap-2">
+            <span class="workspace-badge border-gray-200 bg-gray-50 text-gray-600">{{ status_label }}</span>
+            {% if request.user.is_authenticated %}
+              <span class="inline-flex items-center gap-1.5 rounded-md bg-purple-50 px-2 py-1 text-xs font-medium text-brand-agent">
+                <iconify-icon icon="lucide:bot"></iconify-icon>
+                Polling MVP
+              </span>
+            {% else %}
+              <span class="workspace-badge border-blue-100 bg-blue-50 text-blue-700">
+                <iconify-icon icon="lucide:eye"></iconify-icon>
+                Read-only
+              </span>
+            {% endif %}
           </div>
+          <h2 class="font-display text-xl font-bold text-gray-900">{{ project.name }}</h2>
+          {% if workspace_tagline %}
+            <p class="mt-2 text-sm leading-relaxed text-gray-500">{{ workspace_tagline }}</p>
+          {% elif workspace_summary_detail %}
+            <p class="mt-2 text-sm leading-relaxed text-gray-500">{{ workspace_summary_detail }}</p>
+          {% endif %}
         </div>
         <div class="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
           {% for document in documents %}
-            <a
-              href="{% url 'project-workspace' project.slug %}?document={{ document.slug }}"
-              class="block rounded-2xl border p-4 transition {% if active_document and document.id == active_document.id %}border-gray-900 bg-gray-900 text-white shadow-card{% else %}border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50{% endif %}"
-            >
-              <div class="mb-2 flex items-center justify-between gap-3">
-                <span class="truncate text-sm font-semibold">{{ document.title }}</span>
-                <span class="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider {% if active_document and document.id == active_document.id %}bg-white/15 text-white{% else %}{% if document.status == 'aligned' %}bg-green-50 text-green-700{% elif document.status == 'blocked' %}bg-red-50 text-red-700{% else %}bg-amber-50 text-amber-700{% endif %}{% endif %}">
-                  {{ document.get_status_display }}
-                </span>
-              </div>
-              <div class="flex items-center justify-between text-xs {% if active_document and document.id == active_document.id %}text-white/70{% else %}text-gray-500{% endif %}">
-                <span>{{ document.get_document_type_display }}</span>
-                <span>{% if document.source_kind == 'preset' %}Preset{% else %}Custom{% endif %}</span>
-              </div>
-            </a>
+            <div class="group relative">
+              {% if request.user.is_authenticated %}
+                <form class="absolute right-3 top-3 z-10" data-api-form="/api/projects/{{ project.slug }}/documents/{{ document.slug }}" data-api-method="DELETE">
+                  {% csrf_token %}
+                  <button
+                    type="submit"
+                    class="inline-flex h-7 w-7 items-center justify-center rounded-full border transition {% if active_document and document.id == active_document.id %}border-white/20 bg-white/10 text-white opacity-100 hover:bg-white/15{% else %}border-gray-200 bg-white text-gray-400 opacity-0 hover:border-red-200 hover:bg-red-50 hover:text-red-700 group-hover:opacity-100 focus:opacity-100{% endif %}"
+                    aria-label="Delete {{ document.title }}"
+                  >
+                    <iconify-icon icon="lucide:trash-2"></iconify-icon>
+                  </button>
+                </form>
+              {% endif %}
+              <a
+                href="{% url 'project-workspace' project.slug %}?document={{ document.slug }}"
+                data-document-link
+                class="block rounded-2xl border p-4 pr-12 transition {% if active_document and document.id == active_document.id %}border-gray-900 bg-gray-900 text-white shadow-card{% else %}border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50{% endif %}"
+              >
+                <div class="mb-2 flex items-center justify-between gap-3">
+                  <span class="truncate text-sm font-semibold">{{ document.title }}</span>
+                  <span class="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider {% if active_document and document.id == active_document.id %}bg-white/15 text-white{% else %}{% if document.status == 'aligned' %}bg-green-50 text-green-700{% elif document.status == 'blocked' %}bg-red-50 text-red-700{% else %}bg-amber-50 text-amber-700{% endif %}{% endif %}">
+                    {{ document.get_status_display }}
+                  </span>
+                </div>
+                <div class="flex items-center justify-between text-xs {% if active_document and document.id == active_document.id %}text-white/70{% else %}text-gray-500{% endif %}">
+                  <span>{{ document.get_document_type_display }}</span>
+                  <span>{% if document.source_kind == 'preset' %}Preset{% else %}Custom{% endif %}</span>
+                </div>
+              </a>
+            </div>
           {% endfor %}
         </div>
         <div class="border-t border-gray-100 bg-gray-50 p-4">
@@ -84,123 +112,57 @@
         </div>
       </aside>
 
-      <section class="min-h-0 flex-1 overflow-y-auto">
-        <div class="mx-auto max-w-4xl px-8 py-8 pb-24">
-          <div class="mb-8">
-            <div class="mb-4 flex flex-wrap items-center gap-3">
-              <span class="workspace-badge border-blue-100 bg-blue-50 text-blue-700">Multi-document workspace</span>
-              {% if latest_consistency_run %}
-                <span class="workspace-badge {% if latest_consistency_run.status == 'completed' %}border-green-100 bg-green-50 text-green-700{% else %}border-red-100 bg-red-50 text-red-700{% endif %}">
-                  {% if latest_consistency_run.status == "completed" %}
-                    Consistency checked {{ latest_consistency_run.analyzed_at|date:"M j, g:i A" }}
-                  {% else %}
-                    Consistency check failed
-                  {% endif %}
-                </span>
-              {% else %}
-                <span class="workspace-badge border-amber-100 bg-amber-50 text-amber-700">No consistency run yet</span>
-              {% endif %}
-            </div>
-            <h1 class="mb-4 font-display text-4xl font-bold tracking-tight text-gray-900">{{ project.name }}</h1>
-            {% if workspace_tagline %}
-              <p class="text-lg leading-relaxed text-gray-600">{{ workspace_tagline }}</p>
-            {% endif %}
-            {% if workspace_summary_detail %}
-              <p class="{% if workspace_tagline %}mt-3 {% endif %}text-sm leading-relaxed text-gray-500">{{ workspace_summary_detail }}</p>
-            {% endif %}
-          </div>
-
+      <section class="min-h-0 flex-1 overflow-hidden">
+        <div class="flex h-full flex-col">
           {% if active_document %}
-            <div data-workspace-document-pane class="workspace-panel p-8">
-              <div class="mb-6 flex items-start justify-between gap-4">
-                <div>
-                  <div class="mb-2 flex items-center gap-2">
-                    <span class="workspace-badge border-gray-200 bg-gray-50 text-gray-600">{{ active_document.get_document_type_display }}</span>
-                    <span class="workspace-badge {% if active_document.status == 'aligned' %}border-green-100 bg-green-50 text-green-700{% elif active_document.status == 'blocked' %}border-red-100 bg-red-50 text-red-700{% else %}border-amber-100 bg-amber-50 text-amber-700{% endif %}">
-                      {{ active_document.get_status_display }}
-                    </span>
-                  </div>
-                  <h2 class="font-display text-2xl font-bold text-gray-900">{{ active_document.title }}</h2>
-                  <p class="mt-2 text-sm text-gray-500">Primary document slug: <span class="font-mono">{{ active_document.slug }}</span></p>
-                </div>
-                {% if request.user.is_authenticated %}
-                  <form data-api-form="/api/projects/{{ project.slug }}/documents/{{ active_document.slug }}" data-api-method="DELETE">
-                    {% csrf_token %}
-                    <button type="submit" class="secondary-button !border-red-200 !text-red-700">
-                      <iconify-icon icon="lucide:trash-2"></iconify-icon>
-                      Delete
-                    </button>
-                  </form>
-                {% endif %}
-              </div>
-
+            <div data-workspace-document-pane class="workspace-panel flex min-h-0 flex-1 overflow-hidden">
               {% if request.user.is_authenticated %}
-                <form class="space-y-5" data-api-form="/api/projects/{{ project.slug }}/documents/{{ active_document.slug }}" data-api-method="PATCH">
+                <form class="relative flex min-h-0 flex-1" data-api-form="/api/projects/{{ project.slug }}/documents/{{ active_document.slug }}" data-api-method="PATCH" data-document-editor-form>
                   {% csrf_token %}
-                  <div class="grid gap-4 md:grid-cols-[minmax(0,1fr)_180px]">
-                    <div>
-                      <label class="mb-2 block text-xs font-medium uppercase tracking-wider text-gray-500">Title</label>
-                      <input type="text" name="title" value="{{ active_document.title }}" class="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-200">
-                    </div>
-                    <div>
-                      <label class="mb-2 block text-xs font-medium uppercase tracking-wider text-gray-500">Status</label>
-                      <select name="status" class="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-200">
-                        <option value="iterating" {% if active_document.status == 'iterating' %}selected{% endif %}>Iterating</option>
-                        <option value="aligned" {% if active_document.status == 'aligned' %}selected{% endif %}>Aligned</option>
-                        <option value="blocked" {% if active_document.status == 'blocked' %}selected{% endif %}>Blocked</option>
-                      </select>
-                    </div>
+                  <div class="pointer-events-none absolute right-6 top-6 z-10 flex items-center gap-2">
+                    <span data-document-autosave-status class="rounded-full border border-gray-200 bg-white/90 px-3 py-1 text-[11px] font-medium text-gray-500 shadow-sm backdrop-blur-sm">Saved</span>
+                    <span class="rounded-full border border-gray-200 bg-white/90 px-3 py-1 text-[11px] font-medium text-gray-500 shadow-sm backdrop-blur-sm">Markdown Canvas</span>
                   </div>
-                  <div>
-                    <label class="mb-2 block text-xs font-medium uppercase tracking-wider text-gray-500">Body</label>
-                    <textarea name="body" rows="18" class="w-full rounded-2xl border border-gray-200 bg-white px-4 py-4 text-sm leading-relaxed text-gray-900 placeholder-gray-400 focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-200" placeholder="Describe this document’s current source of truth.">{{ active_document.body }}</textarea>
-                  </div>
-                  <div class="flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 pt-4">
-                    <div class="flex flex-wrap gap-2 text-xs text-gray-500">
-                      <span class="rounded-full border border-gray-200 bg-gray-50 px-3 py-1">Kind: {{ active_document.source_kind|title }}</span>
-                      <span class="rounded-full border border-gray-200 bg-gray-50 px-3 py-1">Revisions: {{ active_document.revisions.count }}</span>
-                    </div>
-                    <button type="submit" class="primary-button">
-                      <iconify-icon icon="lucide:save"></iconify-icon>
-                      Save Document
-                    </button>
-                  </div>
+                  <textarea
+                    name="body"
+                    rows="24"
+                    data-document-editor-input
+                    class="h-full min-h-0 w-full flex-1 resize-none border-0 bg-white px-10 py-10 font-mono text-[15px] leading-8 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-0"
+                    placeholder="# {{ active_document.title }}&#10;&#10;Write the current source of truth in Markdown."
+                  >{{ active_document.body }}</textarea>
                 </form>
               {% else %}
-                <div class="space-y-4">
-                  <textarea rows="18" readonly class="w-full rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-4 py-4 text-sm leading-relaxed text-gray-600 focus:ring-0">{{ active_document.body }}</textarea>
-                  <button type="button" class="primary-button" data-auth-modal-trigger data-auth-mode="login">
-                    <iconify-icon icon="lucide:log-in"></iconify-icon>
-                    Sign In to Edit
-                  </button>
+                <div class="relative flex min-h-0 flex-1">
+                  <div class="pointer-events-none absolute right-6 top-6 z-10">
+                    <span class="rounded-full border border-gray-200 bg-white/90 px-3 py-1 text-[11px] font-medium text-gray-500 shadow-sm backdrop-blur-sm">Markdown Canvas</span>
+                  </div>
+                  <textarea
+                    rows="24"
+                    readonly
+                    class="h-full min-h-0 w-full flex-1 resize-none border-0 bg-white px-10 py-10 font-mono text-[15px] leading-8 text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-0"
+                    placeholder="# {{ active_document.title }}&#10;&#10;Write the current source of truth in Markdown."
+                  >{{ active_document.body }}</textarea>
+                  <div class="absolute inset-x-0 bottom-0 border-t border-gray-100 bg-white/95 p-6 backdrop-blur-sm">
+                    <button type="button" class="primary-button" data-auth-modal-trigger data-auth-mode="login">
+                      <iconify-icon icon="lucide:log-in"></iconify-icon>
+                      Sign In to Edit
+                    </button>
+                  </div>
                 </div>
               {% endif %}
             </div>
-
-            {% if document_revisions %}
-              <div class="mt-8 workspace-panel p-6">
-                <div class="mb-4 flex items-center justify-between">
-                  <h3 class="font-display text-lg font-bold text-gray-900">Recent Document Revisions</h3>
-                  <a href="{% url 'project-history' project.slug %}?document={{ active_document.slug }}" class="text-sm font-medium text-brand-agent hover:underline">Open full history</a>
-                </div>
-                <div class="space-y-3">
-                  {% for revision in document_revisions %}
-                    <div class="flex items-center justify-between rounded-xl border border-gray-200 bg-white px-4 py-3">
-                      <div>
-                        <div class="text-sm font-medium text-gray-900">r{{ revision.number }} · {{ revision.title }}</div>
-                        <div class="text-xs text-gray-500">{{ revision.summary|default:"Document revision captured." }}</div>
-                      </div>
-                      <div class="text-xs text-gray-400">{{ revision.created_at|date:"M j, g:i A" }}</div>
-                    </div>
-                  {% endfor %}
-                </div>
+          {% else %}
+            <div class="workspace-panel flex min-h-0 flex-1 items-center justify-center p-10 text-center">
+              <div class="max-w-sm">
+                <h2 class="font-display text-2xl font-bold text-gray-900">No active document</h2>
+                <p class="mt-3 text-sm leading-relaxed text-gray-500">Create a new document from the left sidebar or pick one from the project list.</p>
               </div>
-            {% endif %}
+            </div>
           {% endif %}
         </div>
       </section>
 
-      <aside class="flex w-[340px] flex-shrink-0 flex-col border-l border-gray-200 bg-white">
+      <aside class="flex w-[380px] flex-shrink-0 flex-col border-l border-gray-200 bg-white">
         <div class="border-b border-gray-100 px-6 py-5">
           <div class="flex items-center justify-between gap-3">
             <div>

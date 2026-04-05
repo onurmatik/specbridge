@@ -104,6 +104,220 @@ function documentSuggestionMenuIsOpen(shell) {
   return shell?.dataset?.dropdownOpen === "true";
 }
 
+function documentEditorFormNode() {
+  return document.querySelector("[data-document-editor-form]");
+}
+
+function documentEditorSnapshot(form) {
+  return JSON.stringify(serializeForm(form));
+}
+
+function setDocumentEditorAutosaveStatus(form, state, label = "") {
+  const statusNode = form?.querySelector?.("[data-document-autosave-status]");
+  if (!statusNode) {
+    return;
+  }
+
+  const text = label || {
+    dirty: "Unsaved",
+    saving: "Saving...",
+    saved: "Saved",
+    error: "Save failed",
+  }[state] || "Saved";
+
+  statusNode.textContent = text;
+  statusNode.classList.remove(
+    "border-gray-200",
+    "bg-white/90",
+    "text-gray-500",
+    "border-amber-200",
+    "bg-amber-50",
+    "text-amber-700",
+    "border-blue-200",
+    "bg-blue-50",
+    "text-blue-700",
+    "border-red-200",
+    "bg-red-50",
+    "text-red-700"
+  );
+
+  if (state === "dirty") {
+    statusNode.classList.add("border-amber-200", "bg-amber-50", "text-amber-700");
+    return;
+  }
+
+  if (state === "saving") {
+    statusNode.classList.add("border-blue-200", "bg-blue-50", "text-blue-700");
+    return;
+  }
+
+  if (state === "error") {
+    statusNode.classList.add("border-red-200", "bg-red-50", "text-red-700");
+    return;
+  }
+
+  statusNode.classList.add("border-gray-200", "bg-white/90", "text-gray-500");
+}
+
+async function flushDocumentEditorAutosave(controller, { force = false } = {}) {
+  if (!controller?.form) {
+    return;
+  }
+
+  window.clearTimeout(controller.timer);
+  controller.timer = null;
+
+  const currentSnapshot = documentEditorSnapshot(controller.form);
+  const needsSave = force || controller.lastSavedSnapshot !== currentSnapshot;
+
+  if (!needsSave) {
+    controller.dirty = false;
+    setDocumentEditorAutosaveStatus(controller.form, "saved");
+    if (controller.navigateTo) {
+      const href = controller.navigateTo;
+      controller.navigateTo = "";
+      window.location.assign(href);
+    }
+    return;
+  }
+
+  if (controller.inFlight) {
+    controller.pendingAfterSave = true;
+    return controller.inFlight;
+  }
+
+  controller.dirty = false;
+  setDocumentEditorAutosaveStatus(controller.form, "saving");
+
+  controller.inFlight = postJson(
+    controller.form.dataset.apiForm,
+    { ...serializeForm(controller.form), __form: controller.form },
+    controller.form.dataset.apiMethod || "POST"
+  )
+    .then(() => {
+      controller.lastSavedSnapshot = documentEditorSnapshot(controller.form);
+      const stamp = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      setDocumentEditorAutosaveStatus(controller.form, "saved", `Saved ${stamp}`);
+    })
+    .catch((error) => {
+      console.error(error);
+      controller.dirty = true;
+      if (!error.message.startsWith("Authentication required")) {
+        setDocumentEditorAutosaveStatus(controller.form, "error");
+      }
+      throw error;
+    })
+    .finally(async () => {
+      controller.inFlight = null;
+
+      if (controller.pendingAfterSave) {
+        controller.pendingAfterSave = false;
+        try {
+          await flushDocumentEditorAutosave(controller, { force: true });
+        } catch (error) {
+          console.error(error);
+        }
+        return;
+      }
+
+      if (controller.navigateTo) {
+        const href = controller.navigateTo;
+        controller.navigateTo = "";
+        window.location.assign(href);
+      }
+    });
+
+  return controller.inFlight;
+}
+
+function initializeDocumentEditorAutosave() {
+  const form = documentEditorFormNode();
+  if (!form || form.dataset.autosaveInitialized === "true") {
+    return;
+  }
+
+  form.dataset.autosaveInitialized = "true";
+
+  const editorInput = form.querySelector("[data-document-editor-input]");
+  if (!editorInput) {
+    return;
+  }
+
+  const controller = {
+    form,
+    timer: null,
+    inFlight: null,
+    pendingAfterSave: false,
+    dirty: false,
+    navigateTo: "",
+    lastSavedSnapshot: documentEditorSnapshot(form),
+  };
+
+  setDocumentEditorAutosaveStatus(form, "saved");
+
+  const scheduleAutosave = () => {
+    const nextSnapshot = documentEditorSnapshot(form);
+    if (nextSnapshot === controller.lastSavedSnapshot) {
+      controller.dirty = false;
+      setDocumentEditorAutosaveStatus(form, "saved");
+      window.clearTimeout(controller.timer);
+      controller.timer = null;
+      return;
+    }
+
+    controller.dirty = true;
+    setDocumentEditorAutosaveStatus(form, "dirty");
+    window.clearTimeout(controller.timer);
+    controller.timer = window.setTimeout(() => {
+      flushDocumentEditorAutosave(controller).catch((error) => {
+        console.error(error);
+      });
+    }, 900);
+  };
+
+  editorInput.addEventListener("input", scheduleAutosave);
+  editorInput.addEventListener("blur", () => {
+    flushDocumentEditorAutosave(controller).catch((error) => {
+      console.error(error);
+    });
+  });
+
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    flushDocumentEditorAutosave(controller, { force: true }).catch((error) => {
+      console.error(error);
+    });
+  });
+
+  document.querySelectorAll("[data-document-link]").forEach((link) => {
+    link.addEventListener("click", async (event) => {
+      if (!controller.dirty && !controller.inFlight && documentEditorSnapshot(form) === controller.lastSavedSnapshot) {
+        return;
+      }
+
+      event.preventDefault();
+      controller.navigateTo = link.href;
+      try {
+        await flushDocumentEditorAutosave(controller, { force: true });
+      } catch (error) {
+        console.error(error);
+        const href = controller.navigateTo || link.href;
+        controller.navigateTo = "";
+        window.location.assign(href);
+      }
+    });
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
+      event.preventDefault();
+      flushDocumentEditorAutosave(controller, { force: true }).catch((error) => {
+        console.error(error);
+      });
+    }
+  });
+}
+
 function initializeDocumentCreateControls() {
   document.querySelectorAll("[data-document-create-shell]").forEach((shell) => {
     if (shell.dataset.documentControlsInitialized === "true") {
@@ -648,6 +862,7 @@ document.addEventListener("input", (event) => {
 });
 
 initializeDocumentCreateControls();
+initializeDocumentEditorAutosave();
 setAuthMode("login");
 
 const autoRefreshMs = Number(document.body.dataset.autoRefresh || 0);

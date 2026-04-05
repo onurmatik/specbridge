@@ -304,12 +304,24 @@ def update_document(
     body: str | None = None,
     status: str | None = None,
 ):
+    original_title = document.title
+    original_body = document.body
+    original_status = document.status
     if title is not None:
         document.title = title
     if body is not None:
         document.body = body
     if status is not None:
         document.status = status
+    changed_fields = []
+    if title is not None and title != original_title:
+        changed_fields.append("title")
+    if body is not None and body != original_body:
+        changed_fields.append("body")
+    if status is not None and status != original_status:
+        changed_fields.append("status")
+    if not changed_fields:
+        return None
     document.save()
     description = f"Updated document {document.title}"
     project_revision = capture_project_revision(

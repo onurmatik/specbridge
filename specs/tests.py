@@ -26,6 +26,17 @@ class SpecsServiceTests(TestCase):
         document.refresh_from_db()
         self.assertEqual(document.revisions.count(), document_revision_count + 1)
 
+    def test_document_update_noop_does_not_create_revisions(self):
+        document = ProjectDocument.objects.get(project=self.project, slug="requirements")
+        project_revision_count = self.project.revisions.count()
+        document_revision_count = document.revisions.count()
+
+        update_document(document=document, body=document.body)
+
+        self.assertEqual(self.project.revisions.count(), project_revision_count)
+        document.refresh_from_db()
+        self.assertEqual(document.revisions.count(), document_revision_count)
+
     def test_document_revisions_endpoint_returns_items(self):
         response = self.client.get(f"/api/projects/{self.project.slug}/documents/requirements/revisions")
 

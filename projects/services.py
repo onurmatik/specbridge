@@ -226,6 +226,9 @@ def workspace_context(project, active_document_slug: str | None = None):
     consistency_issues = list(project.consistency_issues.all()[:8])
     context.update(
         {
+            "page_title": "Workspace",
+            "page_breadcrumb_label": "Workspace",
+            "header_hide_project_identity": True,
             "stream_entries": build_workspace_entries(project),
             "documents": documents,
             "active_document": active_document,
