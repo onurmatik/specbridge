@@ -2,32 +2,43 @@ from django.utils import timezone
 
 from agents.models import AgentSuggestionStatus
 from specs.models import AuditEventType
-from specs.services import capture_version, log_audit_event
+from specs.services import capture_document_revision, capture_project_revision, log_audit_event
 
 
 def apply_suggestion(suggestion, actor):
-    target = suggestion.project.sections.filter(key=suggestion.related_section_key).first()
+    target = suggestion.related_document
     payload = suggestion.payload or {}
+    project_revision = None
     if target:
-        if payload.get("summary"):
-            target.summary = payload["summary"]
+        if payload.get("title"):
+            target.title = payload["title"]
+        if payload.get("body_replace") is not None:
+            target.body = payload["body_replace"]
         if payload.get("body_append"):
             target.body = f"{target.body}\n\n{payload['body_append']}".strip()
         if payload.get("status"):
             target.status = payload["status"]
         target.save()
+        project_revision = capture_project_revision(
+            project=suggestion.project,
+            title=f"Agent suggestion applied: {suggestion.title}",
+            summary=suggestion.summary,
+            actor=actor,
+            source_agent=suggestion,
+            source_post=suggestion.source_post,
+        )
+        capture_document_revision(
+            document=target,
+            title=f"Agent suggestion applied: {suggestion.title}",
+            summary=suggestion.summary,
+            actor=actor,
+            project_revision=project_revision,
+        )
+
     suggestion.status = AgentSuggestionStatus.APPLIED
     suggestion.applied_by = actor
     suggestion.acted_at = timezone.now()
     suggestion.save(update_fields=["status", "applied_by", "acted_at", "updated_at"])
-    version = capture_version(
-        project=suggestion.project,
-        title=f"Agent suggestion applied: {suggestion.title}",
-        summary=suggestion.summary,
-        actor=actor,
-        source_agent=suggestion,
-        source_post=suggestion.source_post,
-    )
     log_audit_event(
         project=suggestion.project,
         actor=actor,
@@ -36,8 +47,11 @@ def apply_suggestion(suggestion, actor):
         description=suggestion.summary,
         source_agent=suggestion,
         source_post=suggestion.source_post,
-        spec_version=version,
-        metadata={"suggestion_id": suggestion.id, "target": suggestion.related_section_key},
+        project_revision=project_revision,
+        metadata={
+            "suggestion_id": suggestion.id,
+            "target": suggestion.related_document.slug if suggestion.related_document else "",
+        },
     )
     return suggestion
 

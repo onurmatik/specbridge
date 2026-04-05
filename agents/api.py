@@ -9,7 +9,7 @@ router = Router(tags=["agents"])
 
 @router.get("/{slug}/agent-suggestions")
 def list_suggestions(request, slug: str):
-    project = get_project_or_404(slug)
+    project = get_project_or_404(slug, request.user)
     return {
         "items": [
             {
@@ -17,25 +17,25 @@ def list_suggestions(request, slug: str):
                 "title": suggestion.title,
                 "summary": suggestion.summary,
                 "status": suggestion.status,
-                "related_section_key": suggestion.related_section_key,
+                "related_document_slug": suggestion.related_document.slug if suggestion.related_document else "",
             }
-            for suggestion in project.agent_suggestions.all()
+            for suggestion in project.agent_suggestions.select_related("related_document").all()
         ]
     }
 
 
 @router.post("/{slug}/agent-suggestions/{suggestion_id}/apply", auth=django_auth)
 def apply_suggestion_endpoint(request, slug: str, suggestion_id: int):
-    project = get_project_or_404(slug)
+    project = get_project_or_404(slug, request.user)
     actor = resolve_actor(request, project)
-    suggestion = project.agent_suggestions.get(pk=suggestion_id)
+    suggestion = project.agent_suggestions.select_related("related_document").get(pk=suggestion_id)
     apply_suggestion(suggestion, actor)
     return {"ok": True, "status": suggestion.status}
 
 
 @router.post("/{slug}/agent-suggestions/{suggestion_id}/dismiss", auth=django_auth)
 def dismiss_suggestion_endpoint(request, slug: str, suggestion_id: int):
-    project = get_project_or_404(slug)
+    project = get_project_or_404(slug, request.user)
     actor = resolve_actor(request, project)
     suggestion = project.agent_suggestions.get(pk=suggestion_id)
     dismiss_suggestion(suggestion, actor)

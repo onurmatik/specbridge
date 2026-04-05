@@ -64,7 +64,13 @@ class OpenQuestion(TimeStampedModel):
         blank=True,
         related_name="questions",
     )
-    related_section_key = models.CharField(max_length=64, blank=True)
+    related_document = models.ForeignKey(
+        "specs.ProjectDocument",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="questions",
+    )
     raised_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -108,7 +114,13 @@ class Blocker(TimeStampedModel):
         blank=True,
         related_name="blockers",
     )
-    related_section_key = models.CharField(max_length=64, blank=True)
+    related_document = models.ForeignKey(
+        "specs.ProjectDocument",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="blockers",
+    )
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -159,7 +171,13 @@ class Decision(TimeStampedModel):
         blank=True,
         related_name="decisions",
     )
-    related_section_key = models.CharField(max_length=64, blank=True)
+    related_document = models.ForeignKey(
+        "specs.ProjectDocument",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="decisions",
+    )
     supersedes = models.ForeignKey(
         "self",
         on_delete=models.SET_NULL,
@@ -177,12 +195,7 @@ class Decision(TimeStampedModel):
     def save(self, *args, **kwargs):
         if not self.code:
             project_code = self.project.slug.replace("-", "").upper()[:4] or "PRJ"
-            sequence = (
-                Decision.objects.filter(project=self.project)
-                .exclude(pk=self.pk)
-                .count()
-                + 1
-            )
+            sequence = Decision.objects.filter(project=self.project).exclude(pk=self.pk).count() + 1
             self.code = f"{project_code}-{sequence:02d}"
         super().save(*args, **kwargs)
 

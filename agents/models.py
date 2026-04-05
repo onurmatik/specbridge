@@ -14,8 +14,14 @@ class AgentSuggestion(TimeStampedModel):
     project = models.ForeignKey("projects.Project", on_delete=models.CASCADE, related_name="agent_suggestions")
     title = models.CharField(max_length=255)
     summary = models.TextField()
-    related_section_key = models.CharField(max_length=64, blank=True)
-    target_type = models.CharField(max_length=64, default="section")
+    related_document = models.ForeignKey(
+        "specs.ProjectDocument",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="agent_suggestions",
+    )
+    target_type = models.CharField(max_length=64, default="document")
     target_identifier = models.CharField(max_length=128, blank=True)
     payload = models.JSONField(default=dict, blank=True)
     status = models.CharField(

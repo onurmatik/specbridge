@@ -12,6 +12,7 @@ class ExportPayload(Schema):
     extension: str = "md"
     share_enabled: bool = False
     include_resolved_questions: bool = False
+    document_slugs: str | None = None
 
 
 class SharePayload(Schema):
@@ -20,7 +21,7 @@ class SharePayload(Schema):
 
 @router.get("/{slug}/exports")
 def list_exports(request, slug: str):
-    project = get_project_or_404(slug)
+    project = get_project_or_404(slug, request.user)
     return {
         "items": [
             {
@@ -39,7 +40,7 @@ def list_exports(request, slug: str):
 
 @router.post("/{slug}/exports", auth=django_auth)
 def create_export_endpoint(request, slug: str, payload: ExportPayload):
-    project = get_project_or_404(slug)
+    project = get_project_or_404(slug, request.user)
     actor = resolve_actor(request, project)
     artifact = create_export(project, payload.format, actor, payload.dict())
     return {"id": artifact.id, "filename": artifact.filename, "status": artifact.status}
@@ -47,7 +48,7 @@ def create_export_endpoint(request, slug: str, payload: ExportPayload):
 
 @router.post("/{slug}/exports/{export_id}/share-toggle", auth=django_auth)
 def toggle_share_endpoint(request, slug: str, export_id: int, payload: SharePayload):
-    project = get_project_or_404(slug)
+    project = get_project_or_404(slug, request.user)
     artifact = project.exports.get(pk=export_id)
     toggle_share(artifact, payload.enabled)
     return {"ok": True, "share_enabled": artifact.share_enabled}

@@ -76,6 +76,17 @@ function projectCreateSubmitNode(surface) {
   return surface?.querySelector?.("[data-project-submit]") || null;
 }
 
+function syncExportDocumentSelection(form) {
+  const hiddenInput = form?.querySelector?.("[data-document-slugs-input]");
+  if (!hiddenInput) {
+    return;
+  }
+  const selected = Array.from(
+    form.querySelectorAll("[data-export-document-checkbox]:checked")
+  ).map((checkbox) => checkbox.value);
+  hiddenInput.value = selected.join(",");
+}
+
 const PROJECT_CREATE_DRAFT_KEY = "specbridge:create-project-draft";
 
 function saveProjectCreateDraft(payload) {
@@ -368,6 +379,7 @@ document.addEventListener("submit", async (event) => {
     openAuthModal("login");
     return;
   }
+  syncExportDocumentSelection(form);
   const payload = serializeForm(form);
   const method = form.dataset.apiMethod || "POST";
   try {
@@ -525,6 +537,11 @@ document.addEventListener("keydown", (event) => {
 });
 
 document.addEventListener("input", (event) => {
+  const apiForm = event.target.closest("[data-api-form]");
+  if (apiForm?.querySelector?.("[data-document-slugs-input]")) {
+    syncExportDocumentSelection(apiForm);
+  }
+
   const projectCreateForm = event.target.closest("[data-project-create-form]");
   if (!projectCreateForm) {
     return;

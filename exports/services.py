@@ -7,40 +7,65 @@ from specs.models import AuditEventType
 from specs.services import log_audit_event
 
 
+def selected_documents_for_export(project, configuration: dict | None = None):
+    configuration = configuration or {}
+    document_slugs = configuration.get("document_slugs", "")
+    if isinstance(document_slugs, str):
+        allowed = {slug.strip() for slug in document_slugs.split(",") if slug.strip()}
+    elif isinstance(document_slugs, list):
+        allowed = {slug for slug in document_slugs if slug}
+    else:
+        allowed = set()
+
+    documents = list(project.documents.order_by("order", "created_at"))
+    if not allowed:
+        return documents
+    return [document for document in documents if document.slug in allowed]
+
+
 def build_export_content(project, export_format: str, configuration: dict | None = None) -> str:
     configuration = configuration or {}
     include_resolved_questions = configuration.get("include_resolved_questions", False)
+    documents = selected_documents_for_export(project, configuration)
     lines = [
         f"# {project.name}",
         "",
         project.summary,
         "",
-        "## Sections",
+        "## Documents",
     ]
-    for section in project.sections.all():
+    for document in documents:
         lines.extend(
             [
-                f"### {section.order}. {section.title}",
-                section.summary,
+                f"### {document.order}. {document.title}",
+                f"- Status: {document.get_status_display()}",
+                f"- Type: {document.get_document_type_display()}",
                 "",
-                section.body,
+                document.body or "_No content yet._",
                 "",
             ]
         )
     lines.append("## Decisions")
-    for decision in project.decisions.all():
-        lines.append(f"- [{decision.status}] {decision.title}: {decision.summary}")
+    for decision in project.decisions.select_related("related_document").all():
+        if decision.related_document and decision.related_document not in documents:
+            continue
+        related_label = f" ({decision.related_document.title})" if decision.related_document else ""
+        lines.append(f"- [{decision.status}] {decision.title}{related_label}: {decision.summary}")
     lines.append("")
     lines.append("## Assumptions")
-    for assumption in project.assumptions.all():
-        lines.append(f"- [{assumption.status}] {assumption.title}: {assumption.description}")
+    for assumption in project.assumptions.select_related("document").all():
+        if assumption.document and assumption.document not in documents:
+            continue
+        related_label = f" ({assumption.document.title})" if assumption.document else ""
+        lines.append(f"- [{assumption.status}] {assumption.title}{related_label}: {assumption.description}")
     if include_resolved_questions:
         lines.append("")
         lines.append("## Questions")
-        for question in project.questions.all():
-            lines.append(f"- [{question.status}] {question.title}")
+        for question in project.questions.select_related("related_document").all():
+            related_label = f" ({question.related_document.title})" if question.related_document else ""
+            lines.append(f"- [{question.status}] {question.title}{related_label}")
     if export_format == ExportFormat.AGENT:
-        lines.insert(0, "You are implementing SpecBridge.")
+        lines.insert(0, "You are implementing a multi-document project workspace in SpecBridge.")
     return "\n".join(lines)
 
 

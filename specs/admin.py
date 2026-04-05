@@ -1,12 +1,20 @@
 from django.contrib import admin
 
-from .models import Assumption, AuditEvent, SpecSection, SpecVersion
+from .models import (
+    Assumption,
+    AuditEvent,
+    ConsistencyIssue,
+    ConsistencyRun,
+    DocumentRevision,
+    ProjectDocument,
+    ProjectRevision,
+)
 
 
-@admin.register(SpecSection)
-class SpecSectionAdmin(admin.ModelAdmin):
-    list_display = ("title", "project", "status", "order", "is_required")
-    list_filter = ("status", "project")
+@admin.register(ProjectDocument)
+class ProjectDocumentAdmin(admin.ModelAdmin):
+    list_display = ("title", "project", "document_type", "status", "order", "is_required")
+    list_filter = ("document_type", "status", "project")
 
 
 @admin.register(Assumption)
@@ -15,9 +23,26 @@ class AssumptionAdmin(admin.ModelAdmin):
     list_filter = ("status",)
 
 
-@admin.register(SpecVersion)
-class SpecVersionAdmin(admin.ModelAdmin):
+@admin.register(ProjectRevision)
+class ProjectRevisionAdmin(admin.ModelAdmin):
     list_display = ("project", "number", "title", "created_at")
+
+
+@admin.register(DocumentRevision)
+class DocumentRevisionAdmin(admin.ModelAdmin):
+    list_display = ("document", "number", "title", "created_at")
+
+
+@admin.register(ConsistencyRun)
+class ConsistencyRunAdmin(admin.ModelAdmin):
+    list_display = ("project", "provider", "model", "status", "issue_count", "analyzed_at")
+    list_filter = ("status", "provider")
+
+
+@admin.register(ConsistencyIssue)
+class ConsistencyIssueAdmin(admin.ModelAdmin):
+    list_display = ("title", "project", "severity", "status", "last_seen_at")
+    list_filter = ("severity", "status")
 
 
 @admin.register(AuditEvent)

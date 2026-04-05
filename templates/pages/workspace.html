@@ -9,271 +9,258 @@
   {% include "components/global_sidebar.html" %}
   <main class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
     {% include "components/page_header.html" %}
-    <div class="flex min-h-0 flex-1 overflow-hidden">
-      <section class="relative flex min-h-0 w-[45%] min-w-[420px] flex-col border-r border-gray-200 bg-white">
-        <div class="flex items-center justify-between border-b border-gray-100 bg-white/80 px-6 py-4 backdrop-blur-sm">
-          <h2 class="font-display text-lg font-bold text-gray-900">Alignment Stream</h2>
-          <div class="flex items-center gap-3">
-            {% if not request.user.is_authenticated %}
-              <span class="text-xs font-medium uppercase tracking-wider text-gray-400">Read-only preview</span>
-            {% endif %}
-            <div class="flex gap-1 rounded-lg bg-gray-100 p-1">
-              <button class="pill-tab bg-white text-gray-900 shadow-sm">All</button>
-              <button class="pill-tab text-gray-500 hover:text-gray-900">Decisions</button>
-              <button class="pill-tab text-gray-500 hover:text-gray-900">Open</button>
+    <div class="flex min-h-0 flex-1 overflow-hidden bg-gray-50">
+      <aside class="flex w-[300px] flex-shrink-0 flex-col border-r border-gray-200 bg-white">
+        <div class="border-b border-gray-100 px-6 py-5">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="font-display text-lg font-bold text-gray-900">Project Documents</h2>
+              <p class="mt-1 text-xs text-gray-500">Preset and custom documents live here.</p>
             </div>
+            <span class="workspace-badge border-gray-200 bg-gray-50 text-gray-600">{{ documents|length }} docs</span>
           </div>
         </div>
-
-        <div class="min-h-0 flex-1 space-y-8 overflow-y-auto p-6">
-          {% for entry in stream_entries %}
-            {% if entry.kind == "decision" %}
-              <div class="flex items-start gap-4">
-                <div class="mt-1 flex h-6 w-6 items-center justify-center rounded-full bg-brand-decision ring-4 ring-green-50">
-                  <iconify-icon icon="lucide:check" class="text-xs text-white"></iconify-icon>
-                </div>
-                <div class="relative flex-1 overflow-hidden rounded-xl border border-green-200 bg-white p-4 shadow-sm">
-                  <div class="absolute inset-y-0 left-0 w-1 bg-brand-decision"></div>
-                  <div class="mb-2 flex items-baseline justify-between">
-                    <span class="text-xs font-bold uppercase tracking-wider text-brand-decision">Decision Recorded</span>
-                    <span class="text-xs text-gray-400">{{ entry.decision.code }}</span>
-                  </div>
-                  <h4 class="font-display text-lg font-medium text-gray-900">{{ entry.decision.title }}</h4>
-                  <p class="mt-2 text-sm leading-relaxed text-gray-600">{{ entry.decision.summary }}</p>
-                  <div class="mt-3 flex items-center gap-3 text-xs text-gray-500">
-                    <span>{{ entry.decision.get_status_display }}</span>
-                    <span class="h-1 w-1 rounded-full bg-gray-300"></span>
-                    <span>{{ entry.decision.implementation_progress }}% implemented</span>
-                  </div>
-                </div>
+        <div class="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+          {% for document in documents %}
+            <a
+              href="{% url 'project-workspace' project.slug %}?document={{ document.slug }}"
+              class="block rounded-2xl border p-4 transition {% if active_document and document.id == active_document.id %}border-gray-900 bg-gray-900 text-white shadow-card{% else %}border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50{% endif %}"
+            >
+              <div class="mb-2 flex items-center justify-between gap-3">
+                <span class="truncate text-sm font-semibold">{{ document.title }}</span>
+                <span class="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider {% if active_document and document.id == active_document.id %}bg-white/15 text-white{% else %}{% if document.status == 'aligned' %}bg-green-50 text-green-700{% elif document.status == 'blocked' %}bg-red-50 text-red-700{% else %}bg-amber-50 text-amber-700{% endif %}{% endif %}">
+                  {{ document.get_status_display }}
+                </span>
               </div>
-            {% elif entry.kind == "agent" %}
-              <div class="flex gap-4">
-                <div class="relative z-10 flex h-10 w-10 items-center justify-center rounded-xl border border-purple-100 bg-purple-50 text-brand-agent">
-                  <iconify-icon icon="lucide:bot" class="text-lg"></iconify-icon>
-                </div>
-                <div class="flex-1 rounded-xl border border-purple-100 bg-purple-50/50 p-4">
-                  <div class="mb-2 flex items-center gap-2">
-                    <iconify-icon icon="lucide:lightbulb" class="text-brand-agent"></iconify-icon>
-                    <span class="text-sm font-medium text-brand-agent">{{ entry.suggestion.title }}</span>
-                  </div>
-                  <p class="text-sm leading-relaxed text-gray-800">{{ entry.suggestion.summary }}</p>
-                  <div class="mt-4 flex gap-2">
-                    {% if request.user.is_authenticated %}
-                      <button class="secondary-button !border-purple-200 !text-brand-agent" data-api-post="/api/projects/{{ project.slug }}/agent-suggestions/{{ entry.suggestion.id }}/apply">Apply Suggestion</button>
-                      <button class="secondary-button" data-api-post="/api/projects/{{ project.slug }}/agent-suggestions/{{ entry.suggestion.id }}/dismiss">Dismiss</button>
-                    {% else %}
-                      <button type="button" class="secondary-button !border-purple-200 !text-brand-agent" data-auth-modal-trigger data-auth-mode="login">Sign In to Collaborate</button>
-                    {% endif %}
-                  </div>
-                </div>
+              <div class="flex items-center justify-between text-xs {% if active_document and document.id == active_document.id %}text-white/70{% else %}text-gray-500{% endif %}">
+                <span>{{ document.get_document_type_display }}</span>
+                <span>{% if document.source_kind == 'preset' %}Preset{% else %}Custom{% endif %}</span>
               </div>
-            {% else %}
-              {% if entry.post.kind == "agent" %}
-                <div class="flex gap-4">
-                  <div class="relative z-10 flex h-10 w-10 items-center justify-center rounded-xl border border-purple-100 bg-purple-50 text-brand-agent">
-                    <iconify-icon icon="lucide:bot" class="text-lg"></iconify-icon>
-                  </div>
-                  <div class="flex-1 rounded-xl border border-purple-100 bg-purple-50/50 p-4">
-                    <div class="mb-2 flex items-center gap-2">
-                      <iconify-icon icon="lucide:alert-circle" class="text-brand-agent"></iconify-icon>
-                      <span class="text-sm font-medium text-brand-agent">Ambiguity Detected</span>
-                    </div>
-                    <p class="text-sm leading-relaxed text-gray-800">{{ entry.post.body }}</p>
-                  </div>
-                </div>
-              {% else %}
-                <div class="flex gap-4">
-                  <div class="flex-shrink-0">
-                    <div class="h-10 w-10 overflow-hidden rounded-full bg-gray-100">
-                      <img src="{{ entry.post.author.avatar_url }}" alt="{{ entry.post.actor_name }}" class="h-full w-full object-cover">
-                    </div>
-                  </div>
-                  <div class="flex-1">
-                    <div class="mb-1 flex items-baseline justify-between">
-                      <span class="font-medium text-gray-900">{{ entry.post.actor_name }} <span class="ml-1 text-xs font-normal text-gray-400">{{ entry.post.actor_title }}</span></span>
-                      <span class="text-xs text-gray-400">{{ entry.post.created_at|date:"g:i A" }}</span>
-                    </div>
-                    <p class="text-sm leading-relaxed text-gray-700">{{ entry.post.body }}</p>
-                  </div>
-                </div>
-              {% endif %}
-            {% endif %}
+            </a>
           {% endfor %}
         </div>
-
-        <div class="shrink-0 border-t border-gray-200 bg-gray-50 p-4">
+        <div class="border-t border-gray-100 bg-gray-50 p-4">
           {% if request.user.is_authenticated %}
-            <form class="field-shell stream-composer-shell" data-api-form="/api/projects/{{ project.slug }}/stream" data-stream-composer>
+            <form class="space-y-3" data-api-form="/api/projects/{{ project.slug }}/documents">
               {% csrf_token %}
-              <textarea name="body" rows="3" data-stream-input class="w-full resize-none border-0 bg-transparent p-3 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-0" placeholder="Add context, propose a decision, or ask AI to help draft a section..."></textarea>
-              <div class="flex items-center justify-between border-t border-gray-100 px-3 py-2">
-                <div class="flex flex-wrap items-center gap-2">
-                  <button type="button" class="icon-button"><iconify-icon icon="lucide:at-sign"></iconify-icon></button>
-                  <button type="button" class="icon-button"><iconify-icon icon="lucide:gavel"></iconify-icon></button>
-                  <button
-                    type="button"
-                    class="secondary-button !border-purple-200 !px-3 !py-1.5 !text-xs !text-brand-agent"
-                    data-ai-draft-request
-                    data-ai-draft-prompt="Help me move the {{ project.name }} workspace forward. Draft the next missing section or ask the single most important clarifying question."
-                  >
-                    <iconify-icon icon="lucide:sparkles"></iconify-icon>
-                    Ask AI
-                  </button>
-                </div>
-                <button type="submit" class="primary-button !px-4 !py-1.5">Post</button>
+              <div>
+                <label class="mb-1 block text-xs font-medium uppercase tracking-wider text-gray-500">New custom document</label>
+                <input type="text" name="title" class="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-200" placeholder="Example: Observability Plan">
               </div>
+              <input type="hidden" name="document_type" value="custom">
+              <button type="submit" class="primary-button w-full justify-center">
+                <iconify-icon icon="lucide:file-plus-2"></iconify-icon>
+                Add Custom Document
+              </button>
             </form>
           {% else %}
-            <div class="field-shell overflow-hidden border-dashed border-gray-300 bg-white/80">
-              <textarea rows="3" readonly class="w-full resize-none border-0 bg-transparent p-3 text-sm text-gray-500 placeholder-gray-400 focus:ring-0" placeholder="Sign in to post to the discussion or propose a decision..."></textarea>
-              <div class="flex items-center justify-between border-t border-gray-100 px-3 py-2">
-                <div class="text-xs font-medium uppercase tracking-wider text-gray-400">Guest access keeps the stream readable</div>
-                <button type="button" class="primary-button !px-4 !py-1.5" data-auth-modal-trigger data-auth-mode="login">Sign In to Post</button>
-              </div>
+            <button type="button" class="primary-button w-full justify-center" data-auth-modal-trigger data-auth-mode="login">
+              <iconify-icon icon="lucide:log-in"></iconify-icon>
+              Sign In to Add Docs
+            </button>
+          {% endif %}
+        </div>
+      </aside>
+
+      <section class="min-h-0 flex-1 overflow-y-auto">
+        <div class="mx-auto max-w-4xl px-8 py-8 pb-24">
+          <div class="mb-8">
+            <div class="mb-4 flex flex-wrap items-center gap-3">
+              <span class="workspace-badge border-blue-100 bg-blue-50 text-blue-700">Multi-document workspace</span>
+              {% if latest_consistency_run %}
+                <span class="workspace-badge {% if latest_consistency_run.status == 'completed' %}border-green-100 bg-green-50 text-green-700{% else %}border-red-100 bg-red-50 text-red-700{% endif %}">
+                  {% if latest_consistency_run.status == "completed" %}
+                    Consistency checked {{ latest_consistency_run.analyzed_at|date:"M j, g:i A" }}
+                  {% else %}
+                    Consistency check failed
+                  {% endif %}
+                </span>
+              {% else %}
+                <span class="workspace-badge border-amber-100 bg-amber-50 text-amber-700">No consistency run yet</span>
+              {% endif %}
             </div>
+            <h1 class="mb-4 font-display text-4xl font-bold tracking-tight text-gray-900">{{ project.name }}</h1>
+            {% if workspace_tagline %}
+              <p class="text-lg leading-relaxed text-gray-600">{{ workspace_tagline }}</p>
+            {% endif %}
+            {% if workspace_summary_detail %}
+              <p class="{% if workspace_tagline %}mt-3 {% endif %}text-sm leading-relaxed text-gray-500">{{ workspace_summary_detail }}</p>
+            {% endif %}
+          </div>
+
+          {% if active_document %}
+            <div data-workspace-document-pane class="workspace-panel p-8">
+              <div class="mb-6 flex items-start justify-between gap-4">
+                <div>
+                  <div class="mb-2 flex items-center gap-2">
+                    <span class="workspace-badge border-gray-200 bg-gray-50 text-gray-600">{{ active_document.get_document_type_display }}</span>
+                    <span class="workspace-badge {% if active_document.status == 'aligned' %}border-green-100 bg-green-50 text-green-700{% elif active_document.status == 'blocked' %}border-red-100 bg-red-50 text-red-700{% else %}border-amber-100 bg-amber-50 text-amber-700{% endif %}">
+                      {{ active_document.get_status_display }}
+                    </span>
+                  </div>
+                  <h2 class="font-display text-2xl font-bold text-gray-900">{{ active_document.title }}</h2>
+                  <p class="mt-2 text-sm text-gray-500">Primary document slug: <span class="font-mono">{{ active_document.slug }}</span></p>
+                </div>
+                {% if request.user.is_authenticated and active_document.source_kind == 'custom' %}
+                  <form data-api-form="/api/projects/{{ project.slug }}/documents/{{ active_document.slug }}" data-api-method="DELETE">
+                    {% csrf_token %}
+                    <button type="submit" class="secondary-button !border-red-200 !text-red-700">
+                      <iconify-icon icon="lucide:trash-2"></iconify-icon>
+                      Delete
+                    </button>
+                  </form>
+                {% endif %}
+              </div>
+
+              {% if request.user.is_authenticated %}
+                <form class="space-y-5" data-api-form="/api/projects/{{ project.slug }}/documents/{{ active_document.slug }}" data-api-method="PATCH">
+                  {% csrf_token %}
+                  <div class="grid gap-4 md:grid-cols-[minmax(0,1fr)_180px]">
+                    <div>
+                      <label class="mb-2 block text-xs font-medium uppercase tracking-wider text-gray-500">Title</label>
+                      <input type="text" name="title" value="{{ active_document.title }}" class="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-200">
+                    </div>
+                    <div>
+                      <label class="mb-2 block text-xs font-medium uppercase tracking-wider text-gray-500">Status</label>
+                      <select name="status" class="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-200">
+                        <option value="iterating" {% if active_document.status == 'iterating' %}selected{% endif %}>Iterating</option>
+                        <option value="aligned" {% if active_document.status == 'aligned' %}selected{% endif %}>Aligned</option>
+                        <option value="blocked" {% if active_document.status == 'blocked' %}selected{% endif %}>Blocked</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div>
+                    <label class="mb-2 block text-xs font-medium uppercase tracking-wider text-gray-500">Body</label>
+                    <textarea name="body" rows="18" class="w-full rounded-2xl border border-gray-200 bg-white px-4 py-4 text-sm leading-relaxed text-gray-900 placeholder-gray-400 focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-200" placeholder="Describe this document’s current source of truth.">{{ active_document.body }}</textarea>
+                  </div>
+                  <div class="flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 pt-4">
+                    <div class="flex flex-wrap gap-2 text-xs text-gray-500">
+                      <span class="rounded-full border border-gray-200 bg-gray-50 px-3 py-1">Preset: {{ active_document.source_kind|title }}</span>
+                      <span class="rounded-full border border-gray-200 bg-gray-50 px-3 py-1">Revisions: {{ active_document.revisions.count }}</span>
+                    </div>
+                    <button type="submit" class="primary-button">
+                      <iconify-icon icon="lucide:save"></iconify-icon>
+                      Save Document
+                    </button>
+                  </div>
+                </form>
+              {% else %}
+                <div class="space-y-4">
+                  <textarea rows="18" readonly class="w-full rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-4 py-4 text-sm leading-relaxed text-gray-600 focus:ring-0">{{ active_document.body }}</textarea>
+                  <button type="button" class="primary-button" data-auth-modal-trigger data-auth-mode="login">
+                    <iconify-icon icon="lucide:log-in"></iconify-icon>
+                    Sign In to Edit
+                  </button>
+                </div>
+              {% endif %}
+            </div>
+
+            {% if document_revisions %}
+              <div class="mt-8 workspace-panel p-6">
+                <div class="mb-4 flex items-center justify-between">
+                  <h3 class="font-display text-lg font-bold text-gray-900">Recent Document Revisions</h3>
+                  <a href="{% url 'project-history' project.slug %}?document={{ active_document.slug }}" class="text-sm font-medium text-brand-agent hover:underline">Open full history</a>
+                </div>
+                <div class="space-y-3">
+                  {% for revision in document_revisions %}
+                    <div class="flex items-center justify-between rounded-xl border border-gray-200 bg-white px-4 py-3">
+                      <div>
+                        <div class="text-sm font-medium text-gray-900">r{{ revision.number }} · {{ revision.title }}</div>
+                        <div class="text-xs text-gray-500">{{ revision.summary|default:"Document revision captured." }}</div>
+                      </div>
+                      <div class="text-xs text-gray-400">{{ revision.created_at|date:"M j, g:i A" }}</div>
+                    </div>
+                  {% endfor %}
+                </div>
+              </div>
+            {% endif %}
           {% endif %}
         </div>
       </section>
 
-      <div class="flex w-1 cursor-col-resize flex-col items-center justify-center bg-gray-100 transition-colors hover:bg-gray-300">
-        <div class="h-8 w-0.5 rounded-full bg-gray-400"></div>
-      </div>
-
-      <section data-workspace-spec-pane class="relative min-h-0 flex-1 overflow-y-auto bg-gray-50">
-        <div class="sticky top-0 z-10 h-8 w-full bg-gradient-to-b from-gray-50 to-transparent"></div>
-        <div class="mx-auto max-w-3xl px-8 py-8 pb-32">
-            <div class="mb-12">
-              <div class="mb-4 flex items-center gap-3">
-                <span class="workspace-badge border-blue-100 bg-blue-50 text-blue-700">Drafting</span>
-                <span class="flex items-center gap-1 text-sm text-gray-500">
-                  <iconify-icon icon="lucide:clock" class="text-xs"></iconify-icon>
-                  Last updated by SpecBridge Agent
-                </span>
-              </div>
-              <h1 class="mb-4 font-display text-4xl font-bold tracking-tight text-gray-900">{{ project.name }}</h1>
-              {% if workspace_tagline %}
-                <p class="text-lg leading-relaxed text-gray-600">{{ workspace_tagline }}</p>
-              {% endif %}
-              {% if workspace_summary_detail %}
-                <p class="{% if workspace_tagline %}mt-3 {% endif %}text-sm leading-relaxed text-gray-500">{{ workspace_summary_detail }}</p>
-              {% endif %}
+      <aside class="flex w-[340px] flex-shrink-0 flex-col border-l border-gray-200 bg-white">
+        <div class="border-b border-gray-100 px-6 py-5">
+          <div class="flex items-center justify-between gap-3">
+            <div>
+              <h2 class="font-display text-lg font-bold text-gray-900">Consistency Inbox</h2>
+              <p class="mt-1 text-xs text-gray-500">Cross-document issues stay project-level.</p>
             </div>
-
             {% if request.user.is_authenticated %}
-              <div class="mb-8 rounded-2xl border border-blue-100 bg-blue-50/80 p-5">
-                <div class="flex items-start gap-3">
-                  <div class="mt-0.5 flex h-9 w-9 items-center justify-center rounded-xl bg-white text-blue-700 shadow-sm">
-                    <iconify-icon icon="lucide:pen-square"></iconify-icon>
-                  </div>
-                  <div class="space-y-2">
-                    <div>
-                      <h2 class="font-display text-lg font-semibold text-gray-900">How to use this workspace</h2>
-                      <p class="mt-1 text-sm leading-relaxed text-gray-600">
-                        Edit the spec sections directly on the right, save your changes, and use the alignment stream on the left to ask AI for drafts or clarify decisions.
-                      </p>
-                    </div>
-                    <div class="flex flex-wrap gap-2 text-xs font-medium text-gray-600">
-                      <span class="rounded-full border border-white bg-white px-3 py-1">1. Draft or revise a section</span>
-                      <span class="rounded-full border border-white bg-white px-3 py-1">2. Ask AI when you need a first pass</span>
-                      <span class="rounded-full border border-white bg-white px-3 py-1">3. Save to keep the spec current</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <button class="secondary-button !px-3 !py-1.5 !text-xs" data-api-post="/api/projects/{{ project.slug }}/consistency-runs">
+                <iconify-icon icon="lucide:refresh-cw"></iconify-icon>
+                Run now
+              </button>
             {% endif %}
-
-            {% for section in sections %}
-              <div class="group mb-10">
-                <div class="mb-3 flex items-center justify-between">
-                  <h2 class="font-display text-xl font-bold text-gray-900">{{ section.order }}. {{ section.title }}</h2>
-                  <div class="workspace-badge {% if section.status == 'aligned' %}border-green-100 bg-green-50 text-green-700{% elif section.status == 'blocked' %}border-red-100 bg-red-50 text-brand-danger{% else %}border-gray-200 bg-gray-100 text-gray-700{% endif %}">
-                    {% if section.status == 'aligned' %}
-                      <iconify-icon icon="lucide:check-circle-2"></iconify-icon>
-                    {% elif section.status == 'blocked' %}
-                      <iconify-icon icon="lucide:shield-alert"></iconify-icon>
-                    {% else %}
-                      <iconify-icon icon="lucide:history"></iconify-icon>
-                    {% endif %}
-                    {{ section.get_status_display }}
-                  </div>
-                </div>
-
-                <div class="workspace-panel p-6">
-                  {% if request.user.is_authenticated %}
-                    <form class="space-y-4" data-api-form="/api/projects/{{ project.slug }}/sections/{{ section.key }}" data-api-method="PATCH">
-                      {% csrf_token %}
-                      <textarea name="body" rows="14" class="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm leading-relaxed text-gray-900 placeholder-gray-400 focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-200" placeholder="Draft the section here. Use bullets, rationale, constraints, and next steps.">{{ section.body }}</textarea>
-                      <div class="flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 pt-4">
-                        <button
-                          type="button"
-                          class="secondary-button !border-purple-200 !text-brand-agent"
-                          data-ai-draft-request
-                          data-section-title="{{ section.title }}"
-                          data-project-name="{{ project.name }}"
-                        >
-                          <iconify-icon icon="lucide:sparkles"></iconify-icon>
-                          Ask AI to Help Draft
-                        </button>
-                        <button type="submit" class="primary-button">
-                          <iconify-icon icon="lucide:save"></iconify-icon>
-                          Save Section
-                        </button>
-                      </div>
-                    </form>
-                  {% else %}
-                    <div class="space-y-4">
-                      <textarea rows="14" readonly class="w-full rounded-xl border border-dashed border-gray-200 bg-gray-50 px-4 py-3 text-sm leading-relaxed text-gray-600 focus:ring-0">{{ section.body }}</textarea>
-                      <div class="flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 pt-4">
-                        <p class="text-sm text-gray-500">Sign in to edit this section directly or ask AI to help you draft it.</p>
-                        <button type="button" class="primary-button" data-auth-modal-trigger data-auth-mode="login">
-                          <iconify-icon icon="lucide:log-in"></iconify-icon>
-                          Sign In to Edit
-                        </button>
-                      </div>
-                    </div>
-                  {% endif %}
-
-                  {% if section.assumptions.all %}
-                    <div class="mt-4 flex flex-wrap gap-2">
-                      {% for assumption in section.assumptions.all %}
-                        <a href="{% url 'project-assumptions' project.slug %}" class="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium {% if assumption.status == 'validated' %}border-green-200 bg-green-50 text-green-700{% elif assumption.status == 'invalidated' %}border-red-200 bg-red-50 text-red-700{% else %}border-amber-200 bg-amber-50 text-amber-700{% endif %}">
-                          <iconify-icon icon="lucide:flask-conical"></iconify-icon>
-                          {{ assumption.title }}
-                        </a>
-                      {% endfor %}
-                    </div>
-                  {% endif %}
-                </div>
+          </div>
+          {% if latest_consistency_run and latest_consistency_run.status == 'failed' %}
+            <div class="mt-4 rounded-xl border border-red-100 bg-red-50 p-3 text-xs text-red-700">
+              Check failed: {{ latest_consistency_run.error_message|default:"Provider error." }}
+            </div>
+          {% endif %}
+        </div>
+        <div class="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
+          {% for issue in consistency_issues %}
+            <div class="rounded-2xl border p-4 {% if issue.status == 'open' %}{% if issue.severity == 'critical' or issue.severity == 'high' %}border-red-100 bg-red-50/40{% else %}border-amber-100 bg-amber-50/40{% endif %}{% else %}border-gray-200 bg-gray-50 opacity-70{% endif %}">
+              <div class="mb-2 flex items-center justify-between gap-2">
+                <span class="rounded px-2 py-1 text-[10px] font-bold uppercase tracking-wider {% if issue.severity == 'critical' or issue.severity == 'high' %}bg-red-100 text-red-700{% elif issue.severity == 'medium' %}bg-amber-100 text-amber-700{% else %}bg-blue-100 text-blue-700{% endif %}">
+                  {{ issue.severity }}
+                </span>
+                <span class="text-[10px] font-medium uppercase tracking-wider text-gray-400">{{ issue.get_status_display }}</span>
               </div>
-            {% endfor %}
-
-            <div class="mb-10">
-              <div class="mb-3 flex items-center justify-between">
-                <h2 class="font-display text-xl font-bold text-gray-900">Open Questions Tracker</h2>
-                <span class="text-xs text-gray-400">Auto-synced with stream</span>
-              </div>
-              <div class="space-y-3">
-                {% for question in questions %}
-                  <div class="flex items-start gap-3 rounded-xl border p-4 shadow-sm {% if question.status == 'resolved' %}border-gray-200 bg-gray-50 opacity-60{% else %}border-amber-200 bg-white{% endif %}">
-                    <iconify-icon icon="{% if question.status == 'resolved' %}lucide:check-circle{% else %}lucide:help-circle{% endif %}" class="{% if question.status == 'resolved' %}text-gray-400{% else %}text-brand-warning{% endif %} mt-0.5"></iconify-icon>
-                    <div class="min-w-0 flex-1">
-                      <h4 class="text-sm font-medium {% if question.status == 'resolved' %}line-through text-gray-600{% else %}text-gray-900{% endif %}">{{ question.title }}</h4>
-                      <p class="mt-1 text-xs text-gray-500">{{ question.details }}</p>
-                    </div>
-                    {% if question.status != 'resolved' %}
-                      {% if request.user.is_authenticated %}
-                        <button class="secondary-button !px-3 !py-1 text-xs" data-api-post="/api/projects/{{ project.slug }}/questions/{{ question.id }}/resolve">Resolve</button>
-                      {% else %}
-                        <button type="button" class="secondary-button !px-3 !py-1 text-xs" data-auth-modal-trigger data-auth-mode="login">Sign In to Resolve</button>
-                      {% endif %}
-                    {% endif %}
+              <h3 class="text-sm font-semibold text-gray-900">{{ issue.title }}</h3>
+              <p class="mt-2 text-sm leading-relaxed text-gray-600">{{ issue.summary }}</p>
+              {% if issue.source_refs %}
+                <div class="mt-3 flex flex-wrap gap-2">
+                  {% for ref in issue.source_refs %}
+                    <span class="rounded-full border border-gray-200 bg-white px-2.5 py-1 text-[11px] font-medium text-gray-600">{{ ref.label }}</span>
+                  {% endfor %}
+                </div>
+              {% endif %}
+              {% if issue.recommendation %}
+                <p class="mt-3 text-xs leading-relaxed text-gray-500">Suggested next step: {{ issue.recommendation }}</p>
+              {% endif %}
+              <div class="mt-4 flex items-center justify-between gap-3">
+                <span class="text-[11px] text-gray-400">Last seen {{ issue.last_seen_at|date:"M j, g:i A" }}</span>
+                {% if request.user.is_authenticated and issue.status == 'open' %}
+                  <div class="flex gap-2">
+                    <button class="secondary-button !px-3 !py-1.5 !text-xs" data-api-post="/api/projects/{{ project.slug }}/consistency-issues/{{ issue.id }}/dismiss">Dismiss</button>
+                    <button class="primary-button !px-3 !py-1.5 !text-xs" data-api-post="/api/projects/{{ project.slug }}/consistency-issues/{{ issue.id }}/resolve">Resolve</button>
                   </div>
-                {% endfor %}
+                {% endif %}
               </div>
             </div>
+          {% empty %}
+            <div class="rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-6 text-sm text-gray-500">
+              No stored consistency issues yet. Run the analyzer after document updates.
+            </div>
+          {% endfor %}
+
+          <div class="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+            <div class="mb-3 flex items-center justify-between">
+              <h3 class="font-display text-base font-bold text-gray-900">Recent Alignment Stream</h3>
+              <span class="text-xs text-gray-400">{{ stream_entries|length }} entries</span>
+            </div>
+            <div class="space-y-3">
+              {% for entry in stream_entries|slice:":5" %}
+                <div class="rounded-xl border border-gray-200 bg-white p-3">
+                  {% if entry.kind == 'decision' %}
+                    <div class="text-xs font-bold uppercase tracking-wider text-green-700">Decision</div>
+                    <div class="mt-1 text-sm font-medium text-gray-900">{{ entry.decision.title }}</div>
+                    <p class="mt-1 text-xs text-gray-500">{{ entry.decision.summary }}</p>
+                  {% elif entry.kind == 'agent' %}
+                    <div class="text-xs font-bold uppercase tracking-wider text-purple-700">Agent Suggestion</div>
+                    <div class="mt-1 text-sm font-medium text-gray-900">{{ entry.suggestion.title }}</div>
+                    <p class="mt-1 text-xs text-gray-500">{{ entry.suggestion.summary }}</p>
+                  {% else %}
+                    <div class="text-sm font-medium text-gray-900">{{ entry.post.actor_name }}</div>
+                    <p class="mt-1 text-xs text-gray-500">{{ entry.post.body }}</p>
+                  {% endif %}
+                </div>
+              {% endfor %}
+            </div>
+          </div>
         </div>
-      </section>
+      </aside>
     </div>
   </main>
 </div>

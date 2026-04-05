@@ -2,12 +2,11 @@ from __future__ import annotations
 
 from collections import Counter
 
-from django.db.models import Count, Q
 from django.utils import timezone
 
 from alignment.models import DecisionStatus, IssueStatus
-from specs.models import AuditEventType, SectionStatus
-from specs.services import capture_version, log_audit_event
+from specs.models import AuditEventType, ConsistencyIssueStatus, DocumentStatus
+from specs.services import capture_project_revision, log_audit_event
 
 
 def build_workspace_entries(project):
@@ -25,7 +24,7 @@ def build_workspace_entries(project):
             "created_at": suggestion.created_at,
             "suggestion": suggestion,
         }
-        for suggestion in project.agent_suggestions.all()
+        for suggestion in project.agent_suggestions.select_related("related_document").all()
     )
     entries.extend(
         {
@@ -33,20 +32,20 @@ def build_workspace_entries(project):
             "created_at": decision.created_at,
             "decision": decision,
         }
-        for decision in project.decisions.exclude(status=DecisionStatus.PENDING)
+        for decision in project.decisions.select_related("related_document").exclude(status=DecisionStatus.PENDING)
     )
     return sorted(entries, key=lambda item: item["created_at"])
 
 
 def compute_dashboard_metrics(project):
-    sections = list(project.sections.all())
-    required_sections = [section for section in sections if section.is_required]
-    aligned_count = sum(1 for section in sections if section.status == SectionStatus.ALIGNED)
-    iterating_count = sum(1 for section in sections if section.status == SectionStatus.ITERATING)
-    blocked_count = sum(1 for section in sections if section.status == SectionStatus.BLOCKED)
+    documents = list(project.documents.all())
+    required_documents = [document for document in documents if document.is_required]
+    aligned_count = sum(1 for document in documents if document.status == DocumentStatus.ALIGNED)
+    iterating_count = sum(1 for document in documents if document.status == DocumentStatus.ITERATING)
+    blocked_count = sum(1 for document in documents if document.status == DocumentStatus.BLOCKED)
     completeness = 0
-    if required_sections:
-        completeness = sum(1 for section in required_sections if section.body.strip()) / len(required_sections)
+    if required_documents:
+        completeness = sum(1 for document in required_documents if document.body.strip()) / len(required_documents)
 
     open_questions = project.questions.filter(status__in=[IssueStatus.OPEN, IssueStatus.REOPENED]).count()
     open_blockers = project.blockers.filter(status__in=[IssueStatus.OPEN, IssueStatus.REOPENED]).count()
@@ -54,9 +53,10 @@ def compute_dashboard_metrics(project):
         status__in=[IssueStatus.OPEN, IssueStatus.REOPENED],
         severity="critical",
     ).count()
+    open_consistency_issues = project.consistency_issues.filter(status=ConsistencyIssueStatus.OPEN).count()
     resolved_questions = project.questions.filter(status=IssueStatus.RESOLVED).count()
     resolved_blockers = project.blockers.filter(status=IssueStatus.RESOLVED).count()
-    penalty = open_blockers * 8 + critical_blockers * 15 + open_questions * 5
+    penalty = open_blockers * 8 + critical_blockers * 15 + open_questions * 5 + open_consistency_issues * 6
     base_score = int(completeness * 80) + min(resolved_questions + resolved_blockers, 20)
     maturity_score = max(min(base_score - penalty, 100), 0)
 
@@ -67,8 +67,8 @@ def compute_dashboard_metrics(project):
     ).count()
     decision_velocity = round(approved_in_week / 7, 1)
 
-    alignment = round((aligned_count / len(sections)) * 100) if sections else 0
-    by_status = Counter(section.status for section in sections)
+    alignment = round((aligned_count / len(documents)) * 100) if documents else 0
+    by_status = Counter(document.status for document in documents)
     return {
         "alignment_percentage": alignment,
         "maturity_score": maturity_score,
@@ -77,13 +77,14 @@ def compute_dashboard_metrics(project):
         "open_questions": open_questions,
         "resolved_questions": resolved_questions,
         "resolved_blockers": resolved_blockers,
-        "section_status_counts": {
-            "aligned": by_status.get(SectionStatus.ALIGNED, 0),
-            "iterating": by_status.get(SectionStatus.ITERATING, 0),
-            "blocked": by_status.get(SectionStatus.BLOCKED, 0),
+        "open_consistency_issues": open_consistency_issues,
+        "document_status_counts": {
+            "aligned": by_status.get(DocumentStatus.ALIGNED, 0),
+            "iterating": by_status.get(DocumentStatus.ITERATING, 0),
+            "blocked": by_status.get(DocumentStatus.BLOCKED, 0),
         },
         "active_members": project.memberships.filter(is_active=True).count(),
-        "unresolved_total": open_questions + open_blockers,
+        "unresolved_total": open_questions + open_blockers + open_consistency_issues,
         "iterating_count": iterating_count,
         "blocked_count": blocked_count,
     }
@@ -97,12 +98,10 @@ def approve_decision(decision, actor):
     decision.status = DecisionStatus.APPROVED
     decision.approved_at = timezone.now()
     decision.save(update_fields=["status", "approved_at", "updated_at"])
-    if decision.related_section_key:
-        section = decision.project.sections.filter(key=decision.related_section_key).first()
-        if section:
-            section.status = SectionStatus.ALIGNED
-            section.save(update_fields=["status", "updated_at"])
-    version = capture_version(
+    if decision.related_document:
+        decision.related_document.status = DocumentStatus.ALIGNED
+        decision.related_document.save(update_fields=["status", "updated_at"])
+    revision = capture_project_revision(
         project=decision.project,
         title=f"Decision approved: {decision.title}",
         summary=decision.summary,
@@ -118,7 +117,7 @@ def approve_decision(decision, actor):
         description=decision.summary,
         source_decision=decision,
         source_post=decision.source_post,
-        spec_version=version,
+        project_revision=revision,
         metadata={"decision_id": decision.id},
     )
     return approval
@@ -149,7 +148,7 @@ def mark_decision_implemented(decision, actor):
     decision.implementation_progress = 100
     decision.implemented_at = timezone.now()
     decision.save(update_fields=["status", "implementation_progress", "implemented_at", "updated_at"])
-    version = capture_version(
+    revision = capture_project_revision(
         project=decision.project,
         title=f"Decision implemented: {decision.title}",
         summary=decision.summary,
@@ -165,7 +164,7 @@ def mark_decision_implemented(decision, actor):
         description=decision.summary,
         source_decision=decision,
         source_post=decision.source_post,
-        spec_version=version,
+        project_revision=revision,
         metadata={"decision_id": decision.id},
     )
     return decision

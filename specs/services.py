@@ -2,28 +2,89 @@ from __future__ import annotations
 
 from typing import Any
 
-from specs.models import AuditEvent, AuditEventType, SpecSection, SpecVersion
+from django.utils.text import slugify
+
+from specs.models import (
+    AuditEvent,
+    AuditEventType,
+    DocumentRevision,
+    DocumentSourceKind,
+    DocumentStatus,
+    DocumentType,
+    ProjectDocument,
+    ProjectRevision,
+)
+
+DEFAULT_DOCUMENT_PRESETS: tuple[dict[str, Any], ...] = (
+    {
+        "slug": "overview",
+        "title": "Overview",
+        "document_type": DocumentType.OVERVIEW,
+        "source_kind": DocumentSourceKind.PRESET,
+        "is_required": True,
+    },
+    {
+        "slug": "goals",
+        "title": "Goals",
+        "document_type": DocumentType.GOALS,
+        "source_kind": DocumentSourceKind.PRESET,
+        "is_required": True,
+    },
+    {
+        "slug": "requirements",
+        "title": "Requirements",
+        "document_type": DocumentType.REQUIREMENTS,
+        "source_kind": DocumentSourceKind.PRESET,
+        "is_required": True,
+    },
+    {
+        "slug": "ui-ux",
+        "title": "UI/UX",
+        "document_type": DocumentType.UI_UX,
+        "source_kind": DocumentSourceKind.PRESET,
+        "is_required": True,
+    },
+    {
+        "slug": "tech-stack",
+        "title": "Tech Stack",
+        "document_type": DocumentType.TECH_STACK,
+        "source_kind": DocumentSourceKind.PRESET,
+        "is_required": True,
+    },
+    {
+        "slug": "infra",
+        "title": "Infra",
+        "document_type": DocumentType.INFRA,
+        "source_kind": DocumentSourceKind.PRESET,
+        "is_required": True,
+    },
+    {
+        "slug": "risks-open-questions",
+        "title": "Risks & Open Questions",
+        "document_type": DocumentType.RISKS_OPEN_QUESTIONS,
+        "source_kind": DocumentSourceKind.PRESET,
+        "is_required": True,
+    },
+)
 
 
-def build_spec_snapshot(project) -> dict[str, Any]:
-    sections = [
-        {
-            "key": section.key,
-            "title": section.title,
-            "summary": section.summary,
-            "body": section.body,
-            "status": section.status,
-            "order": section.order,
-            "assumptions": [
-                {
-                    "id": assumption.id,
-                    "title": assumption.title,
-                    "status": assumption.status,
-                }
-                for assumption in section.assumptions.all()
-            ],
-        }
-        for section in project.sections.prefetch_related("assumptions").all()
+def build_document_snapshot(document: ProjectDocument) -> dict[str, Any]:
+    return {
+        "slug": document.slug,
+        "title": document.title,
+        "document_type": document.document_type,
+        "source_kind": document.source_kind,
+        "body": document.body,
+        "status": document.status,
+        "order": document.order,
+        "is_required": document.is_required,
+    }
+
+
+def build_project_snapshot(project) -> dict[str, Any]:
+    documents = [
+        build_document_snapshot(document)
+        for document in project.documents.all()
     ]
     decisions = [
         {
@@ -32,10 +93,11 @@ def build_spec_snapshot(project) -> dict[str, Any]:
             "title": decision.title,
             "summary": decision.summary,
             "status": decision.status,
-            "related_section_key": decision.related_section_key,
+            "related_document_slug": decision.related_document.slug if decision.related_document else "",
+            "related_document_title": decision.related_document.title if decision.related_document else "",
             "implementation_progress": decision.implementation_progress,
         }
-        for decision in project.decisions.all()
+        for decision in project.decisions.select_related("related_document").all()
     ]
     assumptions = [
         {
@@ -43,10 +105,11 @@ def build_spec_snapshot(project) -> dict[str, Any]:
             "title": assumption.title,
             "description": assumption.description,
             "status": assumption.status,
-            "section_key": assumption.section.key if assumption.section else "",
+            "document_slug": assumption.document.slug if assumption.document else "",
+            "document_title": assumption.document.title if assumption.document else "",
             "impact": assumption.impact,
         }
-        for assumption in project.assumptions.select_related("section").all()
+        for assumption in project.assumptions.select_related("document").all()
     ]
     return {
         "project": {
@@ -56,7 +119,7 @@ def build_spec_snapshot(project) -> dict[str, Any]:
             "tagline": project.tagline,
             "summary": project.summary,
         },
-        "sections": sections,
+        "documents": documents,
         "decisions": decisions,
         "assumptions": assumptions,
     }
@@ -74,7 +137,7 @@ def log_audit_event(
     source_decision=None,
     source_assumption=None,
     source_agent=None,
-    spec_version=None,
+    project_revision=None,
 ):
     return AuditEvent.objects.create(
         project=project,
@@ -87,11 +150,11 @@ def log_audit_event(
         source_decision=source_decision,
         source_assumption=source_assumption,
         source_agent=source_agent,
-        spec_version=spec_version,
+        project_revision=project_revision,
     )
 
 
-def capture_version(
+def capture_project_revision(
     *,
     project,
     title: str,
@@ -102,121 +165,240 @@ def capture_version(
     source_assumption=None,
     source_agent=None,
 ):
-    previous_version = project.versions.order_by("-number").first()
-    version = SpecVersion.objects.create(
+    previous_revision = project.revisions.order_by("-number").first()
+    revision = ProjectRevision.objects.create(
         project=project,
-        number=(previous_version.number + 1) if previous_version else 1,
+        number=(previous_revision.number + 1) if previous_revision else 1,
         title=title,
         summary=summary,
-        snapshot=build_spec_snapshot(project),
+        snapshot=build_project_snapshot(project),
         created_by=actor,
         source_post=source_post,
         source_decision=source_decision,
         source_assumption=source_assumption,
         source_agent=source_agent,
-        previous_version=previous_version,
+        previous_revision=previous_revision,
     )
     log_audit_event(
         project=project,
-        event_type=AuditEventType.VERSION_CREATED,
-        title=f"Captured {project.name} v{version.number}",
+        event_type=AuditEventType.PROJECT_REVISION_CREATED,
+        title=f"Captured {project.name} r{revision.number}",
         description=summary or title,
         actor=actor,
         source_post=source_post,
         source_decision=source_decision,
         source_assumption=source_assumption,
         source_agent=source_agent,
-        spec_version=version,
-        metadata={"version": version.number, "title": title},
+        project_revision=revision,
+        metadata={"revision": revision.number, "title": title},
     )
-    return version
+    return revision
 
 
-def update_section(
+def capture_document_revision(
     *,
-    section: SpecSection,
+    document: ProjectDocument,
+    title: str,
+    summary: str = "",
     actor=None,
-    summary: str | None = None,
+    project_revision: ProjectRevision | None = None,
+):
+    previous_revision = document.revisions.order_by("-number").first()
+    return DocumentRevision.objects.create(
+        document=document,
+        number=(previous_revision.number + 1) if previous_revision else 1,
+        title=title,
+        summary=summary,
+        snapshot=build_document_snapshot(document),
+        created_by=actor,
+        project_revision=project_revision,
+        previous_revision=previous_revision,
+    )
+
+
+def _next_document_order(project) -> int:
+    last_document = project.documents.order_by("-order", "-created_at").first()
+    return (last_document.order + 1) if last_document else 1
+
+
+def unique_document_slug(project, title: str, *, seed: str | None = None) -> str:
+    base_slug = slugify(seed or title) or "document"
+    slug = base_slug
+    suffix = 2
+    while project.documents.filter(slug=slug).exists():
+        slug = f"{base_slug}-{suffix}"
+        suffix += 1
+    return slug
+
+
+def bootstrap_documents(project) -> list[ProjectDocument]:
+    documents = [
+        ProjectDocument(
+            project=project,
+            slug=preset["slug"],
+            title=preset["title"],
+            document_type=preset["document_type"],
+            source_kind=preset["source_kind"],
+            body="",
+            status=DocumentStatus.ITERATING,
+            order=index,
+            is_required=preset["is_required"],
+        )
+        for index, preset in enumerate(DEFAULT_DOCUMENT_PRESETS, start=1)
+    ]
+    ProjectDocument.objects.bulk_create(documents)
+    return list(project.documents.order_by("order", "created_at"))
+
+
+def create_document(
+    *,
+    project,
+    title: str,
+    actor=None,
+    document_type: str = DocumentType.CUSTOM,
+    body: str = "",
+    status: str = DocumentStatus.ITERATING,
+    is_required: bool = False,
+):
+    source_kind = DocumentSourceKind.CUSTOM if document_type == DocumentType.CUSTOM else DocumentSourceKind.PRESET
+    document = ProjectDocument.objects.create(
+        project=project,
+        slug=unique_document_slug(project, title),
+        title=title,
+        document_type=document_type,
+        source_kind=source_kind,
+        body=body,
+        status=status,
+        order=_next_document_order(project),
+        is_required=is_required,
+    )
+    project_revision = capture_project_revision(
+        project=project,
+        title=f"Document created: {document.title}",
+        summary=f"Added {document.title} to the project document set.",
+        actor=actor,
+    )
+    capture_document_revision(
+        document=document,
+        title=f"Document created: {document.title}",
+        summary=document.body[:160],
+        actor=actor,
+        project_revision=project_revision,
+    )
+    log_audit_event(
+        project=project,
+        actor=actor,
+        event_type=AuditEventType.DOCUMENT_CREATED,
+        title=f"Created document {document.title}",
+        description=document.body[:160],
+        metadata={"document_slug": document.slug, "document_type": document.document_type},
+        project_revision=project_revision,
+    )
+    return document
+
+
+def update_document(
+    *,
+    document: ProjectDocument,
+    actor=None,
+    title: str | None = None,
     body: str | None = None,
     status: str | None = None,
-    linked_decision=None,
-    linked_assumption=None,
 ):
-    if summary is not None:
-        section.summary = summary
+    if title is not None:
+        document.title = title
     if body is not None:
-        section.body = body
+        document.body = body
     if status is not None:
-        section.status = status
-    section.save()
-    description = f"Updated section {section.title}"
-    log_audit_event(
-        project=section.project,
-        actor=actor,
-        event_type=AuditEventType.SECTION_UPDATED,
-        title=description,
-        description=description,
-        source_decision=linked_decision,
-        source_assumption=linked_assumption,
-        metadata={"section_key": section.key, "status": section.status},
-    )
-    return capture_version(
-        project=section.project,
-        title=f"Section updated: {section.title}",
+        document.status = status
+    document.save()
+    description = f"Updated document {document.title}"
+    project_revision = capture_project_revision(
+        project=document.project,
+        title=f"Document updated: {document.title}",
         summary=description,
         actor=actor,
-        source_decision=linked_decision,
-        source_assumption=linked_assumption,
     )
+    capture_document_revision(
+        document=document,
+        title=f"Document updated: {document.title}",
+        summary=document.body[:160],
+        actor=actor,
+        project_revision=project_revision,
+    )
+    log_audit_event(
+        project=document.project,
+        actor=actor,
+        event_type=AuditEventType.DOCUMENT_UPDATED,
+        title=description,
+        description=description,
+        metadata={"document_slug": document.slug, "status": document.status},
+        project_revision=project_revision,
+    )
+    return project_revision
 
 
-def compare_versions(left: SpecVersion, right: SpecVersion) -> list[dict[str, Any]]:
-    left_sections = {section["key"]: section for section in left.snapshot.get("sections", [])}
-    right_sections = {section["key"]: section for section in right.snapshot.get("sections", [])}
-    rows = []
-    for key in sorted(set(left_sections) | set(right_sections)):
-        previous = left_sections.get(key)
-        current = right_sections.get(key)
-        if previous and not current:
-            change = "removed"
-        elif current and not previous:
-            change = "added"
-        elif previous != current:
-            change = "modified"
-        else:
-            change = "unchanged"
-        rows.append(
-            {
-                "key": key,
-                "title": (current or previous)["title"],
-                "change": change,
-                "previous": previous,
-                "current": current,
-            }
-        )
-    return rows
+def delete_document(*, document: ProjectDocument, actor=None):
+    project = document.project
+    metadata = {"document_slug": document.slug, "document_type": document.document_type}
+    title = document.title
+    document.delete()
+    project_revision = capture_project_revision(
+        project=project,
+        title=f"Document deleted: {title}",
+        summary=f"Removed {title} from the project document set.",
+        actor=actor,
+    )
+    log_audit_event(
+        project=project,
+        actor=actor,
+        event_type=AuditEventType.DOCUMENT_DELETED,
+        title=f"Deleted document {title}",
+        metadata=metadata,
+        project_revision=project_revision,
+    )
+    return project_revision
 
 
-def apply_snapshot(*, project, snapshot: dict[str, Any], actor=None, title="Reverted to version"):
-    snapshot_sections = snapshot.get("sections", [])
-    existing = {section.key: section for section in project.sections.all()}
-    for payload in snapshot_sections:
-        section = existing.get(payload["key"])
-        if section:
-            section.title = payload["title"]
-            section.summary = payload.get("summary", "")
-            section.body = payload.get("body", "")
-            section.status = payload.get("status", section.status)
-            section.order = payload.get("order", section.order)
-            section.save()
-        else:
-            SpecSection.objects.create(
-                project=project,
-                key=payload["key"],
-                title=payload["title"],
-                summary=payload.get("summary", ""),
-                body=payload.get("body", ""),
-                status=payload.get("status", "iterating"),
-                order=payload.get("order", 0),
-            )
-    return capture_version(project=project, title=title, summary=title, actor=actor)
+def reorder_documents(*, project, ordered_slugs: list[str], actor=None):
+    ordered = {slug: index for index, slug in enumerate(ordered_slugs, start=1)}
+    documents = list(project.documents.order_by("order", "created_at"))
+    changed = False
+    next_order = len(ordered) + 1
+    for document in documents:
+        desired_order = ordered.get(document.slug)
+        if desired_order is None:
+            desired_order = next_order
+            next_order += 1
+        if document.order != desired_order:
+            document.order = desired_order
+            document.save(update_fields=["order", "updated_at"])
+            changed = True
+    if not changed:
+        return None
+    project_revision = capture_project_revision(
+        project=project,
+        title="Documents reordered",
+        summary="Updated the primary document order.",
+        actor=actor,
+    )
+    log_audit_event(
+        project=project,
+        actor=actor,
+        event_type=AuditEventType.DOCUMENT_REORDERED,
+        title="Reordered project documents",
+        description="Updated the primary document order.",
+        metadata={"ordered_slugs": ordered_slugs},
+        project_revision=project_revision,
+    )
+    return project_revision
+
+
+def compare_document_revisions(left: DocumentRevision, right: DocumentRevision) -> dict[str, Any]:
+    return {
+        "title_changed": left.snapshot.get("title") != right.snapshot.get("title"),
+        "body_changed": left.snapshot.get("body") != right.snapshot.get("body"),
+        "status_changed": left.snapshot.get("status") != right.snapshot.get("status"),
+        "previous": left.snapshot,
+        "current": right.snapshot,
+    }

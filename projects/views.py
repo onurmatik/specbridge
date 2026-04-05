@@ -101,6 +101,7 @@ def project_directory(request):
             "unresolved_count": (
                 current_project.questions.exclude(status="resolved").count()
                 + current_project.blockers.exclude(status="resolved").count()
+                + current_project.consistency_issues.filter(status="open").count()
             )
             if current_project
             else 0,
@@ -176,7 +177,11 @@ def project_create_submit(request):
 
 def project_workspace(request, slug):
     project = get_project_or_404(slug, request.user)
-    return render(request, "pages/workspace.html", workspace_context(project))
+    return render(
+        request,
+        "pages/workspace.html",
+        workspace_context(project, active_document_slug=request.GET.get("document")),
+    )
 
 
 def project_dashboard(request, slug):
@@ -191,7 +196,11 @@ def project_decisions(request, slug):
 
 def project_history(request, slug):
     project = get_project_or_404(slug, request.user)
-    return render(request, "pages/history.html", history_context(project))
+    return render(
+        request,
+        "pages/history.html",
+        history_context(project, active_document_slug=request.GET.get("document")),
+    )
 
 
 def project_handoff(request, slug):

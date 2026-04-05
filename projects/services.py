@@ -10,71 +10,9 @@ from django.utils.text import slugify
 from alignment.services import build_workspace_entries, compute_dashboard_metrics
 from projects.demo import DEMO_PROJECT_SLUG, DEMO_USERNAMES, ensure_demo_workspace
 from projects.models import MembershipRole, Organization, Project, ProjectMembership
-from specs.models import SectionStatus, SpecSection
-from specs.services import capture_version
-from specs.services import compare_versions
+from specs.services import bootstrap_documents, capture_project_revision, compare_document_revisions
 
 DEFAULT_PROJECT_STATUS_LABEL = "Aligning"
-
-PROJECT_BOOTSTRAP_SECTIONS = (
-    {
-        "key": "problem-goals",
-        "title": "Problem & Goals",
-        "summary": "Frame the problem, the business outcome, and the success signal.",
-        "body_template": (
-            "{project_name} starts with a shared articulation of the problem.\n\n"
-            "- Customer pain:\n"
-            "- Business objective:\n"
-            "- Success metric:\n\n"
-            "Working direction: {tagline}"
-        ),
-    },
-    {
-        "key": "proposed-solution",
-        "title": "Proposed Solution",
-        "summary": "Describe the core product or workflow change this project is driving.",
-        "body_template": (
-            "Capture the proposed solution for {project_name} in concrete terms.\n\n"
-            "- Scope for the first release:\n"
-            "- Key user flow changes:\n"
-            "- What remains out of scope:\n\n"
-            "Current summary: {summary}"
-        ),
-    },
-    {
-        "key": "technical-implementation",
-        "title": "Technical Implementation",
-        "summary": "Outline architecture, rollout constraints, and delivery dependencies.",
-        "body_template": (
-            "Use this section to align engineering on implementation shape.\n\n"
-            "- Systems impacted:\n"
-            "- Rollout / migration plan:\n"
-            "- Observability and risk checks:"
-        ),
-    },
-    {
-        "key": "ux-interfaces",
-        "title": "UX & Interfaces",
-        "summary": "Track interface changes, content requirements, and edge-case behavior.",
-        "body_template": (
-            "Document the interface implications for {project_name}.\n\n"
-            "- Entry points:\n"
-            "- Empty / loading / failure states:\n"
-            "- Collaboration or approval touchpoints:"
-        ),
-    },
-    {
-        "key": "risks-open-questions",
-        "title": "Risks & Open Questions",
-        "summary": "Keep unknowns, dependencies, and launch blockers visible from day one.",
-        "body_template": (
-            "List the highest-risk assumptions and unresolved questions before build.\n\n"
-            "- Top dependency:\n"
-            "- Hardest open question:\n"
-            "- What would block launch?"
-        ),
-    },
-)
 
 
 def can_access_demo_project(user) -> bool:
@@ -147,11 +85,11 @@ def _default_summary(project_name: str, tagline: str) -> str:
     if tagline:
         lead = tagline if tagline.endswith((".", "!", "?")) else f"{tagline}."
         return (
-            f"{lead} This workspace keeps the spec, decisions, assumptions, and delivery plan "
+            f"{lead} This workspace keeps documents, decisions, assumptions, and delivery intent "
             f"for {project_name} aligned from the first draft onward."
         )
     return (
-        f"A structured workspace for refining the {project_name} specification, decisions, "
+        f"A structured workspace for refining the {project_name} documents, decisions, "
         "assumptions, and delivery plan."
     )
 
@@ -167,27 +105,6 @@ def split_project_summary(project) -> tuple[str, str]:
             detail = detail[1:].lstrip()
         return tagline, detail
     return tagline, summary
-
-
-def _bootstrap_sections(project, tagline: str, summary: str) -> None:
-    SpecSection.objects.bulk_create(
-        [
-            SpecSection(
-                project=project,
-                key=section["key"],
-                title=section["title"],
-                summary=section["summary"],
-                body=section["body_template"].format(
-                    project_name=project.name,
-                    tagline=tagline,
-                    summary=summary,
-                ),
-                status=SectionStatus.ITERATING,
-                order=index,
-            )
-            for index, section in enumerate(PROJECT_BOOTSTRAP_SECTIONS, start=1)
-        ]
-    )
 
 
 @transaction.atomic
@@ -222,11 +139,11 @@ def create_project_workspace(
         role=_creator_role(actor),
         title=actor.title or "Workspace Owner",
     )
-    _bootstrap_sections(project, resolved_tagline, summary)
-    capture_version(
+    bootstrap_documents(project)
+    capture_project_revision(
         project=project,
         title="Initial workspace created",
-        summary="Seeded the first spec scaffold from the project directory.",
+        summary="Seeded the first multi-document workspace scaffold from the project directory.",
         actor=actor,
     )
     return project
@@ -292,19 +209,26 @@ def page_context(project, active_item):
         "unresolved_count": metrics["unresolved_total"],
         "status_label": project.status_label,
         "dashboard_metrics": metrics,
+        "latest_consistency_run": project.consistency_runs.first(),
     }
 
 
-def workspace_context(project):
+def workspace_context(project, active_document_slug: str | None = None):
     context = page_context(project, "workspace")
     workspace_tagline, workspace_summary_detail = split_project_summary(project)
+    documents = list(project.documents.prefetch_related("assumptions"))
+    active_document = next((doc for doc in documents if doc.slug == active_document_slug), documents[0] if documents else None)
+    consistency_issues = list(project.consistency_issues.all()[:8])
     context.update(
         {
             "stream_entries": build_workspace_entries(project),
-            "sections": list(project.sections.prefetch_related("assumptions")),
-            "questions": list(project.questions.all()),
-            "assumptions": list(project.assumptions.select_related("section")),
-            "agent_suggestions": list(project.agent_suggestions.all()),
+            "documents": documents,
+            "active_document": active_document,
+            "document_revisions": list(active_document.revisions.order_by("-number")[:5]) if active_document else [],
+            "questions": list(project.questions.select_related("related_document")),
+            "assumptions": list(project.assumptions.select_related("document")),
+            "agent_suggestions": list(project.agent_suggestions.select_related("related_document")),
+            "consistency_issues": consistency_issues,
             "workspace_tagline": workspace_tagline,
             "workspace_summary_detail": workspace_summary_detail,
         }
@@ -316,10 +240,11 @@ def dashboard_context(project):
     context = page_context(project, "team")
     context.update(
         {
-            "sections": list(project.sections.all()),
-            "questions": list(project.questions.all()),
-            "blockers": list(project.blockers.all()),
-            "decisions": list(project.decisions.all()[:4]),
+            "documents": list(project.documents.all()),
+            "questions": list(project.questions.select_related("related_document").all()),
+            "blockers": list(project.blockers.select_related("related_document").all()),
+            "decisions": list(project.decisions.select_related("related_document").all()[:4]),
+            "consistency_issues": list(project.consistency_issues.all()[:5]),
         }
     )
     return context
@@ -328,22 +253,41 @@ def dashboard_context(project):
 def decisions_context(project):
     context = page_context(project, "decisions")
     context["decisions"] = list(
-        project.decisions.select_related("proposed_by", "supersedes").prefetch_related("approvals__approver")
+        project.decisions.select_related("proposed_by", "supersedes", "related_document").prefetch_related(
+            "approvals__approver"
+        )
     )
     return context
 
 
-def history_context(project):
+def history_context(project, active_document_slug: str | None = None):
     context = page_context(project, "history")
-    versions = list(project.versions.order_by("number"))
-    left_version = versions[-2] if len(versions) > 1 else versions[-1]
-    right_version = versions[-1]
+    project_revisions = list(project.revisions.order_by("number"))
+    left_project_revision = project_revisions[-2] if len(project_revisions) > 1 else (project_revisions[-1] if project_revisions else None)
+    right_project_revision = project_revisions[-1] if project_revisions else None
+
+    documents = list(project.documents.order_by("order", "created_at"))
+    active_document = next((doc for doc in documents if doc.slug == active_document_slug), documents[0] if documents else None)
+    document_revisions = list(active_document.revisions.order_by("number")) if active_document else []
+    left_document_revision = (
+        document_revisions[-2] if len(document_revisions) > 1 else (document_revisions[-1] if document_revisions else None)
+    )
+    right_document_revision = document_revisions[-1] if document_revisions else None
     context.update(
         {
-            "versions": versions[::-1],
-            "left_version": left_version,
-            "right_version": right_version,
-            "diff_rows": compare_versions(left_version, right_version),
+            "project_revisions": project_revisions[::-1],
+            "left_project_revision": left_project_revision,
+            "right_project_revision": right_project_revision,
+            "documents": documents,
+            "active_document": active_document,
+            "document_revisions": document_revisions[::-1],
+            "left_document_revision": left_document_revision,
+            "right_document_revision": right_document_revision,
+            "document_diff": (
+                compare_document_revisions(left_document_revision, right_document_revision)
+                if left_document_revision and right_document_revision
+                else None
+            ),
         }
     )
     return context
@@ -353,7 +297,7 @@ def handoff_context(project):
     context = page_context(project, "handoff")
     context.update(
         {
-            "sections": list(project.sections.all()),
+            "documents": list(project.documents.all()),
             "exports": list(project.exports.select_related("generated_by").all()),
             "share_members": [membership.user for membership in project.memberships.select_related("user")[:2]],
         }
@@ -363,7 +307,7 @@ def handoff_context(project):
 
 def assumptions_context(project):
     context = page_context(project, "assumptions")
-    assumptions = list(project.assumptions.select_related("section", "created_by", "validated_by"))
+    assumptions = list(project.assumptions.select_related("document", "created_by", "validated_by"))
     context["assumptions"] = assumptions
     context["assumption_counts"] = {
         "open": sum(1 for assumption in assumptions if assumption.status == "open"),

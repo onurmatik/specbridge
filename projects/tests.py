@@ -66,22 +66,19 @@ class ProjectPageTests(TestCase):
             response = self.client.get(path)
             self.assertEqual(response.status_code, 200, path)
 
-    def test_authenticated_workspace_renders_editable_spec_forms_and_ai_cta(self):
+    def test_authenticated_workspace_renders_document_editor_and_consistency_inbox(self):
         self.client.force_login(self.project.created_by)
 
         response = self.client.get(reverse("project-workspace", args=[self.project.slug]))
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-api-method="PATCH"', html=False)
-        self.assertContains(response, 'data-workspace-spec-pane', html=False)
-        self.assertContains(response, "How to use this workspace")
-        self.assertContains(response, "Ask AI to Help Draft")
-        self.assertContains(response, "Ask AI")
-        self.assertContains(response, 'data-ai-draft-prompt=', html=False)
-        self.assertContains(response, 'data-stream-input', html=False)
-        self.assertNotContains(response, "How to work in this section")
-        self.assertNotContains(response, "Section Summary")
-        self.assertNotContains(response, "Section Body")
+        self.assertContains(response, 'data-workspace-document-pane', html=False)
+        self.assertContains(response, "Project Documents")
+        self.assertContains(response, "Consistency Inbox")
+        self.assertContains(response, "Add Custom Document")
+        self.assertContains(response, "Save Document")
+        self.assertNotContains(response, "Ask AI to Help Draft")
 
     def test_workspace_separates_tagline_from_summary_detail(self):
         actor = User.objects.create_user(
@@ -99,7 +96,7 @@ class ProjectPageTests(TestCase):
         )
         project.summary = (
             "AI assisted data collection and visualization "
-            "This workspace keeps the spec, decisions, assumptions, and delivery plan "
+            "This workspace keeps documents, decisions, assumptions, and delivery intent "
             "for Stats Board aligned from the first draft onward."
         )
         project.save(update_fields=["summary", "updated_at"])
@@ -110,11 +107,11 @@ class ProjectPageTests(TestCase):
         self.assertContains(response, "AI assisted data collection and visualization")
         self.assertContains(
             response,
-            "This workspace keeps the spec, decisions, assumptions, and delivery plan for Stats Board aligned from the first draft onward.",
+            "This workspace keeps documents, decisions, assumptions, and delivery intent for Stats Board aligned from the first draft onward.",
         )
         self.assertNotContains(
             response,
-            "AI assisted data collection and visualization This workspace keeps the spec, decisions, assumptions, and delivery plan for Stats Board aligned from the first draft onward.",
+            "AI assisted data collection and visualization This workspace keeps documents, decisions, assumptions, and delivery intent for Stats Board aligned from the first draft onward.",
         )
 
     def test_shortcuts_redirect_to_primary_project(self):
@@ -263,8 +260,8 @@ class ProjectPageTests(TestCase):
         self.assertEqual(payload["redirect_to"], reverse("project-workspace", args=[created_project.slug]))
         self.assertEqual(created_project.organization.name, "Sarah Stone Workspace")
         self.assertEqual(created_project.memberships.count(), 1)
-        self.assertEqual(created_project.sections.count(), 5)
-        self.assertEqual(created_project.versions.count(), 1)
+        self.assertEqual(created_project.documents.count(), 7)
+        self.assertEqual(created_project.revisions.count(), 1)
 
         history_response = self.client.get(reverse("project-history", args=[created_project.slug]))
         self.assertEqual(history_response.status_code, 200)
