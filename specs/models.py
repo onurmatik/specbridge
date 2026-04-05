@@ -83,7 +83,7 @@ class ProjectDocument(TimeStampedModel):
     body = models.TextField(blank=True)
     status = models.CharField(max_length=16, choices=DocumentStatus.choices, default=DocumentStatus.ITERATING)
     order = models.PositiveIntegerField(default=0)
-    is_required = models.BooleanField(default=True)
+    is_required = models.BooleanField(default=False)
 
     class Meta:
         ordering = ["order", "created_at"]

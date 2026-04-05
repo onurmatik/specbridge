@@ -67,15 +67,18 @@ def list_documents(request, slug: str):
 def create_document_endpoint(request, slug: str, payload: DocumentCreatePayload):
     project = get_project_or_404(slug, request.user)
     actor = resolve_actor(request, project)
-    document = create_document(
-        project=project,
-        actor=actor,
-        title=payload.title,
-        body=payload.body,
-        document_type=payload.document_type,
-        status=payload.status,
-        is_required=payload.is_required,
-    )
+    try:
+        document = create_document(
+            project=project,
+            actor=actor,
+            title=payload.title,
+            body=payload.body,
+            document_type=payload.document_type,
+            status=payload.status,
+            is_required=payload.is_required,
+        )
+    except ValueError as exc:
+        return 422, {"ok": False, "errors": {"title": [str(exc)]}}
     return {"id": document.id, "slug": document.slug, "status": document.status}
 
 

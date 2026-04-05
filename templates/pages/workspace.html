@@ -41,17 +41,39 @@
         </div>
         <div class="border-t border-gray-100 bg-gray-50 p-4">
           {% if request.user.is_authenticated %}
-            <form class="space-y-3" data-api-form="/api/projects/{{ project.slug }}/documents">
+            <form class="space-y-3" data-api-form="/api/projects/{{ project.slug }}/documents" data-document-create-form>
               {% csrf_token %}
               <div>
-                <label class="mb-1 block text-xs font-medium uppercase tracking-wider text-gray-500">New custom document</label>
+                <label class="mb-1 block text-xs font-medium uppercase tracking-wider text-gray-500">New document</label>
                 <input type="text" name="title" class="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-200" placeholder="Example: Observability Plan">
               </div>
               <input type="hidden" name="document_type" value="custom">
-              <button type="submit" class="primary-button w-full justify-center">
-                <iconify-icon icon="lucide:file-plus-2"></iconify-icon>
-                Add Custom Document
-              </button>
+              <div class="relative w-full" data-document-create-shell>
+                <div class="flex w-full" role="group" aria-label="Add document controls">
+                  <button type="submit" class="primary-button flex-1 justify-center rounded-r-none border-r border-white/15" data-document-submit-main>
+                    <iconify-icon icon="lucide:file-plus-2"></iconify-icon>
+                    Add Document
+                  </button>
+                  <button type="button" class="primary-button rounded-l-none px-3" data-document-suggestions-toggle aria-expanded="false" aria-haspopup="menu" aria-label="Show document suggestions">
+                    <iconify-icon icon="lucide:chevron-up"></iconify-icon>
+                  </button>
+                </div>
+                <div class="absolute z-30 min-w-0 rounded-2xl border border-gray-200 bg-white p-2 shadow-card" data-document-suggestions-menu role="menu" style="left: 0; right: 0; bottom: calc(100% + 0.5rem);" hidden>
+                  <div class="mb-1 px-2 py-1 text-[11px] font-medium uppercase tracking-wider text-gray-400">Suggested docs</div>
+                  {% for suggestion in document_suggestions %}
+                    <button
+                      type="button"
+                      class="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-gray-700 transition hover:bg-gray-50"
+                      data-document-suggestion-title="{{ suggestion.title }}"
+                      data-document-suggestion-type="{{ suggestion.document_type }}"
+                      role="menuitem"
+                    >
+                      <span>{{ suggestion.title }}</span>
+                      <span class="text-xs text-gray-400">{{ suggestion.document_type }}</span>
+                    </button>
+                  {% endfor %}
+                </div>
+              </div>
             </form>
           {% else %}
             <button type="button" class="primary-button w-full justify-center" data-auth-modal-trigger data-auth-mode="login">
@@ -101,7 +123,7 @@
                   <h2 class="font-display text-2xl font-bold text-gray-900">{{ active_document.title }}</h2>
                   <p class="mt-2 text-sm text-gray-500">Primary document slug: <span class="font-mono">{{ active_document.slug }}</span></p>
                 </div>
-                {% if request.user.is_authenticated and active_document.source_kind == 'custom' %}
+                {% if request.user.is_authenticated %}
                   <form data-api-form="/api/projects/{{ project.slug }}/documents/{{ active_document.slug }}" data-api-method="DELETE">
                     {% csrf_token %}
                     <button type="submit" class="secondary-button !border-red-200 !text-red-700">
@@ -135,7 +157,7 @@
                   </div>
                   <div class="flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 pt-4">
                     <div class="flex flex-wrap gap-2 text-xs text-gray-500">
-                      <span class="rounded-full border border-gray-200 bg-gray-50 px-3 py-1">Preset: {{ active_document.source_kind|title }}</span>
+                      <span class="rounded-full border border-gray-200 bg-gray-50 px-3 py-1">Kind: {{ active_document.source_kind|title }}</span>
                       <span class="rounded-full border border-gray-200 bg-gray-50 px-3 py-1">Revisions: {{ active_document.revisions.count }}</span>
                     </div>
                     <button type="submit" class="primary-button">
@@ -198,66 +220,97 @@
             </div>
           {% endif %}
         </div>
-        <div class="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
-          {% for issue in consistency_issues %}
-            <div class="rounded-2xl border p-4 {% if issue.status == 'open' %}{% if issue.severity == 'critical' or issue.severity == 'high' %}border-red-100 bg-red-50/40{% else %}border-amber-100 bg-amber-50/40{% endif %}{% else %}border-gray-200 bg-gray-50 opacity-70{% endif %}">
-              <div class="mb-2 flex items-center justify-between gap-2">
-                <span class="rounded px-2 py-1 text-[10px] font-bold uppercase tracking-wider {% if issue.severity == 'critical' or issue.severity == 'high' %}bg-red-100 text-red-700{% elif issue.severity == 'medium' %}bg-amber-100 text-amber-700{% else %}bg-blue-100 text-blue-700{% endif %}">
-                  {{ issue.severity }}
-                </span>
-                <span class="text-[10px] font-medium uppercase tracking-wider text-gray-400">{{ issue.get_status_display }}</span>
-              </div>
-              <h3 class="text-sm font-semibold text-gray-900">{{ issue.title }}</h3>
-              <p class="mt-2 text-sm leading-relaxed text-gray-600">{{ issue.summary }}</p>
-              {% if issue.source_refs %}
-                <div class="mt-3 flex flex-wrap gap-2">
-                  {% for ref in issue.source_refs %}
-                    <span class="rounded-full border border-gray-200 bg-white px-2.5 py-1 text-[11px] font-medium text-gray-600">{{ ref.label }}</span>
-                  {% endfor %}
+        <div class="min-h-0 flex-1 overflow-y-auto p-4">
+          <div class="space-y-4 pb-4">
+            {% for issue in consistency_issues %}
+              <div class="rounded-2xl border p-4 {% if issue.status == 'open' %}{% if issue.severity == 'critical' or issue.severity == 'high' %}border-red-100 bg-red-50/40{% else %}border-amber-100 bg-amber-50/40{% endif %}{% else %}border-gray-200 bg-gray-50 opacity-70{% endif %}">
+                <div class="mb-2 flex items-center justify-between gap-2">
+                  <span class="rounded px-2 py-1 text-[10px] font-bold uppercase tracking-wider {% if issue.severity == 'critical' or issue.severity == 'high' %}bg-red-100 text-red-700{% elif issue.severity == 'medium' %}bg-amber-100 text-amber-700{% else %}bg-blue-100 text-blue-700{% endif %}">
+                    {{ issue.severity }}
+                  </span>
+                  <span class="text-[10px] font-medium uppercase tracking-wider text-gray-400">{{ issue.get_status_display }}</span>
                 </div>
-              {% endif %}
-              {% if issue.recommendation %}
-                <p class="mt-3 text-xs leading-relaxed text-gray-500">Suggested next step: {{ issue.recommendation }}</p>
-              {% endif %}
-              <div class="mt-4 flex items-center justify-between gap-3">
-                <span class="text-[11px] text-gray-400">Last seen {{ issue.last_seen_at|date:"M j, g:i A" }}</span>
-                {% if request.user.is_authenticated and issue.status == 'open' %}
-                  <div class="flex gap-2">
-                    <button class="secondary-button !px-3 !py-1.5 !text-xs" data-api-post="/api/projects/{{ project.slug }}/consistency-issues/{{ issue.id }}/dismiss">Dismiss</button>
-                    <button class="primary-button !px-3 !py-1.5 !text-xs" data-api-post="/api/projects/{{ project.slug }}/consistency-issues/{{ issue.id }}/resolve">Resolve</button>
+                <h3 class="text-sm font-semibold text-gray-900">{{ issue.title }}</h3>
+                <p class="mt-2 text-sm leading-relaxed text-gray-600">{{ issue.summary }}</p>
+                {% if issue.source_refs %}
+                  <div class="mt-3 flex flex-wrap gap-2">
+                    {% for ref in issue.source_refs %}
+                      <span class="rounded-full border border-gray-200 bg-white px-2.5 py-1 text-[11px] font-medium text-gray-600">{{ ref.label }}</span>
+                    {% endfor %}
                   </div>
                 {% endif %}
-              </div>
-            </div>
-          {% empty %}
-            <div class="rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-6 text-sm text-gray-500">
-              No stored consistency issues yet. Run the analyzer after document updates.
-            </div>
-          {% endfor %}
-
-          <div class="rounded-2xl border border-gray-200 bg-gray-50 p-4">
-            <div class="mb-3 flex items-center justify-between">
-              <h3 class="font-display text-base font-bold text-gray-900">Recent Alignment Stream</h3>
-              <span class="text-xs text-gray-400">{{ stream_entries|length }} entries</span>
-            </div>
-            <div class="space-y-3">
-              {% for entry in stream_entries|slice:":5" %}
-                <div class="rounded-xl border border-gray-200 bg-white p-3">
-                  {% if entry.kind == 'decision' %}
-                    <div class="text-xs font-bold uppercase tracking-wider text-green-700">Decision</div>
-                    <div class="mt-1 text-sm font-medium text-gray-900">{{ entry.decision.title }}</div>
-                    <p class="mt-1 text-xs text-gray-500">{{ entry.decision.summary }}</p>
-                  {% elif entry.kind == 'agent' %}
-                    <div class="text-xs font-bold uppercase tracking-wider text-purple-700">Agent Suggestion</div>
-                    <div class="mt-1 text-sm font-medium text-gray-900">{{ entry.suggestion.title }}</div>
-                    <p class="mt-1 text-xs text-gray-500">{{ entry.suggestion.summary }}</p>
-                  {% else %}
-                    <div class="text-sm font-medium text-gray-900">{{ entry.post.actor_name }}</div>
-                    <p class="mt-1 text-xs text-gray-500">{{ entry.post.body }}</p>
+                {% if issue.recommendation %}
+                  <p class="mt-3 text-xs leading-relaxed text-gray-500">Suggested next step: {{ issue.recommendation }}</p>
+                {% endif %}
+                <div class="mt-4 flex items-center justify-between gap-3">
+                  <span class="text-[11px] text-gray-400">Last seen {{ issue.last_seen_at|date:"M j, g:i A" }}</span>
+                  {% if request.user.is_authenticated and issue.status == 'open' %}
+                    <div class="flex gap-2">
+                      <button class="secondary-button !px-3 !py-1.5 !text-xs" data-api-post="/api/projects/{{ project.slug }}/consistency-issues/{{ issue.id }}/dismiss">Dismiss</button>
+                      <button class="primary-button !px-3 !py-1.5 !text-xs" data-api-post="/api/projects/{{ project.slug }}/consistency-issues/{{ issue.id }}/resolve">Resolve</button>
+                    </div>
                   {% endif %}
                 </div>
-              {% endfor %}
+              </div>
+            {% empty %}
+              <div class="rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-6 text-sm text-gray-500">
+                No stored consistency issues yet. Run the analyzer after document updates.
+              </div>
+            {% endfor %}
+
+            <div class="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+              <div class="mb-3 flex items-center justify-between">
+                <h3 class="font-display text-base font-bold text-gray-900">Recent Alignment Stream</h3>
+                <span class="text-xs text-gray-400">{{ stream_entries|length }} entries</span>
+              </div>
+              <div class="space-y-3">
+                {% for entry in stream_entries|slice:":5" %}
+                  <div class="rounded-xl border border-gray-200 bg-white p-3">
+                    {% if entry.kind == 'decision' %}
+                      <div class="text-xs font-bold uppercase tracking-wider text-green-700">Decision</div>
+                      <div class="mt-1 text-sm font-medium text-gray-900">{{ entry.decision.title }}</div>
+                      <p class="mt-1 text-xs text-gray-500">{{ entry.decision.summary }}</p>
+                    {% elif entry.kind == 'agent' %}
+                      <div class="text-xs font-bold uppercase tracking-wider text-purple-700">Agent Suggestion</div>
+                      <div class="mt-1 text-sm font-medium text-gray-900">{{ entry.suggestion.title }}</div>
+                      <p class="mt-1 text-xs text-gray-500">{{ entry.suggestion.summary }}</p>
+                    {% else %}
+                      <div class="text-sm font-medium text-gray-900">{{ entry.post.actor_name }}</div>
+                      <p class="mt-1 text-xs text-gray-500">{{ entry.post.body }}</p>
+                    {% endif %}
+                  </div>
+                {% endfor %}
+              </div>
             </div>
+          </div>
+        </div>
+        <div class="border-t border-gray-100 bg-white/95 p-4 backdrop-blur-sm">
+          <div class="rounded-2xl border border-gray-200 bg-gray-50 p-4 shadow-card">
+            <div class="mb-3 flex items-start justify-between gap-3">
+              <div>
+                <h3 class="font-display text-base font-bold text-gray-900">AI + Stream Composer</h3>
+                <p class="mt-1 text-xs leading-relaxed text-gray-500">Keep quick prompts and project updates anchored here while you edit documents.</p>
+              </div>
+              <span class="workspace-badge border-blue-100 bg-blue-50 text-blue-700">Docked</span>
+            </div>
+            {% if request.user.is_authenticated %}
+              <form class="space-y-3" data-api-form="/api/projects/{{ project.slug }}/stream">
+                {% csrf_token %}
+                <textarea name="body" rows="4" required data-stream-input class="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm leading-relaxed text-gray-900 placeholder-gray-400 focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-200" placeholder="Post an update, capture a decision seed, or stage a prompt for the AI here."></textarea>
+                <div class="flex items-center justify-between gap-3">
+                  <p class="text-[11px] leading-relaxed text-gray-500">Draft helper actions target this box again. Sending posts the text into the alignment stream.</p>
+                  <button type="submit" class="primary-button !px-3">
+                    <iconify-icon icon="lucide:send"></iconify-icon>
+                    Post
+                  </button>
+                </div>
+              </form>
+            {% else %}
+              <button type="button" class="primary-button w-full justify-center" data-auth-modal-trigger data-auth-mode="login">
+                <iconify-icon icon="lucide:log-in"></iconify-icon>
+                Sign In to Post
+              </button>
+            {% endif %}
           </div>
         </div>
       </aside>

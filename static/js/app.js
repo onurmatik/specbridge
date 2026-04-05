@@ -76,6 +76,91 @@ function projectCreateSubmitNode(surface) {
   return surface?.querySelector?.("[data-project-submit]") || null;
 }
 
+function closeDocumentSuggestionMenus(exceptShell = null) {
+  document.querySelectorAll("[data-document-create-shell]").forEach((shell) => {
+    if (exceptShell && shell === exceptShell) {
+      return;
+    }
+    setDocumentSuggestionMenuState(shell, false);
+  });
+}
+
+function setDocumentSuggestionMenuState(shell, isOpen) {
+  if (!shell) {
+    return;
+  }
+  const menu = shell.querySelector("[data-document-suggestions-menu]");
+  const toggle = shell.querySelector("[data-document-suggestions-toggle]");
+  if (menu) {
+    menu.hidden = !isOpen;
+  }
+  shell.dataset.dropdownOpen = isOpen ? "true" : "false";
+  if (toggle) {
+    toggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
+  }
+}
+
+function documentSuggestionMenuIsOpen(shell) {
+  return shell?.dataset?.dropdownOpen === "true";
+}
+
+function initializeDocumentCreateControls() {
+  document.querySelectorAll("[data-document-create-shell]").forEach((shell) => {
+    if (shell.dataset.documentControlsInitialized === "true") {
+      return;
+    }
+
+    shell.dataset.documentControlsInitialized = "true";
+
+    const form = shell.closest("[data-document-create-form]");
+    const toggle = shell.querySelector("[data-document-suggestions-toggle]");
+    const menu = shell.querySelector("[data-document-suggestions-menu]");
+    const mainSubmit = shell.querySelector("[data-document-submit-main]");
+
+    if (!form || !toggle || !menu) {
+      return;
+    }
+
+    setDocumentSuggestionMenuState(shell, false);
+
+    toggle.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const nextOpenState = !documentSuggestionMenuIsOpen(shell);
+      closeDocumentSuggestionMenus(shell);
+      setDocumentSuggestionMenuState(shell, nextOpenState);
+    });
+
+    menu.querySelectorAll("[data-document-suggestion-title]").forEach((option) => {
+      option.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const titleInput = form.querySelector("input[name='title']");
+        const typeInput = form.querySelector("input[name='document_type']");
+
+        if (titleInput) {
+          titleInput.value = option.dataset.documentSuggestionTitle || "";
+        }
+
+        if (typeInput) {
+          typeInput.value = option.dataset.documentSuggestionType || "custom";
+        }
+
+        closeDocumentSuggestionMenus();
+        form.requestSubmit();
+      });
+    });
+
+    mainSubmit?.addEventListener("click", () => {
+      const typeInput = form.querySelector("input[name='document_type']");
+      if (typeInput) {
+        typeInput.value = "custom";
+      }
+      closeDocumentSuggestionMenus();
+    });
+  });
+}
+
 function syncExportDocumentSelection(form) {
   const hiddenInput = form?.querySelector?.("[data-document-slugs-input]");
   if (!hiddenInput) {
@@ -449,6 +534,10 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  if (!event.target.closest("[data-document-create-shell]")) {
+    closeDocumentSuggestionMenus();
+  }
+
   const button = event.target.closest("[data-api-post]");
   if (button) {
     event.preventDefault();
@@ -526,6 +615,7 @@ document.addEventListener("keydown", (event) => {
   if (event.key !== "Escape") {
     return;
   }
+  closeDocumentSuggestionMenus();
   closeAuthModal();
   closeProjectModal();
 });
@@ -537,6 +627,14 @@ document.addEventListener("keydown", (event) => {
 });
 
 document.addEventListener("input", (event) => {
+  const documentCreateForm = event.target.closest("[data-document-create-form]");
+  if (documentCreateForm && event.target.name === "title") {
+    const typeInput = documentCreateForm.querySelector("input[name='document_type']");
+    if (typeInput) {
+      typeInput.value = "custom";
+    }
+  }
+
   const apiForm = event.target.closest("[data-api-form]");
   if (apiForm?.querySelector?.("[data-document-slugs-input]")) {
     syncExportDocumentSelection(apiForm);
@@ -549,6 +647,7 @@ document.addEventListener("input", (event) => {
   saveProjectCreateDraft(serializeForm(projectCreateForm));
 });
 
+initializeDocumentCreateControls();
 setAuthMode("login");
 
 const autoRefreshMs = Number(document.body.dataset.autoRefresh || 0);

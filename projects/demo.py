@@ -26,7 +26,10 @@ from specs.models import (
     ConsistencyIssueStatus,
     ConsistencyRun,
     ConsistencyRunStatus,
+    DocumentSourceKind,
     DocumentStatus,
+    DocumentType,
+    ProjectDocument,
 )
 from specs.services import bootstrap_documents, capture_document_revision, capture_project_revision
 
@@ -126,6 +129,33 @@ def ensure_demo_workspace():
         )
 
         documents = {document.slug: document for document in bootstrap_documents(project)}
+        for index, payload in enumerate(
+            (
+                {"slug": "goals", "title": "Goals", "document_type": DocumentType.GOALS},
+                {"slug": "requirements", "title": "Requirements", "document_type": DocumentType.REQUIREMENTS},
+                {"slug": "ui-ux", "title": "UI/UX", "document_type": DocumentType.UI_UX},
+                {"slug": "tech-stack", "title": "Tech Stack", "document_type": DocumentType.TECH_STACK},
+                {"slug": "infra", "title": "Infra", "document_type": DocumentType.INFRA},
+                {
+                    "slug": "risks-open-questions",
+                    "title": "Risks & Open Questions",
+                    "document_type": DocumentType.RISKS_OPEN_QUESTIONS,
+                },
+            ),
+            start=2,
+        ):
+            document = ProjectDocument.objects.create(
+                project=project,
+                slug=payload["slug"],
+                title=payload["title"],
+                document_type=payload["document_type"],
+                source_kind=DocumentSourceKind.PRESET,
+                body="",
+                status=DocumentStatus.ITERATING,
+                order=index,
+                is_required=False,
+            )
+            documents[document.slug] = document
 
         seed_content = {
             "overview": {

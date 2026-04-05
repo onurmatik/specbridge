@@ -1,3 +1,4 @@
+from django.http import JsonResponse
 from ninja import Router, Schema
 from ninja.security import django_auth
 
@@ -40,12 +41,15 @@ def list_stream(request, slug: str):
 def create_stream_post(request, slug: str, payload: StreamPayload):
     project = get_project_or_404(slug, request.user)
     actor = resolve_actor(request, project)
+    body = payload.body.strip()
+    if not body:
+        return JsonResponse({"ok": False, "errors": {"body": ["Message is required."]}}, status=422)
     post = StreamPost.objects.create(
         project=project,
         author=actor,
         actor_name=actor.display_name,
         actor_title=actor.title,
-        body=payload.body,
+        body=body,
     )
     return {"id": post.id, "body": post.body, "actor_name": post.actor_name}
 

@@ -3,12 +3,6 @@ from django.db import migrations
 
 DOCUMENT_PRESETS = (
     ("overview", "Overview", "overview"),
-    ("goals", "Goals", "goals"),
-    ("requirements", "Requirements", "requirements"),
-    ("ui-ux", "UI/UX", "ui-ux"),
-    ("tech-stack", "Tech Stack", "tech-stack"),
-    ("infra", "Infra", "infra"),
-    ("risks-open-questions", "Risks & Open Questions", "risks-open-questions"),
 )
 
 
@@ -32,7 +26,7 @@ def seed_default_documents(apps, schema_editor):
                     body="",
                     status="iterating",
                     order=index,
-                    is_required=True,
+                    is_required=False,
                 )
             existing_documents = list(ProjectDocument.objects.filter(project=project).order_by("order", "created_at"))
 
@@ -90,7 +84,7 @@ def seed_default_documents(apps, schema_editor):
             project=project,
             number=1,
             title="Migrated to multi-document workspace",
-            summary="Seeded starter documents during the multi-document migration.",
+            summary="Seeded the initial overview document during the multi-document migration.",
             snapshot=snapshot,
             created_by=project.created_by,
         )

@@ -10,7 +10,12 @@ from django.utils.text import slugify
 from alignment.services import build_workspace_entries, compute_dashboard_metrics
 from projects.demo import DEMO_PROJECT_SLUG, DEMO_USERNAMES, ensure_demo_workspace
 from projects.models import MembershipRole, Organization, Project, ProjectMembership
-from specs.services import bootstrap_documents, capture_project_revision, compare_document_revisions
+from specs.services import (
+    DOCUMENT_SUGGESTIONS,
+    bootstrap_documents,
+    capture_project_revision,
+    compare_document_revisions,
+)
 
 DEFAULT_PROJECT_STATUS_LABEL = "Aligning"
 
@@ -225,6 +230,7 @@ def workspace_context(project, active_document_slug: str | None = None):
             "documents": documents,
             "active_document": active_document,
             "document_revisions": list(active_document.revisions.order_by("-number")[:5]) if active_document else [],
+            "document_suggestions": DOCUMENT_SUGGESTIONS,
             "questions": list(project.questions.select_related("related_document")),
             "assumptions": list(project.assumptions.select_related("document")),
             "agent_suggestions": list(project.agent_suggestions.select_related("related_document")),

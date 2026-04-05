@@ -76,8 +76,10 @@ class ProjectPageTests(TestCase):
         self.assertContains(response, 'data-workspace-document-pane', html=False)
         self.assertContains(response, "Project Documents")
         self.assertContains(response, "Consistency Inbox")
-        self.assertContains(response, "Add Custom Document")
+        self.assertContains(response, "Add Document")
         self.assertContains(response, "Save Document")
+        self.assertContains(response, "AI + Stream Composer")
+        self.assertContains(response, 'data-stream-input', html=False)
         self.assertNotContains(response, "Ask AI to Help Draft")
 
     def test_workspace_separates_tagline_from_summary_detail(self):
@@ -260,7 +262,7 @@ class ProjectPageTests(TestCase):
         self.assertEqual(payload["redirect_to"], reverse("project-workspace", args=[created_project.slug]))
         self.assertEqual(created_project.organization.name, "Sarah Stone Workspace")
         self.assertEqual(created_project.memberships.count(), 1)
-        self.assertEqual(created_project.documents.count(), 7)
+        self.assertEqual(created_project.documents.count(), 1)
         self.assertEqual(created_project.revisions.count(), 1)
 
         history_response = self.client.get(reverse("project-history", args=[created_project.slug]))

@@ -118,7 +118,7 @@ class Migration(migrations.Migration):
                 ('body', models.TextField(blank=True)),
                 ('status', models.CharField(choices=[('aligned', 'Aligned'), ('iterating', 'Iterating'), ('blocked', 'Blocked')], default='iterating', max_length=16)),
                 ('order', models.PositiveIntegerField(default=0)),
-                ('is_required', models.BooleanField(default=True)),
+                ('is_required', models.BooleanField(default=False)),
                 ('project', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='documents', to='projects.project')),
             ],
             options={

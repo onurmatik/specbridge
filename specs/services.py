@@ -21,49 +21,45 @@ DEFAULT_DOCUMENT_PRESETS: tuple[dict[str, Any], ...] = (
         "title": "Overview",
         "document_type": DocumentType.OVERVIEW,
         "source_kind": DocumentSourceKind.PRESET,
-        "is_required": True,
+        "is_required": False,
+    },
+)
+
+DOCUMENT_SUGGESTIONS: tuple[dict[str, Any], ...] = (
+    {
+        "slug": "overview",
+        "title": "Overview",
+        "document_type": DocumentType.OVERVIEW,
     },
     {
         "slug": "goals",
         "title": "Goals",
         "document_type": DocumentType.GOALS,
-        "source_kind": DocumentSourceKind.PRESET,
-        "is_required": True,
     },
     {
         "slug": "requirements",
         "title": "Requirements",
         "document_type": DocumentType.REQUIREMENTS,
-        "source_kind": DocumentSourceKind.PRESET,
-        "is_required": True,
     },
     {
         "slug": "ui-ux",
         "title": "UI/UX",
         "document_type": DocumentType.UI_UX,
-        "source_kind": DocumentSourceKind.PRESET,
-        "is_required": True,
     },
     {
         "slug": "tech-stack",
         "title": "Tech Stack",
         "document_type": DocumentType.TECH_STACK,
-        "source_kind": DocumentSourceKind.PRESET,
-        "is_required": True,
     },
     {
         "slug": "infra",
         "title": "Infra",
         "document_type": DocumentType.INFRA,
-        "source_kind": DocumentSourceKind.PRESET,
-        "is_required": True,
     },
     {
         "slug": "risks-open-questions",
         "title": "Risks & Open Questions",
         "document_type": DocumentType.RISKS_OPEN_QUESTIONS,
-        "source_kind": DocumentSourceKind.PRESET,
-        "is_required": True,
     },
 )
 
@@ -260,6 +256,9 @@ def create_document(
     status: str = DocumentStatus.ITERATING,
     is_required: bool = False,
 ):
+    title = (title or "").strip()
+    if not title:
+        raise ValueError("Document title is required.")
     source_kind = DocumentSourceKind.CUSTOM if document_type == DocumentType.CUSTOM else DocumentSourceKind.PRESET
     document = ProjectDocument.objects.create(
         project=project,

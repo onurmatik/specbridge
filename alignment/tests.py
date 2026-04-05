@@ -2,7 +2,7 @@ import json
 
 from django.test import Client, TestCase
 
-from alignment.models import Decision, DecisionStatus, OpenQuestion
+from alignment.models import Decision, DecisionStatus, OpenQuestion, StreamPost
 from projects.demo import ensure_demo_workspace
 
 
@@ -33,3 +33,22 @@ class AlignmentApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         question.refresh_from_db()
         self.assertEqual(question.status, "resolved")
+
+    def test_create_stream_post_endpoint(self):
+        response = self.client.post(
+            f"/api/projects/{self.project.slug}/stream",
+            data=json.dumps({"body": "  Need a fast draft for infra ownership.  "}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["body"], "Need a fast draft for infra ownership.")
+        self.assertTrue(StreamPost.objects.filter(project=self.project, body="Need a fast draft for infra ownership.").exists())
+
+    def test_create_stream_post_requires_body(self):
+        response = self.client.post(
+            f"/api/projects/{self.project.slug}/stream",
+            data=json.dumps({"body": "   "}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["errors"]["body"], ["Message is required."])
