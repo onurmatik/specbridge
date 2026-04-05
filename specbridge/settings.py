@@ -3,12 +3,34 @@ from pathlib import Path
 
 import dj_database_url
 
+from specbridge.env import load_dotenv
+
 BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BASE_DIR)
+
+
+def env_bool(name: str, default: bool) -> bool:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+    return raw_value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def env_int(name: str, default: int) -> int:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+    try:
+        return int(raw_value)
+    except ValueError:
+        return default
+
+
 SECRET_KEY = os.getenv(
     "DJANGO_SECRET_KEY",
     "django-insecure-specbridge-local-dev-key-change-in-production",
 )
-DEBUG = os.getenv("DJANGO_DEBUG", "true").lower() == "true"
+DEBUG = env_bool("DJANGO_DEBUG", True)
 ALLOWED_HOSTS = [host for host in os.getenv("DJANGO_ALLOWED_HOSTS", "*").split(",") if host]
 
 INSTALLED_APPS = [
@@ -99,3 +121,10 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 LOGIN_URL = 'login'
 LOGIN_REDIRECT_URL = 'project-directory'
 LOGOUT_REDIRECT_URL = 'project-directory'
+
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+OPENAI_DEFAULT_MODEL = os.getenv("OPENAI_DEFAULT_MODEL", "gpt-5-mini")
+OPENAI_DEFAULT_TIMEOUT_SECONDS = env_int("OPENAI_DEFAULT_TIMEOUT_SECONDS", 60)
+OPENAI_DEFAULT_MAX_INSTRUCTION_CHARS = env_int("OPENAI_DEFAULT_MAX_INSTRUCTION_CHARS", 20000)
+OPENAI_DEFAULT_MAX_OUTPUT_TOKENS = env_int("OPENAI_DEFAULT_MAX_OUTPUT_TOKENS", 1200)
+OPENAI_DEFAULT_REASONING_EFFORT = os.getenv("OPENAI_DEFAULT_REASONING_EFFORT", "low")

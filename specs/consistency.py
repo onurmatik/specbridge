@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 from dataclasses import dataclass
 from urllib import error, request
 
+from django.conf import settings
 from django.utils import timezone
 
 from specs.models import (
@@ -19,7 +19,6 @@ from specs.models import (
 from specs.services import build_project_snapshot, log_audit_event
 
 OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
-DEFAULT_OPENAI_MODEL = "gpt-5-mini"
 
 CONSISTENCY_SCHEMA = {
     "type": "object",
@@ -128,16 +127,27 @@ def _analysis_prompt(snapshot: dict) -> str:
     )
 
 
+def _truncate_prompt(prompt: str) -> str:
+    max_chars = max(getattr(settings, "OPENAI_DEFAULT_MAX_INSTRUCTION_CHARS", 20000), 0)
+    if not max_chars or len(prompt) <= max_chars:
+        return prompt
+    return prompt[:max_chars].rstrip() + "\n\n[TRUNCATED]"
+
+
 def analyze_project_consistency(snapshot: dict) -> ConsistencyAnalysisResult:
-    api_key = os.environ.get("OPENAI_API_KEY")
+    api_key = getattr(settings, "OPENAI_API_KEY", "")
     if not api_key:
         raise ConsistencyError("OPENAI_API_KEY is not configured.")
 
-    model = os.environ.get("OPENAI_CONSISTENCY_MODEL", DEFAULT_OPENAI_MODEL)
+    model = getattr(settings, "OPENAI_DEFAULT_MODEL", "gpt-5-mini")
+    timeout_seconds = max(getattr(settings, "OPENAI_DEFAULT_TIMEOUT_SECONDS", 60), 1)
+    max_output_tokens = max(getattr(settings, "OPENAI_DEFAULT_MAX_OUTPUT_TOKENS", 1200), 1)
+    reasoning_effort = getattr(settings, "OPENAI_DEFAULT_REASONING_EFFORT", "low")
     payload = {
         "model": model,
-        "input": _analysis_prompt(snapshot),
-        "reasoning": {"effort": "low"},
+        "input": _truncate_prompt(_analysis_prompt(snapshot)),
+        "max_output_tokens": max_output_tokens,
+        "reasoning": {"effort": reasoning_effort},
         "text": {
             "format": {
                 "type": "json_schema",
@@ -158,7 +168,7 @@ def analyze_project_consistency(snapshot: dict) -> ConsistencyAnalysisResult:
     )
 
     try:
-        with request.urlopen(response, timeout=60) as http_response:
+        with request.urlopen(response, timeout=timeout_seconds) as http_response:
             body = http_response.read().decode("utf-8")
     except error.HTTPError as exc:
         details = exc.read().decode("utf-8", errors="replace")
