@@ -522,7 +522,9 @@ function syncExportSelection(form) {
 
 function scrollToSpecSection(workspace, sectionId, behavior = "smooth") {
   const container = workspace?.querySelector?.("[data-spec-scroll-container]");
-  const target = workspace?.querySelector?.(`[data-section-id='${sectionId}']`);
+  const target = workspace?.querySelector?.(
+    `[data-spec-section][data-section-id='${sectionId}']`
+  );
   if (!container || !target) {
     return false;
   }
