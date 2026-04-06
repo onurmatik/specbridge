@@ -4,138 +4,322 @@
 
 - Superdesign project: `0e542410-b834-442c-98b7-89e31fdcbbd0`
 - Superdesign draft: `334441f1-f8fb-4716-9bd2-c5bdec4fb495`
-- Verified on `2026-03-25` that the fetched draft matches `docs/design/html/workspace.html` exactly.
+- Live draft title on 2026-04-06: `Dynamic Horizontal Navbar & Extended Spec`
+- Saved artifact refreshed from the live draft on 2026-04-06:
+  - `docs/design/html/workspace.html`
 
 ## Goal
 
-Implement the workspace page so it behaves like the approved Superdesign draft, especially on the left-side stream:
+Align the workspace page more literally to the approved Superdesign draft, with the left pane as the first priority:
 
-- the workspace fills the viewport
-- the stream itself scrolls
-- the post composer stays pinned below the stream
-- the only persistent user avatar stays at the bottom of the global sidebar
-- the header does not introduce a second user-profile block that pulls identity UI upward
+- make the conversation side read like a single polished alignment stream
+- keep the composer pinned below the stream
+- preserve the existing SpecBridge editing and AI workflows where they already exceed the draft
+- close only the real backend gaps, not imagined ones
 
-## Current gaps against the draft
+## Current assessment
 
-1. `templates/components/page_header.html`
-   The current header includes an authenticated user card in the top-right area. The draft component contract does not expose a user-profile prop, and the approved workspace chrome is designed around the bottom sidebar avatar as the persistent identity anchor.
+### What is already aligned or backend-ready
 
-2. `templates/pages/workspace.html`
-   The page is structurally close to the draft, but it should be treated as a strict viewport shell, not a normal document page. Scroll ownership and footer/composer ownership need to be implemented exactly like the draft.
+1. The workspace route already behaves like an app shell.
+   - `templates/pages/workspace.html` already owns viewport height and keeps the left and right panes independently scrollable.
 
-3. `templates/components/global_sidebar.html`
-   The sidebar already places the avatar below the navigation, but it only works as intended when the parent shell height is fully constrained by the workspace viewport.
+2. The workspace header is no longer blocked by an extra top-right identity card.
+   - `projects/services.py` sets `header_variant = "project-toolbar"` for project pages.
+   - `templates/components/page_header.html` renders the compact project toolbar in that mode.
 
-4. `templates/base.html`
-   The base layout does not currently expose a clean workspace-only body/shell variant. The workspace implementation should avoid changing global page behavior for dashboard, assumptions, history, and other routes.
+3. The sidebar already matches the intended identity anchor pattern.
+   - `templates/components/global_sidebar.html` keeps the user avatar below the `flex-1` nav block.
 
-## Implementation plan
+4. The right pane already has stronger functionality than the draft.
+   - Section autosave exists.
+   - Section status updates exist.
+   - AI revise exists.
+   - Section insert, move, and delete exist.
 
-### 1. Add a workspace-specific chrome variant
+5. Concern and stream actions are already backed by APIs.
+   - Stream post create: `alignment/api.py`
+   - Concern scan / re-evaluate / dismiss / resolve-with-AI: `specs/api.py`
+   - Proposal accept / reject: `specs/api.py`
 
-Files:
+6. Dynamic section navigation is partially implemented already.
+   - `templates/pages/workspace.html` renders a horizontal section nav.
+   - `static/js/app.js` already handles section scroll-to and scroll spy.
 
-- `templates/components/page_header.html`
-- `projects/views.py` or the context-building layer that feeds header state
+## Gap verdict
 
-Work:
+There is no major backend or schema gap between the latest draft and the current product.
 
-- Add a workspace-specific header mode instead of changing the shared header globally.
-- In workspace mode, remove the top-right authenticated user card.
-- Keep the draft-aligned breadcrumb, status label, unresolved/team information, and action buttons.
-- Preserve the existing richer header behavior for non-workspace routes unless separately redesigned.
+The main gap is a frontend composition gap:
 
-Reason:
+- the left pane is structured as multiple product surfaces
+- the draft expects a single conversation-first stream
+- the right pane is functionally ahead of the draft, but still missing a few chrome details
 
-This prevents the UI from showing two identity anchors at once and restores the draft's intended bottom-sidebar avatar behavior.
+The only likely backend or API additions are optional, not mandatory:
 
-### 2. Make workspace a true viewport app surface
+- draft-specific quick actions if we want exact CTA semantics
+- a persisted split width if we want a truly resizable divider instead of a visual handle
+
+## Concrete gaps against the latest draft
+
+### 1. Left pane composition is still product-heavy instead of stream-first
+
+Current structure in `templates/pages/workspace.html`:
+
+- queue summary
+- selected concern summary card
+- alignment stream
+- AI patch review
+- pinned composer
+
+Draft structure:
+
+- compact stream header
+- filter tabs
+- one mixed, chronologically readable conversation stream
+- pinned composer immediately below it
+
+Impact:
+
+- the current page exposes more functionality than the draft, but the visual hierarchy is off
+- this is the biggest reason the left side does not feel pixel-perfect
+
+### 2. The draft filter model does not exist yet
+
+Latest draft expects:
+
+- `All`
+- `Decisions`
+- `Open`
+
+Current template shows static labels instead:
+
+- `Queue`
+- `Alignment Stream`
+- `Posting / AI Chat`
+
+Missing today:
+
+- no `stream` query param
+- no client-side filter state
+- no server-side filtered view model for those three states
+
+### 3. The unified stream view model is missing
+
+`alignment/services.py::build_workspace_entries()` currently mixes:
+
+- top-level stream posts
+- non-pending decisions
+
+It does not build a single draft-shaped stream item list containing:
+
+- human messages with avatar treatment
+- agent intervention cards
+- open concern cards
+- selected concern thread messages
+- AI patch review summaries
+
+Impact:
+
+- backend data exists, but the presentation layer is not yet organized around the draft
+
+### 4. Draft quick actions do not map 1:1 to current endpoints
+
+Examples from the draft:
+
+- `Address Existing Users`
+- `Define SSO Strategy`
+- `Resolve`
+
+Current product actions are different:
+
+- `Raise concern`
+- `Re-evaluate`
+- `Resolve with AI`
+- proposal `Accept` / `Reject`
+
+Recommendation:
+
+- v1 should map draft quick actions to existing behaviors where possible
+- do not add new endpoints unless a button truly needs unique side effects
+
+### 5. Actor presentation is incomplete on the left side
+
+The draft relies on:
+
+- human avatars
+- a clear agent visual treatment
+- decision cards inline in the stream
+
+Current implementation:
+
+- usually renders text-first cards without avatar rhythm
+- separates concern and proposal surfaces from the main stream
+
+Backend note:
+
+- `alignment.models.StreamPost` already keeps `author`, `actor_name`, and `actor_title`
+- for user-authored entries, avatar rendering can usually be derived from `author.avatar_url`
+- AI and system entries still need explicit icon or fallback treatment in the view model
+
+### 6. Right-pane chrome is close, but not fully aligned to the latest draft
+
+Still missing or only partially present:
+
+- nav fade overlays on both sides of the horizontal section nav
+- hidden horizontal scrollbar treatment
+- active nav item auto-centering while scrolling
+- visual split handle between left and right panes
+
+These are frontend-only gaps.
+
+### 7. The previously saved design artifact was stale
+
+On 2026-04-06, the live draft differed from the older checked-in `docs/design/html/workspace.html`.
+
+That artifact has now been refreshed so implementation work can compare against the latest approved draft rather than an older snapshot.
+
+## Recommended implementation sequence
+
+### Phase 1. Close the low-risk chrome gaps first
 
 Files:
 
 - `templates/pages/workspace.html`
-- potentially `templates/base.html` if a body-class or body-attribute block is needed
+- `static/js/app.js`
+- optionally `static_src/styles/tailwind.css` if a tiny utility is cleaner than repeated classes
 
 Work:
 
-- Match the draft shell exactly: root workspace container should own the viewport height and clip page-level overflow.
-- Ensure only the left stream and right spec panes scroll.
-- Keep the composer outside the stream scroller.
-- Keep the split handle and right-pane top gradient in the same ownership structure as the draft.
+- replace the current left-side header copy and static tab labels with the draft language
+- keep the pinned composer, but restyle it to the draft shell more literally
+- add the visual split handle between panes
+- add nav fade overlays and hidden scrollbar styling for the right-side horizontal nav
+- update JS so the active nav item is kept centered when scroll spy changes state
 
 Reason:
 
-If the page itself scrolls, the composer stops behaving like a pinned footer and the sidebar avatar no longer reads as anchored to the app frame.
+- this gets visible pixel alignment quickly without disturbing any backend behavior
 
-### 3. Reproduce the left stream DOM more literally
+### Phase 2. Introduce a draft-shaped workspace stream builder
 
 Files:
 
+- `alignment/services.py`
+- `projects/services.py`
 - `templates/pages/workspace.html`
 
 Work:
 
-- Keep the thread header, stream scroller, and composer as three sibling blocks in one flex column.
-- Match the draft class ordering and spacing for the composer wrapper:
-  `p-4 border-t border-gray-200 bg-gray-50`
-- Match the inner composer shell styling and button spacing to the draft, including icon button treatment.
-- Re-add the filter tab icon treatment from the draft if visual parity is the goal.
+- add a `stream_filter` input to `workspace_context()`
+- build a new `workspace_stream_items` list that can represent:
+  - `message`
+  - `agent_notice`
+  - `decision`
+  - `open_concern`
+  - `proposal_summary`
+- keep current raw collections during migration so the page can switch incrementally
+- use the builder to feed the left pane rather than manually stacking unrelated cards
 
 Reason:
 
-This page is close enough that another abstract "layout fix" is risky. A more literal draft-to-template port is safer.
+- the live draft is essentially a stream composition problem, not a database problem
 
-### 4. Keep the sidebar avatar as the single persistent identity anchor
-
-Files:
-
-- `templates/components/global_sidebar.html`
-
-Work:
-
-- Keep the avatar after the `flex-1` navigation block so it naturally sits at the bottom.
-- Do not add header-level identity UI on the workspace route.
-- Validate spacing against the draft once the viewport shell is corrected.
-
-Reason:
-
-The sidebar avatar position is correct only when the surrounding shell is correct and there is no competing avatar higher on the page.
-
-### 5. Introduce route-safe implementation hooks
+### Phase 3. Make the three draft filters real
 
 Files:
 
-- `templates/base.html`
 - `projects/views.py`
-- any shared context processor used by the page header
+- `projects/services.py`
+- `templates/pages/workspace.html`
 
 Work:
 
-- Prefer an explicit workspace flag such as `page_variant = "workspace"` or `header_variant = "workspace"` over brittle path checks inside templates.
-- If body-level behavior is required, expose a template block or context-driven class instead of hardcoding `h-screen overflow-hidden` globally.
+- accept `?stream=all|decisions|open`
+- highlight the active filter server-side for deterministic first render
+- filter `workspace_stream_items` by type or concern status
+
+Recommended behavior:
+
+- `All`: full mixed stream
+- `Decisions`: decision items only
+- `Open`: open concerns and unresolved agent/question items
 
 Reason:
 
-The workspace needs app-like overflow behavior, but most other pages in this project are standard scroll pages.
+- a URL-driven filter is shareable, testable, and works without client hydration
+
+### Phase 4. Decide how current advanced features should survive the redesign
+
+Features that exist today but are not primary in the draft:
+
+- Active Queue
+- selected concern detail card
+- AI Patch Review
+
+Recommendation:
+
+- do not remove the backend support
+- reduce their default visual dominance on the workspace route
+- move them behind contextual expansions or fold them into the stream model
+
+Suggested v1:
+
+- selected concern becomes a focused stream state, not a large standalone card
+- AI Patch Review becomes an expandable review block tied to the selected concern
+- queue data powers the `Open` filter instead of always occupying top-of-pane space
+
+### Phase 5. Map draft quick actions onto existing product behaviors
+
+Files:
+
+- `templates/pages/workspace.html`
+- `static/js/app.js`
+- optionally `projects/services.py` if button metadata should be computed server-side
+
+Work:
+
+- use existing endpoints wherever possible
+- prefer lightweight behaviors first:
+  - selecting a concern
+  - scrolling the composer into view
+  - prefilling the composer with a prompt
+  - opening the concern review state
+
+Avoid for v1:
+
+- adding new endpoints just to mimic draft button labels
+
+Reason:
+
+- the backend already covers the important workflows; only the interaction packaging is missing
 
 ## Verification plan
 
-1. Compare the final DOM structure and classes against `docs/design/html/workspace.html`.
-2. Confirm there is no body scroll on the workspace route at desktop sizes.
-3. Confirm the left stream scrolls independently and the composer never scrolls away.
-4. Confirm the only persistent user avatar is the sidebar avatar at the bottom of the rail.
-5. Run `uv run python manage.py check`.
-6. Run `npm run build:css` if any new Tailwind classes or component-layer utilities are introduced.
+1. Compare the final workspace DOM and spacing against `docs/design/html/workspace.html`.
+2. Confirm there is no body scroll on `/projects/<slug>/workspace/`.
+3. Confirm the left stream scrolls independently and the composer remains visible.
+4. Confirm `?stream=all`, `?stream=decisions`, and `?stream=open` render the expected states.
+5. Confirm the right-side horizontal nav:
+   - highlights the current section
+   - stays horizontally usable with many sections
+   - recenters the active tab during scroll spy updates
+6. Confirm concern actions, proposal actions, and spec autosave still work after the DOM restructure.
+7. Run:
+   - `uv run python manage.py check`
+   - `uv run python manage.py test alignment.tests specs.tests`
 
 ## Acceptance criteria
 
-- Workspace visually behaves like the approved Superdesign draft.
-- The composer is pinned below the stream and remains visible while the stream scrolls.
-- The top header no longer shows an extra user-profile card on the workspace page.
-- The sidebar avatar is visually anchored to the bottom of the left rail.
-- Other routes keep their current scroll behavior unless explicitly updated.
+- The left pane reads as one coherent alignment stream instead of several stacked tools.
+- The composer remains pinned below the stream.
+- The latest draft's three filter states are real and navigable.
+- Existing concern and spec workflows still function.
+- The right pane preserves current editing power while matching the latest draft chrome more closely.
 
 ## Non-blockers
 
-- `.superdesign/init/extractable-components.md` is not present. That does not block implementation planning, but it should be added later if we want to mirror the Superdesign component extraction workflow more strictly.
+- A truly draggable split layout is optional; a visual handle is enough for the first pass.
+- Exact sample content from the Superdesign mock should not replace real project data.
+- No database migration is required for the recommended implementation sequence.

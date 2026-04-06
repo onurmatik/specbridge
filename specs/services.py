@@ -13,9 +13,12 @@ from specs.models import (
 from specs.spec_document import (
     SPEC_SCHEMA_VERSION,
     build_primary_ref,
+    delete_section,
     default_spec_content,
     find_section,
     find_section_by_identifier,
+    insert_section_after,
+    move_section,
     normalized_spec_content,
     section_catalog,
     section_markdown_from_ref,
@@ -261,6 +264,142 @@ def update_spec_section(
 
     mark_linked_concerns_stale(project=project, section_ids=[summary_section["id"]], actor=actor)
     return project_revision
+
+
+def add_spec_section_after(
+    *,
+    project,
+    after_section_id: str,
+    actor=None,
+    title: str = "New Section",
+):
+    spec_document = ensure_spec_document(project)
+    next_content, inserted_section = insert_section_after(
+        spec_document.content_json,
+        project=project,
+        after_section_id=after_section_id,
+        title=title,
+    )
+    if not inserted_section:
+        raise ValueError("Section not found.")
+
+    spec_document.content_json = next_content
+    spec_document.schema_version = SPEC_SCHEMA_VERSION
+    spec_document.save(update_fields=["content_json", "schema_version", "updated_at"])
+
+    summary_section = section_summary(inserted_section)
+    description = f"Added section {summary_section['title']}"
+    project_revision = capture_project_revision(
+        project=project,
+        title=description,
+        summary=description,
+        actor=actor,
+    )
+    log_audit_event(
+        project=project,
+        actor=actor,
+        event_type=AuditEventType.DOCUMENT_CREATED,
+        title=description,
+        description=description,
+        metadata={"section_id": summary_section["id"], "status": summary_section["status"]},
+        project_revision=project_revision,
+    )
+    return summary_section
+
+
+def reorder_spec_section(
+    *,
+    project,
+    section_id: str,
+    direction: str,
+    actor=None,
+):
+    normalized_direction = (direction or "").strip().lower()
+    if normalized_direction not in {"up", "down"}:
+        raise ValueError("Section move direction must be 'up' or 'down'.")
+
+    spec_document = ensure_spec_document(project)
+    next_content, moved_section, changed = move_section(
+        spec_document.content_json,
+        section_id,
+        direction=normalized_direction,
+    )
+    if not moved_section:
+        raise ValueError("Section not found.")
+    if not changed:
+        raise ValueError("Section cannot be moved further.")
+
+    spec_document.content_json = next_content
+    spec_document.schema_version = SPEC_SCHEMA_VERSION
+    spec_document.save(update_fields=["content_json", "schema_version", "updated_at"])
+
+    summary_section = section_summary(moved_section)
+    description = f"Moved section {summary_section['title']} {normalized_direction}"
+    project_revision = capture_project_revision(
+        project=project,
+        title=description,
+        summary=description,
+        actor=actor,
+    )
+    log_audit_event(
+        project=project,
+        actor=actor,
+        event_type=AuditEventType.DOCUMENT_REORDERED,
+        title=description,
+        description=description,
+        metadata={"section_id": summary_section["id"], "direction": normalized_direction},
+        project_revision=project_revision,
+    )
+    return summary_section
+
+
+def delete_spec_section(
+    *,
+    project,
+    section_id: str,
+    actor=None,
+):
+    spec_document = ensure_spec_document(project)
+    next_content, deleted_section, changed, focus_section_id = delete_section(spec_document.content_json, section_id)
+    if not deleted_section:
+        raise ValueError("Section not found.")
+    if not changed:
+        raise ValueError("Section could not be deleted.")
+
+    spec_document.content_json = next_content
+    spec_document.schema_version = SPEC_SCHEMA_VERSION
+    spec_document.save(update_fields=["content_json", "schema_version", "updated_at"])
+
+    summary_section = section_summary(deleted_section)
+    description = f"Deleted section {summary_section['title']}"
+    project_revision = capture_project_revision(
+        project=project,
+        title=description,
+        summary=description,
+        actor=actor,
+    )
+    log_audit_event(
+        project=project,
+        actor=actor,
+        event_type=AuditEventType.DOCUMENT_DELETED,
+        title=description,
+        description=description,
+        metadata={"section_id": summary_section["id"]},
+        project_revision=project_revision,
+    )
+
+    from specs.concerns import mark_linked_concerns_stale
+
+    mark_linked_concerns_stale(
+        project=project,
+        section_ids=[summary_section["id"]],
+        actor=actor,
+        trigger="spec_section_delete",
+    )
+    return {
+        "deleted_section": summary_section,
+        "focus_section_id": focus_section_id,
+    }
 
 
 def compare_section_revisions(left: SpecDocumentRevision, right: SpecDocumentRevision, section_id: str) -> dict[str, Any]:

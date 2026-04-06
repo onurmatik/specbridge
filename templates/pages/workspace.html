@@ -260,132 +260,247 @@
               <div>
                 {% for item in spec_sections %}
                   {% with section=item.section %}
-                    <section
-                      id="spec-section-{{ section.id }}"
-                      class="group relative scroll-mt-28 px-8 py-8 {% if item.is_selected %}bg-red-50/20{% endif %}{% if not forloop.first %} border-t border-gray-200{% endif %}"
-                      data-spec-section
-                      data-section-id="{{ section.id }}"
-                    >
-                      <div class="absolute right-6 top-6 z-10 flex items-center gap-2">
-                        {% if request.user.is_authenticated %}
-                          <div class="relative" data-section-ai-shell>
-                            <button
-                              type="button"
-                              class="flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 transition hover:border-gray-300 hover:bg-gray-50 hover:text-gray-900"
-                              data-section-ai-toggle
-                              aria-expanded="false"
-                              aria-label="Revise this section with AI"
-                              title="Revise this section with AI"
-                            >
-                              <iconify-icon icon="lucide:sparkles" class="text-sm"></iconify-icon>
-                            </button>
-                            <div
-                              hidden
-                              data-section-ai-menu
-                              class="absolute right-0 top-full mt-2 w-[320px] rounded-[26px] border border-gray-200 bg-white p-4 shadow-paper"
-                            >
-                              <div class="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Section AI</div>
-                              <div class="mt-3 flex flex-wrap gap-2">
-                                <button type="button" class="workspace-badge border-gray-200 bg-white text-gray-600 transition hover:border-gray-300 hover:text-gray-900" data-section-ai-preset="Revise this section for overall quality while preserving the original intent and commitments.">
-                                  Revise
-                                </button>
-                                <button type="button" class="workspace-badge border-gray-200 bg-white text-gray-600 transition hover:border-gray-300 hover:text-gray-900" data-section-ai-preset="Clarify this section and make it easier to scan without changing scope or meaning.">
-                                  Clarify
-                                </button>
-                                <button type="button" class="workspace-badge border-gray-200 bg-white text-gray-600 transition hover:border-gray-300 hover:text-gray-900" data-section-ai-preset="Summarize this section into a shorter version while preserving the important commitments and constraints.">
-                                  Summarize
-                                </button>
-                                <button type="button" class="workspace-badge border-gray-200 bg-white text-gray-600 transition hover:border-gray-300 hover:text-gray-900" data-section-ai-preset="Fix grammar, spelling, punctuation, and awkward phrasing while preserving meaning.">
-                                  Grammar
-                                </button>
-                                <button type="button" class="workspace-badge border-gray-200 bg-white text-gray-600 transition hover:border-gray-300 hover:text-gray-900" data-section-ai-preset="Add useful detail and connective explanation without inventing any new requirements or facts.">
-                                  Add detail
-                                </button>
-                              </div>
-                              <textarea
-                                rows="4"
-                                data-section-ai-prompt
-                                class="mt-3 block w-full resize-none rounded-2xl border border-gray-200 bg-gray-50 px-3 py-3 text-sm leading-6 text-gray-800 placeholder-gray-400 focus:border-gray-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-gray-200"
-                                placeholder="Tell AI how to revise this section."
-                              >Revise this section for overall quality while preserving the original intent and commitments.</textarea>
-                              <div class="mt-3 flex items-center justify-between gap-3">
-                                <p class="text-[11px] leading-relaxed text-gray-500">Runs against the current section title, status, and body.</p>
-                                <button type="button" class="primary-button !px-3 !py-1.5 !text-xs" data-section-ai-run>
-                                  Run
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        {% endif %}
-                        <span class="workspace-badge border-gray-200 bg-white text-gray-600">{{ section.kind }}</span>
-                        <span class="workspace-badge {% if section.status == 'aligned' %}border-green-100 bg-green-50 text-green-700{% elif section.status == 'blocked' %}border-red-100 bg-red-50 text-red-700{% else %}border-amber-100 bg-amber-50 text-amber-700{% endif %}">
-                          {{ section.status }}
-                        </span>
-                        {% if request.user.is_authenticated %}
-                          <span data-spec-section-autosave-status class="workspace-badge border-gray-200 bg-white text-gray-600">Saved</span>
-                        {% endif %}
-                      </div>
-
-                      <div class="lg:pr-72">
-                        {% if request.user.is_authenticated %}
-                          <form
-                            class="space-y-4"
-                            data-api-form="/api/projects/{{ project.slug }}/spec/sections/{{ section.id }}"
-                            data-api-method="PATCH"
-                            data-spec-section-form
-                          >
-                            {% csrf_token %}
-                            <input
-                              type="text"
-                              name="title"
-                              value="{{ section.title }}"
-                              class="w-full border-0 bg-transparent pr-44 font-display text-2xl font-bold tracking-tight text-gray-900 focus:outline-none focus:ring-0"
-                            >
-                            <div class="flex items-center gap-3">
-                              <label class="text-xs font-medium uppercase tracking-wider text-gray-400">Status</label>
-                              <select name="status" class="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-700 focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-200">
-                                <option value="aligned" {% if section.status == 'aligned' %}selected{% endif %}>Aligned</option>
-                                <option value="iterating" {% if section.status == 'iterating' %}selected{% endif %}>Iterating</option>
-                                <option value="blocked" {% if section.status == 'blocked' %}selected{% endif %}>Blocked</option>
-                              </select>
-                            </div>
-                            <textarea
-                              name="body"
-                              rows="10"
-                              data-spec-section-input
-                              class="block min-h-[220px] w-full resize-none border-0 bg-transparent px-0 py-2 text-[15px] leading-8 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-0"
-                              placeholder="Write the current source of truth for this section."
-                            >{{ section.body }}</textarea>
-                          </form>
-                        {% else %}
-                          <div>
-                            <h2 class="pr-44 font-display text-2xl font-bold tracking-tight text-gray-900">{{ section.title }}</h2>
-                            <div class="mt-4 whitespace-pre-wrap text-[15px] leading-8 text-gray-700">{{ section.body|default:"No content yet." }}</div>
-                          </div>
-                        {% endif %}
-                      </div>
-
-                      {% if item.concerns %}
-                        <aside class="mt-6 lg:absolute lg:right-6 lg:top-24 lg:mt-0 lg:w-56">
-                          <div class="space-y-3">
-                            {% for concern in item.concerns|slice:":3" %}
-                              <a
-                                href="{% url 'project-workspace' project.slug %}?concern={{ concern.id }}"
-                                class="block rounded-2xl border p-3 text-sm shadow-sm {% if selected_concern and concern.id == selected_concern.id %}border-red-100 bg-red-50{% else %}border-gray-200 bg-white hover:border-gray-300{% endif %}"
+                    <div class="group relative">
+                      <section
+                        id="spec-section-{{ section.id }}"
+                        class="relative scroll-mt-28 px-8 py-8 {% if item.is_selected %}bg-red-50/20{% endif %}{% if not forloop.first %} border-t border-gray-200{% endif %}"
+                        data-spec-section
+                        data-section-id="{{ section.id }}"
+                      >
+                        <div class="absolute right-6 top-6 z-10 flex items-center justify-end gap-2">
+                          {% if request.user.is_authenticated %}
+                            <span data-spec-section-autosave-status class="text-[11px] font-medium whitespace-nowrap text-gray-400">Saved</span>
+                            <div class="relative" data-section-status-shell>
+                              <button
+                                type="button"
+                                class="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium capitalize transition {% if section.status == 'aligned' %}border-green-100 bg-green-50 text-green-700 hover:border-green-200 hover:bg-green-100/70{% elif section.status == 'blocked' %}border-red-100 bg-red-50 text-red-700 hover:border-red-200 hover:bg-red-100/70{% else %}border-amber-100 bg-amber-50 text-amber-700 hover:border-amber-200 hover:bg-amber-100/70{% endif %}"
+                                data-section-status-toggle
+                                aria-expanded="false"
+                                aria-label="Section status"
+                                title="Section status"
                               >
-                                <div class="mb-1 flex items-center gap-2">
-                                  <span class="rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider {% if concern.severity == 'critical' or concern.severity == 'high' %}bg-red-100 text-red-700{% elif concern.severity == 'medium' %}bg-amber-100 text-amber-700{% else %}bg-blue-100 text-blue-700{% endif %}">
-                                    {{ concern.get_severity_display }}
-                                  </span>
+                                <span data-section-status-label>{{ section.status }}</span>
+                                <iconify-icon icon="lucide:chevron-down" class="text-xs opacity-60"></iconify-icon>
+                              </button>
+                              <div
+                                hidden
+                                data-section-status-menu
+                                class="absolute right-0 top-full mt-2 w-44 rounded-[20px] border border-gray-200 bg-white p-2 shadow-paper"
+                              >
+                                <button
+                                  type="button"
+                                  class="block w-full rounded-2xl px-3 py-2 text-left text-sm text-gray-700 transition hover:bg-gray-50"
+                                  data-section-status-option
+                                  data-status-value="aligned"
+                                >
+                                  Aligned
+                                </button>
+                                <button
+                                  type="button"
+                                  class="block w-full rounded-2xl px-3 py-2 text-left text-sm text-gray-700 transition hover:bg-gray-50"
+                                  data-section-status-option
+                                  data-status-value="iterating"
+                                >
+                                  Iterating
+                                </button>
+                                <button
+                                  type="button"
+                                  class="block w-full rounded-2xl px-3 py-2 text-left text-sm text-gray-700 transition hover:bg-gray-50"
+                                  data-section-status-option
+                                  data-status-value="blocked"
+                                >
+                                  Blocked
+                                </button>
+                              </div>
+                            </div>
+                            <div class="relative" data-section-ai-shell>
+                              <button
+                                type="button"
+                                class="flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 transition hover:border-gray-300 hover:bg-gray-50 hover:text-gray-900"
+                                data-section-ai-toggle
+                                aria-expanded="false"
+                                aria-label="Revise this section with AI"
+                                title="Revise this section with AI"
+                              >
+                                <iconify-icon icon="lucide:sparkles" class="text-sm"></iconify-icon>
+                              </button>
+                              <div
+                                hidden
+                                data-section-ai-menu
+                                class="absolute right-0 top-full mt-2 w-[320px] rounded-[26px] border border-gray-200 bg-white p-4 shadow-paper"
+                              >
+                                <div class="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Section AI</div>
+                                <div class="mt-3 flex flex-wrap gap-2">
+                                  <button type="button" class="workspace-badge border-gray-200 bg-white text-gray-600 transition hover:border-gray-300 hover:text-gray-900" data-section-ai-preset="Revise this section for overall quality while preserving the original intent and commitments.">
+                                    Revise
+                                  </button>
+                                  <button type="button" class="workspace-badge border-gray-200 bg-white text-gray-600 transition hover:border-gray-300 hover:text-gray-900" data-section-ai-preset="Clarify this section and make it easier to scan without changing scope or meaning.">
+                                    Clarify
+                                  </button>
+                                  <button type="button" class="workspace-badge border-gray-200 bg-white text-gray-600 transition hover:border-gray-300 hover:text-gray-900" data-section-ai-preset="Summarize this section into a shorter version while preserving the important commitments and constraints.">
+                                    Summarize
+                                  </button>
+                                  <button type="button" class="workspace-badge border-gray-200 bg-white text-gray-600 transition hover:border-gray-300 hover:text-gray-900" data-section-ai-preset="Fix grammar, spelling, punctuation, and awkward phrasing while preserving meaning.">
+                                    Grammar
+                                  </button>
+                                  <button type="button" class="workspace-badge border-gray-200 bg-white text-gray-600 transition hover:border-gray-300 hover:text-gray-900" data-section-ai-preset="Add useful detail and connective explanation without inventing any new requirements or facts.">
+                                    Add detail
+                                  </button>
                                 </div>
-                                <div class="font-medium text-gray-900">{{ concern.title }}</div>
-                                <p class="mt-1 text-xs leading-relaxed text-gray-600">{{ concern.summary|truncatechars:120 }}</p>
-                              </a>
-                            {% endfor %}
-                          </div>
-                        </aside>
+                                <textarea
+                                  rows="4"
+                                  data-section-ai-prompt
+                                  class="mt-3 block w-full resize-none rounded-2xl border border-gray-200 bg-gray-50 px-3 py-3 text-sm leading-6 text-gray-800 placeholder-gray-400 focus:border-gray-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-gray-200"
+                                  placeholder="Tell AI how to revise this section."
+                                >Revise this section for overall quality while preserving the original intent and commitments.</textarea>
+                                <div class="mt-3 flex items-center justify-between gap-3">
+                                  <p class="text-[11px] leading-relaxed text-gray-500">Runs against the current section title, status, and body.</p>
+                                  <button type="button" class="primary-button !px-3 !py-1.5 !text-xs" data-section-ai-run>
+                                    Run
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                            <div class="relative" data-section-actions-shell>
+                              <button
+                                type="button"
+                                class="flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 transition hover:border-gray-300 hover:bg-gray-50 hover:text-gray-900"
+                                data-section-actions-toggle
+                                aria-expanded="false"
+                                aria-label="Section actions"
+                                title="Section actions"
+                              >
+                                <iconify-icon icon="lucide:ellipsis" class="text-sm"></iconify-icon>
+                              </button>
+                              <div
+                                hidden
+                                data-section-actions-menu
+                                class="absolute right-0 top-full mt-2 w-72 rounded-[22px] border border-gray-200 bg-white p-2 shadow-paper"
+                              >
+                                <button
+                                  type="button"
+                                  class="flex w-full items-center justify-between whitespace-nowrap rounded-2xl px-3 py-2.5 text-left text-sm text-gray-700 transition hover:bg-gray-50 hover:text-gray-900"
+                                  data-section-structure-action
+                                  data-action-url="/api/projects/{{ project.slug }}/spec/sections/{{ section.id }}/insert-below"
+                                  data-action-method="POST"
+                                >
+                                  <span>Add section below</span>
+                                  <iconify-icon icon="lucide:plus" class="text-base text-gray-400"></iconify-icon>
+                                </button>
+                                <button
+                                  type="button"
+                                  class="flex w-full items-center justify-between whitespace-nowrap rounded-2xl px-3 py-2.5 text-left text-sm text-gray-700 transition hover:bg-gray-50 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-40"
+                                  data-section-structure-action
+                                  data-action-url="/api/projects/{{ project.slug }}/spec/sections/{{ section.id }}/move"
+                                  data-action-method="POST"
+                                  data-action-payload='{"direction":"up"}'
+                                  {% if forloop.first %}disabled{% endif %}
+                                >
+                                  <span>Move up</span>
+                                  <iconify-icon icon="lucide:arrow-up" class="text-base text-gray-400"></iconify-icon>
+                                </button>
+                                <button
+                                  type="button"
+                                  class="flex w-full items-center justify-between whitespace-nowrap rounded-2xl px-3 py-2.5 text-left text-sm text-gray-700 transition hover:bg-gray-50 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-40"
+                                  data-section-structure-action
+                                  data-action-url="/api/projects/{{ project.slug }}/spec/sections/{{ section.id }}/move"
+                                  data-action-method="POST"
+                                  data-action-payload='{"direction":"down"}'
+                                  {% if forloop.last %}disabled{% endif %}
+                                >
+                                  <span>Move down</span>
+                                  <iconify-icon icon="lucide:arrow-down" class="text-base text-gray-400"></iconify-icon>
+                                </button>
+                                <div class="my-1 h-px bg-gray-100"></div>
+                                <button
+                                  type="button"
+                                  class="flex w-full items-center justify-between whitespace-nowrap rounded-2xl px-3 py-2.5 text-left text-sm text-red-600 transition hover:bg-red-50"
+                                  data-section-structure-action
+                                  data-action-url="/api/projects/{{ project.slug }}/spec/sections/{{ section.id }}"
+                                  data-action-method="DELETE"
+                                  data-action-confirm="true"
+                                >
+                                  <span>Delete this section</span>
+                                  <iconify-icon icon="lucide:trash-2" class="text-base text-red-400"></iconify-icon>
+                                </button>
+                              </div>
+                            </div>
+                          {% endif %}
+                          {% if not request.user.is_authenticated %}
+                            <span class="workspace-badge {% if section.status == 'aligned' %}border-green-100 bg-green-50 text-green-700{% elif section.status == 'blocked' %}border-red-100 bg-red-50 text-red-700{% else %}border-amber-100 bg-amber-50 text-amber-700{% endif %}">
+                              {{ section.status }}
+                            </span>
+                          {% endif %}
+                        </div>
+
+                        <div class="lg:pr-72">
+                          {% if request.user.is_authenticated %}
+                            <form
+                              class="space-y-4"
+                              data-api-form="/api/projects/{{ project.slug }}/spec/sections/{{ section.id }}"
+                              data-api-method="PATCH"
+                              data-spec-section-form
+                            >
+                              {% csrf_token %}
+                              <input
+                                type="text"
+                                name="title"
+                                value="{{ section.title }}"
+                                class="w-full border-0 bg-transparent pr-80 font-display text-2xl font-bold tracking-tight text-gray-900 focus:outline-none focus:ring-0"
+                              >
+                              <input type="hidden" name="status" value="{{ section.status }}" data-section-status-input>
+                              <textarea
+                                name="body"
+                                rows="10"
+                                data-spec-section-input
+                                class="block min-h-[220px] w-full resize-none border-0 bg-transparent px-0 py-2 text-[15px] leading-8 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-0"
+                                placeholder="Write the current source of truth for this section."
+                              >{{ section.body }}</textarea>
+                            </form>
+                          {% else %}
+                            <div>
+                              <h2 class="pr-80 font-display text-2xl font-bold tracking-tight text-gray-900">{{ section.title }}</h2>
+                              <div class="mt-4 whitespace-pre-wrap text-[15px] leading-8 text-gray-700">{{ section.body|default:"No content yet." }}</div>
+                            </div>
+                          {% endif %}
+                        </div>
+
+                        {% if item.concerns %}
+                          <aside class="mt-6 lg:absolute lg:right-6 lg:top-24 lg:mt-0 lg:w-56">
+                            <div class="space-y-3">
+                              {% for concern in item.concerns|slice:":3" %}
+                                <a
+                                  href="{% url 'project-workspace' project.slug %}?concern={{ concern.id }}"
+                                  class="block rounded-2xl border p-3 text-sm shadow-sm {% if selected_concern and concern.id == selected_concern.id %}border-red-100 bg-red-50{% else %}border-gray-200 bg-white hover:border-gray-300{% endif %}"
+                                >
+                                  <div class="mb-1 flex items-center gap-2">
+                                    <span class="rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider {% if concern.severity == 'critical' or concern.severity == 'high' %}bg-red-100 text-red-700{% elif concern.severity == 'medium' %}bg-amber-100 text-amber-700{% else %}bg-blue-100 text-blue-700{% endif %}">
+                                      {{ concern.get_severity_display }}
+                                    </span>
+                                  </div>
+                                  <div class="font-medium text-gray-900">{{ concern.title }}</div>
+                                  <p class="mt-1 text-xs leading-relaxed text-gray-600">{{ concern.summary|truncatechars:120 }}</p>
+                                </a>
+                              {% endfor %}
+                            </div>
+                          </aside>
+                        {% endif %}
+                      </section>
+                      {% if request.user.is_authenticated %}
+                        <div class="relative z-10 flex justify-center">
+                          <button
+                            type="button"
+                            class="-mt-3 mb-0.5 inline-flex items-center gap-2 rounded-full border border-dashed border-gray-200 bg-white/95 px-3 py-1.5 text-xs font-medium text-gray-500 opacity-0 shadow-sm transition hover:border-gray-300 hover:text-gray-900 group-hover:opacity-100 group-focus-within:opacity-100"
+                            data-section-structure-action
+                            data-action-url="/api/projects/{{ project.slug }}/spec/sections/{{ section.id }}/insert-below"
+                            data-action-method="POST"
+                          >
+                            <iconify-icon icon="lucide:plus" class="text-sm"></iconify-icon>
+                            Add section below
+                          </button>
+                        </div>
                       {% endif %}
-                    </section>
+                    </div>
                   {% endwith %}
                 {% endfor %}
               </div>

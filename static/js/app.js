@@ -104,6 +104,62 @@ function documentSuggestionMenuIsOpen(shell) {
   return shell?.dataset?.dropdownOpen === "true";
 }
 
+function closeSectionStatusMenus(exceptShell = null) {
+  document.querySelectorAll("[data-section-status-shell]").forEach((shell) => {
+    if (exceptShell && shell === exceptShell) {
+      return;
+    }
+    setSectionStatusMenuState(shell, false);
+  });
+}
+
+function setSectionStatusMenuState(shell, isOpen) {
+  if (!shell) {
+    return;
+  }
+  const menu = shell.querySelector("[data-section-status-menu]");
+  const toggle = shell.querySelector("[data-section-status-toggle]");
+  if (menu) {
+    menu.hidden = !isOpen;
+  }
+  shell.dataset.sectionStatusOpen = isOpen ? "true" : "false";
+  if (toggle) {
+    toggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
+  }
+}
+
+function sectionStatusMenuIsOpen(shell) {
+  return shell?.dataset?.sectionStatusOpen === "true";
+}
+
+function closeSectionActionMenus(exceptShell = null) {
+  document.querySelectorAll("[data-section-actions-shell]").forEach((shell) => {
+    if (exceptShell && shell === exceptShell) {
+      return;
+    }
+    setSectionActionMenuState(shell, false);
+  });
+}
+
+function setSectionActionMenuState(shell, isOpen) {
+  if (!shell) {
+    return;
+  }
+  const menu = shell.querySelector("[data-section-actions-menu]");
+  const toggle = shell.querySelector("[data-section-actions-toggle]");
+  if (menu) {
+    menu.hidden = !isOpen;
+  }
+  shell.dataset.sectionActionsOpen = isOpen ? "true" : "false";
+  if (toggle) {
+    toggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
+  }
+}
+
+function sectionActionMenuIsOpen(shell) {
+  return shell?.dataset?.sectionActionsOpen === "true";
+}
+
 function closeSectionAiMenus(exceptShell = null) {
   document.querySelectorAll("[data-section-ai-shell]").forEach((shell) => {
     if (exceptShell && shell === exceptShell) {
@@ -165,36 +221,29 @@ function setAutosaveStatus(statusNode, state, label = "") {
 
   statusNode.textContent = text;
   statusNode.classList.remove(
-    "border-gray-200",
-    "bg-white/90",
+    "text-gray-400",
     "text-gray-500",
-    "border-amber-200",
-    "bg-amber-50",
-    "text-amber-700",
-    "border-blue-200",
-    "bg-blue-50",
-    "text-blue-700",
-    "border-red-200",
-    "bg-red-50",
-    "text-red-700"
+    "text-amber-600",
+    "text-blue-600",
+    "text-red-600"
   );
 
   if (state === "dirty") {
-    statusNode.classList.add("border-amber-200", "bg-amber-50", "text-amber-700");
+    statusNode.classList.add("text-amber-600");
     return;
   }
 
   if (state === "saving") {
-    statusNode.classList.add("border-blue-200", "bg-blue-50", "text-blue-700");
+    statusNode.classList.add("text-blue-600");
     return;
   }
 
   if (state === "error") {
-    statusNode.classList.add("border-red-200", "bg-red-50", "text-red-700");
+    statusNode.classList.add("text-red-600");
     return;
   }
 
-  statusNode.classList.add("border-gray-200", "bg-white/90", "text-gray-500");
+  statusNode.classList.add("text-gray-400");
 }
 
 function setDocumentEditorAutosaveStatus(form, state, label = "") {
@@ -428,6 +477,7 @@ function initializeSpecSectionAutosave() {
     if (!editorInput) {
       return;
     }
+    const watchedFields = Array.from(form.querySelectorAll("input[name], textarea[name], select[name]"));
 
     resizeDocumentEditorInput(editorInput);
 
@@ -464,17 +514,125 @@ function initializeSpecSectionAutosave() {
       }, 900);
     };
 
-    editorInput.addEventListener("input", scheduleAutosave);
-    editorInput.addEventListener("blur", () => {
-      flushSpecSectionAutosave(controller).catch((error) => {
-        console.error(error);
-      });
+    watchedFields.forEach((field) => {
+      const handler = () => {
+        if (field === editorInput) {
+          resizeDocumentEditorInput(editorInput);
+        }
+        scheduleAutosave();
+      };
+      field.addEventListener("input", handler);
+      field.addEventListener("change", handler);
+      if (field.type !== "hidden") {
+        field.addEventListener("blur", () => {
+          flushSpecSectionAutosave(controller).catch((error) => {
+            console.error(error);
+          });
+        });
+      }
     });
 
     form.addEventListener("submit", (event) => {
       event.preventDefault();
       flushSpecSectionAutosave(controller, { force: true }).catch((error) => {
         console.error(error);
+      });
+    });
+  });
+}
+
+async function flushAllPendingAutosaves() {
+  const pendingSaves = [
+    ...documentEditorAutosaveControllers.map((controller) => flushDocumentEditorAutosave(controller, { force: true })),
+    ...specSectionAutosaveControllers.map((controller) => flushSpecSectionAutosave(controller, { force: true })),
+  ];
+  await Promise.all(pendingSaves);
+}
+
+function applySectionStatusState(shell, statusValue) {
+  if (!shell) {
+    return;
+  }
+
+  const normalizedStatus = `${statusValue || "iterating"}`.trim().toLowerCase() || "iterating";
+  const toggle = shell.querySelector("[data-section-status-toggle]");
+  const label = shell.querySelector("[data-section-status-label]");
+
+  if (label) {
+    label.textContent = normalizedStatus;
+  }
+
+  if (toggle) {
+    toggle.classList.remove(
+      "border-green-100",
+      "bg-green-50",
+      "text-green-700",
+      "hover:border-green-200",
+      "hover:bg-green-100/70",
+      "border-red-100",
+      "bg-red-50",
+      "text-red-700",
+      "hover:border-red-200",
+      "hover:bg-red-100/70",
+      "border-amber-100",
+      "bg-amber-50",
+      "text-amber-700",
+      "hover:border-amber-200",
+      "hover:bg-amber-100/70"
+    );
+
+    if (normalizedStatus === "aligned") {
+      toggle.classList.add("border-green-100", "bg-green-50", "text-green-700", "hover:border-green-200", "hover:bg-green-100/70");
+    } else if (normalizedStatus === "blocked") {
+      toggle.classList.add("border-red-100", "bg-red-50", "text-red-700", "hover:border-red-200", "hover:bg-red-100/70");
+    } else {
+      toggle.classList.add("border-amber-100", "bg-amber-50", "text-amber-700", "hover:border-amber-200", "hover:bg-amber-100/70");
+    }
+  }
+}
+
+function initializeSectionStatusControls() {
+  document.querySelectorAll("[data-section-status-shell]").forEach((shell) => {
+    if (shell.dataset.sectionStatusInitialized === "true") {
+      return;
+    }
+
+    shell.dataset.sectionStatusInitialized = "true";
+    const toggle = shell.querySelector("[data-section-status-toggle]");
+    const sectionNode = shell.closest("[data-spec-section]");
+    const statusInput = sectionNode?.querySelector?.("[data-section-status-input]");
+    if (!toggle || !statusInput) {
+      return;
+    }
+
+    applySectionStatusState(shell, statusInput.value);
+    setSectionStatusMenuState(shell, false);
+
+    toggle.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const nextOpenState = !sectionStatusMenuIsOpen(shell);
+      closeSectionAiMenus();
+      closeSectionActionMenus();
+      closeSectionStatusMenus(shell);
+      setSectionStatusMenuState(shell, nextOpenState);
+    });
+
+    shell.querySelectorAll("[data-section-status-option]").forEach((option) => {
+      option.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const nextStatus = option.dataset.statusValue || "";
+        if (!nextStatus || statusInput.value === nextStatus) {
+          setSectionStatusMenuState(shell, false);
+          return;
+        }
+
+        statusInput.value = nextStatus;
+        applySectionStatusState(shell, nextStatus);
+        statusInput.dispatchEvent(new Event("input", { bubbles: true }));
+        statusInput.dispatchEvent(new Event("change", { bubbles: true }));
+        setSectionStatusMenuState(shell, false);
       });
     });
   });
@@ -519,6 +677,8 @@ function initializeSectionAiControls() {
       if (shell.dataset.sectionAiBusy === "true") {
         return;
       }
+      closeSectionStatusMenus();
+      closeSectionActionMenus();
       const nextOpenState = !sectionAiMenuIsOpen(shell);
       closeSectionAiMenus(shell);
       setSectionAiMenuState(shell, nextOpenState);
@@ -603,6 +763,32 @@ function initializeSectionAiControls() {
   });
 }
 
+function initializeSectionActionControls() {
+  document.querySelectorAll("[data-section-actions-shell]").forEach((shell) => {
+    if (shell.dataset.sectionActionsInitialized === "true") {
+      return;
+    }
+
+    shell.dataset.sectionActionsInitialized = "true";
+    const toggle = shell.querySelector("[data-section-actions-toggle]");
+    if (!toggle) {
+      return;
+    }
+
+    setSectionActionMenuState(shell, false);
+
+    toggle.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const nextOpenState = !sectionActionMenuIsOpen(shell);
+      closeSectionAiMenus();
+      closeSectionStatusMenus();
+      closeSectionActionMenus(shell);
+      setSectionActionMenuState(shell, nextOpenState);
+    });
+  });
+}
+
 function initializeDocumentCreateControls() {
   document.querySelectorAll("[data-document-create-shell]").forEach((shell) => {
     if (shell.dataset.documentControlsInitialized === "true") {
@@ -679,11 +865,19 @@ function scrollToSpecSection(workspace, sectionId, behavior = "smooth") {
   if (!container || !target) {
     return false;
   }
+  const containerRect = container.getBoundingClientRect();
+  const targetRect = target.getBoundingClientRect();
+  const targetTop = targetRect.top - containerRect.top + container.scrollTop;
   container.scrollTo({
-    top: Math.max(target.offsetTop - 96, 0),
+    top: Math.max(targetTop - 96, 0),
     behavior,
   });
   return true;
+}
+
+function hashSpecSectionId() {
+  const rawHash = `${window.location.hash || ""}`;
+  return rawHash.startsWith("#spec-section-") ? rawHash.replace("#spec-section-", "") : "";
 }
 
 function initializeSpecNavigation() {
@@ -697,8 +891,10 @@ function initializeSpecNavigation() {
 
   const updateActiveSection = () => {
     let currentId = sections[0]?.dataset.sectionId || "";
+    const containerRect = container.getBoundingClientRect();
     sections.forEach((section) => {
-      if (container.scrollTop >= section.offsetTop - 160) {
+      const sectionTop = section.getBoundingClientRect().top - containerRect.top + container.scrollTop;
+      if (container.scrollTop >= sectionTop - 160) {
         currentId = section.dataset.sectionId || currentId;
       }
     });
@@ -723,15 +919,39 @@ function initializeSpecNavigation() {
     });
   });
 
-  const initialTarget = workspace.dataset.scrollTargetSection;
+  const initialTarget = hashSpecSectionId() || workspace.dataset.scrollTargetSection;
   if (initialTarget) {
     window.setTimeout(() => {
-      scrollToSpecSection(workspace, initialTarget);
+      scrollToSpecSection(workspace, initialTarget, hashSpecSectionId() ? "auto" : "smooth");
     }, 120);
   }
 
   container.addEventListener("scroll", updateActiveSection);
   updateActiveSection();
+}
+
+function sectionActionPayload(button) {
+  const rawPayload = button?.dataset?.actionPayload || "";
+  if (!rawPayload) {
+    return {};
+  }
+  try {
+    return JSON.parse(rawPayload);
+  } catch (error) {
+    console.error("Invalid section action payload", error);
+    return {};
+  }
+}
+
+function sectionActionTitle(button) {
+  const sectionNode = button?.closest?.("[data-spec-section]");
+  const titleInput = sectionNode?.querySelector?.("input[name='title']");
+  const titleHeading = sectionNode?.querySelector?.("h2");
+  return (titleInput?.value || titleHeading?.textContent || "").trim() || "this section";
+}
+
+function sectionActionRedirectUrl(sectionId = "") {
+  return sectionId ? `${currentPath()}#spec-section-${sectionId}` : currentPath();
 }
 
 const PROJECT_CREATE_DRAFT_KEY = "specbridge:create-project-draft";
@@ -1107,6 +1327,14 @@ document.addEventListener("click", async (event) => {
     closeSectionAiMenus();
   }
 
+  if (!event.target.closest("[data-section-status-shell]")) {
+    closeSectionStatusMenus();
+  }
+
+  if (!event.target.closest("[data-section-actions-shell]")) {
+    closeSectionActionMenus();
+  }
+
   const specLink = event.target.closest("a[href^='#spec-section-']");
   if (specLink) {
     const workspace = document.querySelector("[data-spec-workspace]");
@@ -1118,6 +1346,68 @@ document.addEventListener("click", async (event) => {
       }
       return;
     }
+  }
+
+  const sectionActionButton = event.target.closest("[data-section-structure-action]");
+  if (sectionActionButton) {
+    event.preventDefault();
+    if (sectionActionButton.disabled) {
+      return;
+    }
+    if (!isAuthenticated()) {
+      openAuthModal("login");
+      return;
+    }
+
+    if (sectionActionButton.dataset.actionConfirm === "true") {
+      const sectionTitle = sectionActionTitle(sectionActionButton);
+      if (!window.confirm(`Delete "${sectionTitle}"? This cannot be undone.`)) {
+        return;
+      }
+    }
+
+    try {
+      await flushAllPendingAutosaves();
+    } catch (error) {
+      console.error(error);
+      if (error.message.startsWith("Authentication required")) {
+        return;
+      }
+      window.alert("Save failed. Resolve any pending section errors and try again.");
+      return;
+    }
+
+    const actionShell = sectionActionButton.closest("[data-section-actions-shell]");
+    const actionToggle = actionShell?.querySelector?.("[data-section-actions-toggle]");
+    const requestUrl = sectionActionButton.dataset.actionUrl || "";
+    const requestMethod = sectionActionButton.dataset.actionMethod || "POST";
+    const requestPayload = sectionActionPayload(sectionActionButton);
+
+    closeSectionAiMenus();
+    closeSectionActionMenus();
+    sectionActionButton.disabled = true;
+    if (actionToggle) {
+      actionToggle.disabled = true;
+    }
+
+    try {
+      const responsePayload = await postJson(requestUrl, requestPayload, requestMethod);
+      const focusSectionId = responsePayload?.section_id || responsePayload?.focus_section_id || "";
+      window.location.assign(sectionActionRedirectUrl(focusSectionId));
+    } catch (error) {
+      console.error(error);
+      if (error.message.startsWith("Authentication required")) {
+        return;
+      }
+      const message = error.payload?.errors?.section?.[0] || "Action failed. Check the console for details.";
+      window.alert(message);
+    } finally {
+      sectionActionButton.disabled = false;
+      if (actionToggle) {
+        actionToggle.disabled = false;
+      }
+    }
+    return;
   }
 
   const button = event.target.closest("[data-api-post]");
@@ -1198,6 +1488,8 @@ document.addEventListener("keydown", (event) => {
     return;
   }
   closeDocumentSuggestionMenus();
+  closeSectionStatusMenus();
+  closeSectionActionMenus();
   closeSectionAiMenus();
   closeAuthModal();
   closeProjectModal();
@@ -1233,6 +1525,8 @@ document.addEventListener("input", (event) => {
 initializeDocumentCreateControls();
 initializeDocumentEditorAutosave();
 initializeSpecSectionAutosave();
+initializeSectionStatusControls();
+initializeSectionActionControls();
 initializeSectionAiControls();
 initializeSpecNavigation();
 setAuthMode("login");

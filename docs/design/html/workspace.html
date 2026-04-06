@@ -43,6 +43,15 @@
       background: #D4D4D8;
     }
 
+    /* Hide scrollbar for the horizontal nav */
+    .scrollbar-hide::-webkit-scrollbar {
+      display: none;
+    }
+    .scrollbar-hide {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
     /* Subtle pulse for agent indicators */
     @keyframes pulse-soft {
       0%, 100% { opacity: 1; }
@@ -265,10 +274,20 @@
         </div>
 
         <!-- RIGHT: STRUCTURED SPEC VIEW -->
-        <section class="flex-1 bg-gray-50 overflow-y-auto relative">
+        <section id="spec-scroll-container" class="flex-1 bg-gray-50 overflow-y-auto relative scroll-smooth">
           
-          <!-- Top gradient for fade effect -->
-          <div class="sticky top-0 w-full h-8 bg-gradient-to-b from-gray-50 to-transparent z-10 pointer-events-none"></div>
+          <!-- DYNAMIC STICKY NAV WRAPPER -->
+          <div class="sticky top-0 w-full bg-white border-b border-gray-200 z-30 relative">
+            <!-- Left fade indicator -->
+            <div id="nav-fade-left" class="absolute left-0 top-0 bottom-0 w-12 bg-gradient-to-r from-white via-white/90 to-transparent pointer-events-none z-10 opacity-0 transition-opacity duration-300"></div>
+            <!-- Right fade indicator -->
+            <div id="nav-fade-right" class="absolute right-0 top-0 bottom-0 w-16 bg-gradient-to-l from-white via-white/90 to-transparent pointer-events-none z-10 transition-opacity duration-300"></div>
+            
+            <!-- Scrollable Nav Container -->
+            <nav id="dynamic-nav" class="flex items-end gap-6 px-8 pt-4 overflow-x-auto scroll-smooth whitespace-nowrap scrollbar-hide relative">
+              <!-- JS will inject links here -->
+            </nav>
+          </div>
 
           <div class="max-w-3xl mx-auto px-8 py-8 pb-32">
             
@@ -290,7 +309,7 @@
             </div>
 
             <!-- Spec Section: Problem & Goals -->
-            <div class="mb-10 group">
+            <div id="problem-goals" class="mb-10 group spec-section scroll-mt-24">
               <div class="flex items-center justify-between mb-3">
                 <h2 class="font-display font-bold text-xl text-gray-900 flex items-center gap-2">
                   1. Problem & Goals
@@ -313,7 +332,7 @@
             </div>
 
             <!-- Spec Section: Proposed Solution -->
-            <div class="mb-10 relative group">
+            <div id="proposed-solution" class="mb-10 relative group spec-section scroll-mt-24">
               <div class="flex items-center justify-between mb-3">
                 <h2 class="font-display font-bold text-xl text-gray-900 flex items-center gap-2">
                   2. Proposed Solution
@@ -341,9 +360,55 @@
                     Existing passwords will be deprecated with a 30-day grace period. Enterprise SSO remains fully supported and bypasses magic links entirely.
                   </p>
                 </div>
+              </div>
+            </div>
 
-                <h3 class="font-medium text-gray-900 mb-2 mt-6">2.3 Edge Cases & Fallbacks</h3>
-                <p class="text-gray-700 text-sm leading-relaxed relative">
+            <!-- Spec Section: Technical Implementation -->
+            <div id="technical-implementation" class="mb-10 group spec-section scroll-mt-24">
+              <div class="flex items-center justify-between mb-3">
+                <h2 class="font-display font-bold text-xl text-gray-900 flex items-center gap-2">
+                  3. Technical Implementation
+                </h2>
+                <!-- Status Badge -->
+                <div class="flex items-center gap-1.5 px-2 py-1 rounded-md bg-amber-50 border border-amber-100">
+                  <iconify-icon icon="lucide:hammer" class="text-brand-warning text-xs"></iconify-icon>
+                  <span class="text-xs font-medium text-amber-700">In Review</span>
+                </div>
+              </div>
+              <div class="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+                <p class="text-gray-700 text-sm leading-relaxed mb-4">
+                  We will utilize JSON Web Tokens (JWT) distributed via a secure, HTTP-only cookie. The magic link itself will contain a single-use, short-lived token (5 min expiration) that exchanges for the session JWT upon clicking.
+                </p>
+                <div class="p-4 bg-gray-50 rounded-lg border border-gray-100 font-mono text-xs text-gray-600 overflow-x-auto">
+                  POST /api/v1/auth/magic-link<br>
+                  Body: { "email": "user@example.com" }
+                </div>
+              </div>
+            </div>
+
+            <!-- Spec Section: UX Design -->
+            <div id="ux-design" class="mb-10 group spec-section scroll-mt-24">
+              <div class="flex items-center justify-between mb-3">
+                <h2 class="font-display font-bold text-xl text-gray-900 flex items-center gap-2">
+                  4. User Experience & Interface Design
+                </h2>
+              </div>
+              <div class="prose prose-zinc max-w-none text-gray-700">
+                <p>
+                  The login screen will be simplified to a single input field centered on the page. Upon submitting, the UI must transition to a "Check your email" state with an open-in-mail-app deep link for mobile users.
+                </p>
+              </div>
+            </div>
+
+            <!-- Spec Section: Edge Cases -->
+            <div id="edge-cases" class="mb-10 group spec-section scroll-mt-24">
+              <div class="flex items-center justify-between mb-3">
+                <h2 class="font-display font-bold text-xl text-gray-900 flex items-center gap-2">
+                  5. Edge Cases & Fallbacks
+                </h2>
+              </div>
+              <div class="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+                <p class="text-gray-700 text-sm leading-relaxed relative mb-6">
                   If an email takes longer than expected to arrive, <span class="agent-highlight font-medium">users will be prompted to wait or request a new link</span>.
                   
                   <!-- FLOATING AGENT WARNING (Margin Note Style) -->
@@ -360,14 +425,55 @@
                     </span>
                   </span>
                 </p>
+                <ul class="list-disc list-inside text-sm text-gray-700 space-y-2">
+                  <li><strong>Expired Links:</strong> If a user clicks a link older than 5 minutes, prompt them to resend immediately from the error page.</li>
+                  <li><strong>Cross-device authentication:</strong> If opened on a different device than requested, warn the user but allow login.</li>
+                </ul>
+              </div>
+            </div>
+
+            <!-- Spec Section: Risk Assessment -->
+            <div id="risk-assessment" class="mb-10 group spec-section scroll-mt-24">
+              <div class="flex items-center justify-between mb-3">
+                <h2 class="font-display font-bold text-xl text-gray-900 flex items-center gap-2">
+                  6. Risk Assessment & Mitigation
+                </h2>
+              </div>
+              <div class="prose prose-zinc max-w-none text-gray-700">
+                <p>Moving away from passwords shifts the security perimeter entirely to the user's email provider. To mitigate account takeover (ATO) risks, we will implement rate-limiting on requests and require re-authentication for destructive actions (e.g., deleting account or changing billing information).</p>
+              </div>
+            </div>
+
+            <!-- Spec Section: Success Metrics -->
+            <div id="success-metrics" class="mb-10 group spec-section scroll-mt-24">
+              <div class="flex items-center justify-between mb-3">
+                <h2 class="font-display font-bold text-xl text-gray-900 flex items-center gap-2">
+                  7. Success Metrics & Timeline
+                </h2>
+              </div>
+              <div class="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+                <ul class="list-none space-y-3">
+                  <li class="flex items-start gap-2">
+                    <iconify-icon icon="lucide:target" class="text-gray-400 mt-1"></iconify-icon>
+                    <span class="text-sm text-gray-700"><strong>Metric 1:</strong> 30% increase in Day 1 activation rate.</span>
+                  </li>
+                  <li class="flex items-start gap-2">
+                    <iconify-icon icon="lucide:target" class="text-gray-400 mt-1"></iconify-icon>
+                    <span class="text-sm text-gray-700"><strong>Metric 2:</strong> 99% of magic links delivered in under 5 seconds.</span>
+                  </li>
+                  <li class="flex items-start gap-2">
+                    <iconify-icon icon="lucide:calendar" class="text-gray-400 mt-1"></iconify-icon>
+                    <span class="text-sm text-gray-700"><strong>Timeline:</strong> Target Q3 launch (Beta by mid-August).</span>
+                  </li>
+                </ul>
               </div>
             </div>
 
             <!-- Spec Section: Open Questions (Auto-generated) -->
-            <div class="mb-10 group">
+            <div id="open-questions" class="mb-10 group spec-section scroll-mt-24">
               <div class="flex items-center justify-between mb-3">
                 <h2 class="font-display font-bold text-xl text-gray-900 flex items-center gap-2">
-                  3. Open Questions Tracker
+                  8. Open Questions Tracker
                 </h2>
                 <span class="text-xs text-gray-400">Auto-synced with stream</span>
               </div>
@@ -401,5 +507,112 @@
       </div>
     </main>
   </div>
+  
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const container = document.getElementById('spec-scroll-container');
+      const sections = Array.from(document.querySelectorAll('.spec-section'));
+      const navContainer = document.getElementById('dynamic-nav');
+      
+      // Generate Dynamic Nav Links
+      sections.forEach(section => {
+        const h2 = section.querySelector('h2');
+        if (!h2) return;
+        
+        let rawTitle = h2.textContent.trim();
+        // Strip leading numbers for cleaner nav tabs (e.g. "1. Problem & Goals" -> "Problem & Goals")
+        let title = rawTitle.replace(/^\d+\.\s*/, '');
+        
+        const a = document.createElement('a');
+        a.href = '#' + section.id;
+        // Base classes
+        a.className = 'spec-nav-link pb-3 text-sm font-medium transition-all border-b-2 border-transparent text-gray-500 hover:text-gray-900 cursor-pointer';
+        a.textContent = title;
+        
+        // Custom scroll handler to account for sticky offset within the container
+        a.addEventListener('click', (e) => {
+          e.preventDefault();
+          const target = document.getElementById(section.id);
+          if (target) {
+            container.scrollTo({
+              top: target.offsetTop - 100, // Offset so the title doesn't hide behind the sticky nav
+              behavior: 'smooth'
+            });
+            // Optional: update URL silently
+            history.replaceState(null, null, '#' + section.id);
+          }
+        });
+        
+        navContainer.appendChild(a);
+      });
+
+      const navLinks = document.querySelectorAll('.spec-nav-link');
+
+      // Scroll Spy Logic to update active state
+      function updateActiveSection() {
+        let currentId = sections[0] ? sections[0].id : null;
+        
+        sections.forEach(section => {
+          // Check if section top has passed the sticky threshold
+          if (container.scrollTop >= (section.offsetTop - 140)) {
+            currentId = section.id;
+          }
+        });
+
+        navLinks.forEach(link => {
+          link.classList.remove('text-brand-decision', 'border-brand-decision');
+          link.classList.add('text-gray-500', 'border-transparent');
+          
+          if (link.getAttribute('href') === '#' + currentId) {
+            link.classList.remove('text-gray-500', 'border-transparent');
+            link.classList.add('text-brand-decision', 'border-brand-decision');
+            
+            // Keep the active link visible in the horizontal scrolling nav
+            link.scrollIntoView({
+              behavior: 'smooth',
+              block: 'nearest',
+              inline: 'center'
+            });
+          }
+        });
+      }
+
+      // Fading edges logic for the horizontal nav container
+      const fadeLeft = document.getElementById('nav-fade-left');
+      const fadeRight = document.getElementById('nav-fade-right');
+      
+      function updateFades() {
+        // Left fade
+        if (navContainer.scrollLeft > 0) {
+          fadeLeft.classList.remove('opacity-0');
+          fadeLeft.classList.add('opacity-100');
+        } else {
+          fadeLeft.classList.add('opacity-0');
+          fadeLeft.classList.remove('opacity-100');
+        }
+        
+        // Right fade
+        // Add 2px tolerance for fractional scroll widths on some displays
+        if (Math.ceil(navContainer.scrollLeft + navContainer.clientWidth) < navContainer.scrollWidth - 2) {
+          fadeRight.classList.remove('opacity-0');
+          fadeRight.classList.add('opacity-100');
+        } else {
+          fadeRight.classList.add('opacity-0');
+          fadeRight.classList.remove('opacity-100');
+        }
+      }
+
+      // Attach Events
+      if (container && sections.length > 0) {
+        container.addEventListener('scroll', updateActiveSection);
+        updateActiveSection(); // Run once initially
+      }
+
+      navContainer.addEventListener('scroll', updateFades);
+      window.addEventListener('resize', updateFades);
+      // Timeout ensures layout has rendered so widths are correct
+      setTimeout(updateFades, 100);
+    });
+  </script>
 </body>
 </html>

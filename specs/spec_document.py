@@ -249,6 +249,28 @@ def find_section_by_identifier(content_json: dict[str, Any] | None, identifier: 
     return None
 
 
+def section_index(content_json: dict[str, Any] | None, section_id: str) -> int:
+    for index, section in enumerate(section_nodes(content_json)):
+        if section_attrs(section).get("id") == section_id:
+            return index
+    return -1
+
+
+def unique_section_key(content_json: dict[str, Any] | None, desired_key: str) -> str:
+    base_key = slugify(desired_key) or "section"
+    existing_keys = {
+        str(section_attrs(section).get("key", "")).strip()
+        for section in section_nodes(content_json)
+    }
+    if base_key not in existing_keys:
+        return base_key
+
+    suffix = 2
+    while f"{base_key}-{suffix}" in existing_keys:
+        suffix += 1
+    return f"{base_key}-{suffix}"
+
+
 def update_section_content(
     content_json: dict[str, Any] | None,
     section_id: str,
@@ -276,6 +298,79 @@ def update_section_content(
             changed = True
         break
     return next_content, updated_section, changed
+
+
+def insert_section_after(
+    content_json: dict[str, Any] | None,
+    *,
+    project,
+    after_section_id: str,
+    title: str = "New Section",
+    kind: str = DocumentType.CUSTOM,
+    status: str = DocumentStatus.ITERATING,
+    required: bool = False,
+    body: str = "",
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    next_content = normalized_spec_content(copy.deepcopy(content_json))
+    insert_after_index = section_index(next_content, after_section_id)
+    if insert_after_index < 0:
+        return next_content, None
+
+    normalized_title = (title or "").strip() or "New Section"
+    unique_key = unique_section_key(next_content, normalized_title)
+    inserted_section = build_section_node(
+        project,
+        key=unique_key,
+        title=normalized_title,
+        kind=kind,
+        status=status,
+        required=required,
+        legacy_slug=unique_key,
+        body=body,
+    )
+    next_content.setdefault("content", []).insert(insert_after_index + 1, inserted_section)
+    return next_content, inserted_section
+
+
+def move_section(
+    content_json: dict[str, Any] | None,
+    section_id: str,
+    *,
+    direction: str,
+) -> tuple[dict[str, Any], dict[str, Any] | None, bool]:
+    next_content = normalized_spec_content(copy.deepcopy(content_json))
+    sections = next_content.setdefault("content", [])
+    current_index = section_index(next_content, section_id)
+    if current_index < 0:
+        return next_content, None, False
+
+    moved_section = sections[current_index]
+    offset = -1 if direction == "up" else 1 if direction == "down" else 0
+    target_index = current_index + offset
+    if offset == 0 or target_index < 0 or target_index >= len(sections):
+        return next_content, moved_section, False
+
+    sections[current_index], sections[target_index] = sections[target_index], sections[current_index]
+    return next_content, sections[target_index], True
+
+
+def delete_section(
+    content_json: dict[str, Any] | None,
+    section_id: str,
+) -> tuple[dict[str, Any], dict[str, Any] | None, bool, str]:
+    next_content = normalized_spec_content(copy.deepcopy(content_json))
+    sections = next_content.setdefault("content", [])
+    current_index = section_index(next_content, section_id)
+    if current_index < 0:
+        return next_content, None, False, ""
+
+    removed_section = sections.pop(current_index)
+    if not sections:
+        return next_content, removed_section, True, ""
+
+    focus_index = min(current_index, len(sections) - 1)
+    focus_section_id = str(section_attrs(sections[focus_index]).get("id", ""))
+    return next_content, removed_section, True, focus_section_id
 
 
 def build_primary_ref(section: dict[str, Any], *, excerpt: str = "", node_id: str = "") -> dict[str, Any]:

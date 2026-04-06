@@ -7,7 +7,14 @@ from projects.demo import ensure_demo_workspace
 from specs.concerns import ConcernAnalysisResult, ConcernProposalResult, ConcernReevaluationResult
 from specs.models import Assumption, ConcernProposalChange, ConcernRun, ProjectConcern
 from specs.section_ai import _section_revision_prompt
-from specs.services import section_markdown_for_ref, section_summaries, update_spec_section
+from specs.services import (
+    add_spec_section_after,
+    delete_spec_section,
+    reorder_spec_section,
+    section_markdown_for_ref,
+    section_summaries,
+    update_spec_section,
+)
 from specs.spec_document import markdown_to_blocks
 
 
@@ -18,7 +25,12 @@ class SpecsServiceTests(TestCase):
         self.client.force_login(self.project.created_by)
 
     def _section(self, key):
+        self.project.refresh_from_db()
         return next(section for section in section_summaries(self.project) if section["key"] == key)
+
+    def _section_keys(self):
+        self.project.refresh_from_db()
+        return [section["key"] for section in section_summaries(self.project)]
 
     def test_section_update_creates_new_revisions(self):
         section = self._section("requirements")
@@ -49,6 +61,72 @@ class SpecsServiceTests(TestCase):
         self.assertEqual(self.project.revisions.count(), project_revision_count)
         self.project.spec_document.refresh_from_db()
         self.assertEqual(self.project.spec_document.revisions.count(), spec_revision_count)
+
+    def test_add_spec_section_after_inserts_custom_section_and_creates_revisions(self):
+        section = self._section("overview")
+        project_revision_count = self.project.revisions.count()
+        spec_revision_count = self.project.spec_document.revisions.count()
+
+        inserted_section = add_spec_section_after(
+            project=self.project,
+            after_section_id=section["id"],
+            title="Edge Cases",
+        )
+
+        self.assertEqual(inserted_section["title"], "Edge Cases")
+        self.assertEqual(inserted_section["kind"], "custom")
+        self.assertEqual(
+            self._section_keys()[:3],
+            ["overview", "edge-cases", "goals"],
+        )
+        self.assertEqual(self.project.revisions.count(), project_revision_count + 1)
+        self.project.spec_document.refresh_from_db()
+        self.assertEqual(self.project.spec_document.revisions.count(), spec_revision_count + 1)
+
+    def test_reorder_spec_section_moves_section_and_creates_revisions(self):
+        section = self._section("requirements")
+        project_revision_count = self.project.revisions.count()
+        spec_revision_count = self.project.spec_document.revisions.count()
+
+        moved_section = reorder_spec_section(
+            project=self.project,
+            section_id=section["id"],
+            direction="up",
+        )
+
+        self.assertEqual(moved_section["id"], section["id"])
+        self.assertEqual(
+            self._section_keys()[:3],
+            ["overview", "requirements", "goals"],
+        )
+        self.assertEqual(self.project.revisions.count(), project_revision_count + 1)
+        self.project.spec_document.refresh_from_db()
+        self.assertEqual(self.project.spec_document.revisions.count(), spec_revision_count + 1)
+
+    def test_delete_spec_section_removes_section_and_marks_linked_concern_stale(self):
+        concern = ProjectConcern.objects.get(project=self.project, fingerprint="fallback-mismatch")
+        section = self._section("requirements")
+        project_revision_count = self.project.revisions.count()
+        spec_revision_count = self.project.spec_document.revisions.count()
+
+        result = delete_spec_section(project=self.project, section_id=section["id"])
+
+        self.assertEqual(result["deleted_section"]["id"], section["id"])
+        self.assertNotIn("requirements", self._section_keys())
+        self.assertEqual(self.project.revisions.count(), project_revision_count + 1)
+        self.project.spec_document.refresh_from_db()
+        self.assertEqual(self.project.spec_document.revisions.count(), spec_revision_count + 1)
+
+        concern.refresh_from_db()
+        self.assertEqual(concern.status, "stale")
+        self.assertIsNotNone(concern.reevaluation_requested_at)
+        self.assertTrue(
+            ConcernRun.objects.filter(
+                project=self.project,
+                status="pending",
+                target_concern_fingerprint=concern.fingerprint,
+            ).exists()
+        )
 
     def test_section_update_marks_linked_concern_stale_and_queues_recheck(self):
         concern = ProjectConcern.objects.get(project=self.project, fingerprint="fallback-mismatch")
@@ -126,6 +204,52 @@ class SpecsServiceTests(TestCase):
             response.json()["errors"]["section"][0],
             "Enter a revision prompt before running AI.",
         )
+
+    def test_insert_section_endpoint_creates_new_section(self):
+        section = self._section("overview")
+
+        response = self.client.post(
+            f"/api/projects/{self.project.slug}/spec/sections/{section['id']}/insert-below",
+            data=json.dumps({"title": "Release Plan"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["title"], "Release Plan")
+        self.assertEqual(
+            self._section_keys()[:3],
+            ["overview", "release-plan", "goals"],
+        )
+
+    def test_move_section_endpoint_rejects_invalid_boundary_move(self):
+        section = self._section("overview")
+
+        response = self.client.post(
+            f"/api/projects/{self.project.slug}/spec/sections/{section['id']}/move",
+            data=json.dumps({"direction": "up"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(
+            response.json()["errors"]["section"][0],
+            "Section cannot be moved further.",
+        )
+
+    def test_delete_section_endpoint_returns_next_focus_section(self):
+        section = self._section("requirements")
+        next_section = self._section("ui-ux")
+
+        response = self.client.delete(
+            f"/api/projects/{self.project.slug}/spec/sections/{section['id']}",
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["deleted_section_id"], section["id"])
+        self.assertEqual(payload["focus_section_id"], next_section["id"])
 
     def test_section_ai_prompt_requires_english_output(self):
         prompt = _section_revision_prompt(

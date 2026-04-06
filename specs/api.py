@@ -18,12 +18,15 @@ from specs.consistency import dismiss_consistency_issue, resolve_consistency_iss
 from specs.models import Assumption, AssumptionStatus, AuditEventType
 from specs.section_ai import SectionRevisionError, revise_section_with_ai
 from specs.services import (
+    add_spec_section_after,
     build_primary_ref_for_section,
     build_project_snapshot,
     build_spec_snapshot,
     capture_project_revision,
+    delete_spec_section,
     ensure_spec_document,
     log_audit_event,
+    reorder_spec_section,
     update_spec_section,
 )
 from specs.spec_document import markdown_to_blocks
@@ -43,6 +46,14 @@ class SpecSectionAiRevisionPayload(Schema):
     action: str | None = None
     title: str | None = None
     body: str | None = None
+
+
+class SpecSectionCreatePayload(Schema):
+    title: str | None = None
+
+
+class SpecSectionMovePayload(Schema):
+    direction: str
 
 
 class AssumptionPayload(Schema):
@@ -140,6 +151,55 @@ def patch_spec_section(request, slug: str, section_id: str, payload: SpecSection
     except ValueError as exc:
         return 404, {"ok": False, "errors": {"section": [str(exc)]}}
     return {"ok": True, "section_id": section_id}
+
+
+@router.post("/{slug}/spec/sections/{section_id}/insert-below", auth=django_auth)
+def create_spec_section_below(request, slug: str, section_id: str, payload: SpecSectionCreatePayload):
+    project = get_project_or_404(slug, request.user)
+    actor = resolve_actor(request, project)
+    try:
+        section = add_spec_section_after(
+            project=project,
+            after_section_id=section_id,
+            actor=actor,
+            title=payload.title or "New Section",
+        )
+    except ValueError as exc:
+        return JsonResponse({"ok": False, "errors": {"section": [str(exc)]}}, status=404)
+    return {"ok": True, "section_id": section["id"], "title": section["title"]}
+
+
+@router.post("/{slug}/spec/sections/{section_id}/move", auth=django_auth)
+def move_spec_section(request, slug: str, section_id: str, payload: SpecSectionMovePayload):
+    project = get_project_or_404(slug, request.user)
+    actor = resolve_actor(request, project)
+    try:
+        section = reorder_spec_section(
+            project=project,
+            section_id=section_id,
+            direction=payload.direction,
+            actor=actor,
+        )
+    except ValueError as exc:
+        status_code = 404 if str(exc) == "Section not found." else 422
+        return JsonResponse({"ok": False, "errors": {"section": [str(exc)]}}, status=status_code)
+    return {"ok": True, "section_id": section["id"], "direction": payload.direction}
+
+
+@router.delete("/{slug}/spec/sections/{section_id}", auth=django_auth)
+def destroy_spec_section(request, slug: str, section_id: str):
+    project = get_project_or_404(slug, request.user)
+    actor = resolve_actor(request, project)
+    try:
+        result = delete_spec_section(project=project, section_id=section_id, actor=actor)
+    except ValueError as exc:
+        status_code = 404 if str(exc) == "Section not found." else 422
+        return JsonResponse({"ok": False, "errors": {"section": [str(exc)]}}, status=status_code)
+    return {
+        "ok": True,
+        "deleted_section_id": result["deleted_section"]["id"],
+        "focus_section_id": result["focus_section_id"],
+    }
 
 
 @router.post("/{slug}/spec/sections/{section_id}/revise-with-ai", auth=django_auth)
