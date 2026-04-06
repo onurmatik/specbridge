@@ -6,6 +6,7 @@ from django.test import Client, TestCase
 from projects.demo import ensure_demo_workspace
 from specs.concerns import ConcernAnalysisResult, ConcernProposalResult, ConcernReevaluationResult
 from specs.models import Assumption, ConcernProposalChange, ConcernRun, ProjectConcern
+from specs.section_ai import _section_revision_prompt
 from specs.services import section_markdown_for_ref, section_summaries, update_spec_section
 from specs.spec_document import markdown_to_blocks
 
@@ -125,6 +126,17 @@ class SpecsServiceTests(TestCase):
             response.json()["errors"]["section"][0],
             "Enter a revision prompt before running AI.",
         )
+
+    def test_section_ai_prompt_requires_english_output(self):
+        prompt = _section_revision_prompt(
+            prompt="Bunu daha net yaz.",
+            title="Requirements",
+            kind="requirements",
+            status="iterating",
+            body="Gecikmeli e-posta teslimatı durumunda kullanıcıya açık bir yönlendirme göster.",
+        )
+
+        self.assertIn("Always return the revised section and summary in English", prompt)
 
     def test_create_and_validate_assumption_endpoints(self):
         section = self._section("requirements")

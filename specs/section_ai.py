@@ -151,6 +151,8 @@ def _section_revision_prompt(*, prompt: str, title: str, kind: str, status: str,
         "You are revising a single section from a collaborative product specification.\n"
         "Operate only on the supplied section body.\n"
         "Do not change the section title, section status, or document type.\n"
+        "Always return the revised section and summary in English, even if the user's request or the current "
+        "section body is written in another language.\n"
         "Do not add new requirements, owners, metrics, integrations, dates, APIs, decisions, or implementation "
         "details that are not already supported by the current text.\n"
         "Do not reference other sections unless the current body already does.\n"
