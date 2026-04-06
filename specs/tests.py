@@ -23,6 +23,7 @@ from specs.services import (
     update_spec_section,
 )
 from specs.spec_document import markdown_to_blocks
+from specs.templatetags.specs_formatting import render_unified_diff
 
 
 class _FakeHTTPResponse:
@@ -37,6 +38,18 @@ class _FakeHTTPResponse:
 
     def read(self):
         return json.dumps(self.payload).encode("utf-8")
+
+
+class DiffFormattingTests(TestCase):
+    def test_render_unified_diff_applies_expected_line_classes(self):
+        html = render_unified_diff("--- old\n+++ new\n@@ -1 +1 @@\n-removed\n+added\n unchanged")
+
+        self.assertIn('class="diff-line diff-line-meta-old"', html)
+        self.assertIn('class="diff-line diff-line-meta-new"', html)
+        self.assertIn('class="diff-line diff-line-hunk"', html)
+        self.assertIn('class="diff-line diff-line-remove"', html)
+        self.assertIn('class="diff-line diff-line-add"', html)
+        self.assertIn('class="diff-line diff-line-context"', html)
 
 
 class SpecsServiceTests(TestCase):

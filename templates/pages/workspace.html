@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load specs_formatting %}
 
 {% block title %}SpecBridge · Workspace{% endblock %}
 {% block html_class %}h-full{% endblock %}
@@ -223,7 +224,7 @@
                         {% if proposal_item.change.summary %}
                           <p class="mb-3 text-sm leading-relaxed text-gray-600">{{ proposal_item.change.summary }}</p>
                         {% endif %}
-                        <pre class="max-h-56 overflow-auto rounded-xl bg-gray-950 px-4 py-3 text-[11px] leading-6 text-gray-100">{{ proposal_item.diff }}</pre>
+                        <pre class="diff-view">{{ proposal_item.diff|render_unified_diff }}</pre>
                       </div>
                     {% endfor %}
                   </div>

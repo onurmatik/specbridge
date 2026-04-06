@@ -130,6 +130,19 @@ class ProjectPageTests(TestCase):
         self.assertContains(response, "Concern thread")
         self.assertContains(response, "Address in Chat")
 
+    def test_workspace_concern_query_renders_color_coded_diff_markup(self):
+        self.client.force_login(self.project.created_by)
+        concern = self.project.concerns.get(title="Fallback mismatch across requirements, UI/UX, and infra")
+
+        response = self.client.get(f"{reverse('project-workspace', args=[self.project.slug])}?concern={concern.id}")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "AI Patch Review")
+        self.assertContains(response, 'class="diff-view"', html=False)
+        self.assertContains(response, 'class="diff-line diff-line-meta-old"', html=False)
+        self.assertContains(response, 'class="diff-line diff-line-meta-new"', html=False)
+        self.assertContains(response, 'class="diff-line diff-line-add"', html=False)
+
     def test_workspace_keeps_project_summary_out_of_document_canvas(self):
         actor = User.objects.create_user(
             username="workspace-owner",

@@ -11,3 +11,5 @@ staticfiles/*
 !staticfiles/.gitkeep
 node_modules/
 .venv/
+.env
+.env-prod

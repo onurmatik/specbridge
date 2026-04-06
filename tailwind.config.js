@@ -7,7 +7,17 @@ module.exports = {
     "./exports/templates/**/*.html",
     "./projects/templates/**/*.html",
     "./specs/templates/**/*.html",
+    "./specs/templatetags/**/*.py",
     "./static/js/**/*.js"
+  ],
+  safelist: [
+    "diff-line",
+    "diff-line-context",
+    "diff-line-meta-old",
+    "diff-line-meta-new",
+    "diff-line-hunk",
+    "diff-line-remove",
+    "diff-line-add"
   ],
   theme: {
     extend: {
@@ -44,4 +54,3 @@ module.exports = {
   },
   plugins: [require("@tailwindcss/typography")]
 };
-
