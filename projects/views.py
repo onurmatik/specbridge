@@ -41,6 +41,7 @@ def _project_create_context(request, *, values=None, errors=None):
         "page_title": "Create Project",
         "page_breadcrumb_label": "Create Project",
         "page_badge_label": "New workspace" if has_projects else "First workspace",
+        "header_variant": "default",
         "header_hide_create_action": True,
         "project_create_values": values or {},
         "project_create_errors": resolved_errors,
@@ -95,9 +96,12 @@ def project_directory(request):
         {
             "projects": projects,
             "current_project": current_project,
-            "project": current_project,
+            "project": None,
             "active_item": "projects",
             "navigation_items": navigation_items,
+            "header_variant": "default",
+            "page_title": "Projects",
+            "header_hide_project_identity": True,
             "unresolved_count": (
                 current_project.concerns.exclude(status__in=["resolved", "dismissed"]).count()
             )

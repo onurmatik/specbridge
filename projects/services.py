@@ -207,12 +207,14 @@ def navigation_for_project(project):
 
 def page_context(project, active_item):
     metrics = compute_dashboard_metrics(project)
-    memberships = list(project.memberships.select_related("user"))
+    memberships = list(project.memberships.select_related("user").order_by("-is_active", "created_at"))
     return {
         "project": project,
         "active_item": active_item,
         "navigation_items": navigation_for_project(project),
         "memberships": memberships,
+        "header_variant": "project-toolbar",
+        "header_memberships": [membership for membership in memberships if membership.is_active][:2],
         "active_members_count": sum(1 for membership in memberships if membership.is_active),
         "unresolved_count": metrics["unresolved_total"],
         "status_label": project.status_label,
