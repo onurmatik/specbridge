@@ -39,7 +39,7 @@
           </div>
           <div class="metric-card">
             <div class="mb-4 flex items-center justify-between">
-              <div class="text-sm font-medium text-gray-500">Document Maturity Score</div>
+              <div class="text-sm font-medium text-gray-500">Section Maturity Score</div>
               <div class="flex h-8 w-8 items-center justify-center rounded-full bg-purple-50 text-brand-agent">
                 <iconify-icon icon="lucide:file-check-2"></iconify-icon>
               </div>
@@ -78,28 +78,28 @@
               <div class="mb-8 flex items-center justify-between">
                 <h2 class="flex items-center gap-2 font-display text-xl font-bold text-gray-900">
                   <iconify-icon icon="lucide:bar-chart-3" class="text-gray-400"></iconify-icon>
-                  Alignment by Document
+                  Alignment by Section
                 </h2>
                 <a href="{% url 'project-workspace' project.slug %}" class="text-sm font-medium text-brand-agent hover:underline">View Workspace →</a>
               </div>
               <div class="space-y-6">
-                {% for document in documents %}
+                {% for section in sections %}
                   <div>
                     <div class="mb-2 flex items-end justify-between">
                       <div class="flex items-center gap-2">
-                        <span class="text-sm font-medium text-gray-900">{{ document.order }}. {{ document.title }}</span>
-                        {% if document.status == "blocked" %}
+                        <span class="text-sm font-medium text-gray-900">{{ forloop.counter }}. {{ section.title }}</span>
+                        {% if section.status == "blocked" %}
                           <span class="rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-brand-danger">Blocked</span>
-                        {% elif document.status == "iterating" %}
+                        {% elif section.status == "iterating" %}
                           <span class="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-brand-warning">Active Debate</span>
                         {% endif %}
                       </div>
-                      <span class="text-sm font-bold {% if document.status == 'aligned' %}text-brand-decision{% elif document.status == 'blocked' %}text-brand-danger{% else %}text-brand-warning{% endif %}">
-                        {% if document.status == 'aligned' %}100{% elif document.status == 'blocked' %}15{% else %}60{% endif %}%
+                      <span class="text-sm font-bold {% if section.status == 'aligned' %}text-brand-decision{% elif section.status == 'blocked' %}text-brand-danger{% else %}text-brand-warning{% endif %}">
+                        {% if section.status == 'aligned' %}100{% elif section.status == 'blocked' %}15{% else %}60{% endif %}%
                       </span>
                     </div>
                     <div class="h-2.5 w-full overflow-hidden rounded-full bg-gray-100">
-                      <div class="h-full {% if document.status == 'aligned' %}bg-brand-decision{% elif document.status == 'blocked' %}bg-brand-danger{% else %}bg-brand-warning{% endif %}" style="width:{% if document.status == 'aligned' %}100{% elif document.status == 'blocked' %}15{% else %}60{% endif %}%"></div>
+                      <div class="h-full {% if section.status == 'aligned' %}bg-brand-decision{% elif section.status == 'blocked' %}bg-brand-danger{% else %}bg-brand-warning{% endif %}" style="width:{% if section.status == 'aligned' %}100{% elif section.status == 'blocked' %}15{% else %}60{% endif %}%"></div>
                     </div>
                   </div>
                 {% endfor %}
@@ -185,7 +185,7 @@
                         {% elif membership.role == 'ceo' %}
                           Fully aligned. No pending actions.
                         {% else %}
-                          Keeping the structured documents and decision log in sync.
+                          Keeping the structured spec sections and decision log in sync.
                         {% endif %}
                       </p>
                     </div>
@@ -217,7 +217,7 @@
 
             <section class="workspace-panel p-6">
               <div class="mb-6 flex items-center justify-between">
-                <h2 class="font-display text-lg font-bold text-gray-900">Issues &amp; Concerns</h2>
+                <h2 class="font-display text-lg font-bold text-gray-900">Issues &amp; Alignment</h2>
                 <span class="rounded-md bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600">{{ concerns|length }} visible</span>
               </div>
               <div class="space-y-3">

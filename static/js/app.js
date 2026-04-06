@@ -105,6 +105,7 @@ function documentSuggestionMenuIsOpen(shell) {
 }
 
 const documentEditorAutosaveControllers = [];
+const specSectionAutosaveControllers = [];
 
 function documentEditorFormNodes() {
   return Array.from(document.querySelectorAll("[data-document-editor-form]"));
@@ -122,8 +123,7 @@ function resizeDocumentEditorInput(input) {
   input.style.height = `${Math.max(input.scrollHeight, 320)}px`;
 }
 
-function setDocumentEditorAutosaveStatus(form, state, label = "") {
-  const statusNode = form?.querySelector?.("[data-document-autosave-status]");
+function setAutosaveStatus(statusNode, state, label = "") {
   if (!statusNode) {
     return;
   }
@@ -167,6 +167,11 @@ function setDocumentEditorAutosaveStatus(form, state, label = "") {
   }
 
   statusNode.classList.add("border-gray-200", "bg-white/90", "text-gray-500");
+}
+
+function setDocumentEditorAutosaveStatus(form, state, label = "") {
+  const statusNode = form?.querySelector?.("[data-document-autosave-status]");
+  setAutosaveStatus(statusNode, state, label);
 }
 
 async function flushDocumentEditorAutosave(controller, { force = false } = {}) {
@@ -219,6 +224,77 @@ async function flushDocumentEditorAutosave(controller, { force = false } = {}) {
         controller.pendingAfterSave = false;
         try {
           await flushDocumentEditorAutosave(controller, { force: true });
+        } catch (error) {
+          console.error(error);
+        }
+      }
+    });
+
+  return controller.inFlight;
+}
+
+function specSectionFormNodes() {
+  return Array.from(document.querySelectorAll("[data-spec-section-form]"));
+}
+
+function specSectionSnapshot(form) {
+  return JSON.stringify(serializeForm(form));
+}
+
+function setSpecSectionAutosaveStatus(form, state, label = "") {
+  const statusNode = form?.closest?.("[data-spec-section]")?.querySelector?.("[data-spec-section-autosave-status]");
+  setAutosaveStatus(statusNode, state, label);
+}
+
+async function flushSpecSectionAutosave(controller, { force = false } = {}) {
+  if (!controller?.form) {
+    return;
+  }
+
+  window.clearTimeout(controller.timer);
+  controller.timer = null;
+
+  const currentSnapshot = specSectionSnapshot(controller.form);
+  const needsSave = force || controller.lastSavedSnapshot !== currentSnapshot;
+
+  if (!needsSave) {
+    controller.dirty = false;
+    setSpecSectionAutosaveStatus(controller.form, "saved");
+    return;
+  }
+
+  if (controller.inFlight) {
+    controller.pendingAfterSave = true;
+    return controller.inFlight;
+  }
+
+  controller.dirty = false;
+  setSpecSectionAutosaveStatus(controller.form, "saving");
+
+  controller.inFlight = postJson(
+    controller.form.dataset.apiForm,
+    { ...serializeForm(controller.form), __form: controller.form },
+    controller.form.dataset.apiMethod || "POST"
+  )
+    .then(() => {
+      controller.lastSavedSnapshot = specSectionSnapshot(controller.form);
+      const stamp = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      setSpecSectionAutosaveStatus(controller.form, "saved", `Saved ${stamp}`);
+    })
+    .catch((error) => {
+      console.error(error);
+      controller.dirty = true;
+      if (!error.message.startsWith("Authentication required")) {
+        setSpecSectionAutosaveStatus(controller.form, "error");
+      }
+      throw error;
+    })
+    .finally(async () => {
+      controller.inFlight = null;
+      if (controller.pendingAfterSave) {
+        controller.pendingAfterSave = false;
+        try {
+          await flushSpecSectionAutosave(controller, { force: true });
         } catch (error) {
           console.error(error);
         }
@@ -304,7 +380,75 @@ function initializeDocumentEditorAutosave() {
           console.error(error);
         });
       });
+      specSectionAutosaveControllers.forEach((controller) => {
+        flushSpecSectionAutosave(controller, { force: true }).catch((error) => {
+          console.error(error);
+        });
+      });
     }
+  });
+}
+
+function initializeSpecSectionAutosave() {
+  specSectionFormNodes().forEach((form) => {
+    if (form.dataset.autosaveInitialized === "true") {
+      return;
+    }
+
+    form.dataset.autosaveInitialized = "true";
+    const editorInput = form.querySelector("[data-spec-section-input]");
+    if (!editorInput) {
+      return;
+    }
+
+    resizeDocumentEditorInput(editorInput);
+
+    const controller = {
+      form,
+      timer: null,
+      inFlight: null,
+      pendingAfterSave: false,
+      dirty: false,
+      lastSavedSnapshot: specSectionSnapshot(form),
+    };
+
+    specSectionAutosaveControllers.push(controller);
+    setSpecSectionAutosaveStatus(form, "saved");
+
+    const scheduleAutosave = () => {
+      resizeDocumentEditorInput(editorInput);
+      const nextSnapshot = specSectionSnapshot(form);
+      if (nextSnapshot === controller.lastSavedSnapshot) {
+        controller.dirty = false;
+        setSpecSectionAutosaveStatus(form, "saved");
+        window.clearTimeout(controller.timer);
+        controller.timer = null;
+        return;
+      }
+
+      controller.dirty = true;
+      setSpecSectionAutosaveStatus(form, "dirty");
+      window.clearTimeout(controller.timer);
+      controller.timer = window.setTimeout(() => {
+        flushSpecSectionAutosave(controller).catch((error) => {
+          console.error(error);
+        });
+      }, 900);
+    };
+
+    editorInput.addEventListener("input", scheduleAutosave);
+    editorInput.addEventListener("blur", () => {
+      flushSpecSectionAutosave(controller).catch((error) => {
+        console.error(error);
+      });
+    });
+
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      flushSpecSectionAutosave(controller, { force: true }).catch((error) => {
+        console.error(error);
+      });
+    });
   });
 }
 
@@ -365,15 +509,76 @@ function initializeDocumentCreateControls() {
   });
 }
 
-function syncExportDocumentSelection(form) {
-  const hiddenInput = form?.querySelector?.("[data-document-slugs-input]");
+function syncExportSelection(form) {
+  const hiddenInput = form?.querySelector?.("[data-section-ids-input]");
   if (!hiddenInput) {
     return;
   }
   const selected = Array.from(
-    form.querySelectorAll("[data-export-document-checkbox]:checked")
+    form.querySelectorAll("[data-export-section-checkbox]:checked")
   ).map((checkbox) => checkbox.value);
   hiddenInput.value = selected.join(",");
+}
+
+function scrollToSpecSection(workspace, sectionId, behavior = "smooth") {
+  const container = workspace?.querySelector?.("[data-spec-scroll-container]");
+  const target = workspace?.querySelector?.(`[data-section-id='${sectionId}']`);
+  if (!container || !target) {
+    return false;
+  }
+  container.scrollTo({
+    top: Math.max(target.offsetTop - 96, 0),
+    behavior,
+  });
+  return true;
+}
+
+function initializeSpecNavigation() {
+  const workspace = document.querySelector("[data-spec-workspace]");
+  const container = workspace?.querySelector?.("[data-spec-scroll-container]");
+  const sections = Array.from(workspace?.querySelectorAll?.("[data-spec-section]") || []);
+  const navLinks = Array.from(workspace?.querySelectorAll?.("[data-spec-nav-link]") || []);
+  if (!workspace || !container || !sections.length || !navLinks.length) {
+    return;
+  }
+
+  const updateActiveSection = () => {
+    let currentId = sections[0]?.dataset.sectionId || "";
+    sections.forEach((section) => {
+      if (container.scrollTop >= section.offsetTop - 160) {
+        currentId = section.dataset.sectionId || currentId;
+      }
+    });
+
+    navLinks.forEach((link) => {
+      const isActive = link.dataset.sectionId === currentId;
+      link.classList.toggle("border-brand-decision", isActive);
+      link.classList.toggle("text-brand-decision", isActive);
+      link.classList.toggle("border-transparent", !isActive);
+      link.classList.toggle("text-gray-500", !isActive);
+    });
+  };
+
+  navLinks.forEach((link) => {
+    link.addEventListener("click", (event) => {
+      event.preventDefault();
+      const sectionId = link.dataset.sectionId;
+      if (!scrollToSpecSection(workspace, sectionId)) {
+        return;
+      }
+      window.history.replaceState(null, "", `#spec-section-${sectionId}`);
+    });
+  });
+
+  const initialTarget = workspace.dataset.scrollTargetSection;
+  if (initialTarget) {
+    window.setTimeout(() => {
+      scrollToSpecSection(workspace, initialTarget);
+    }, 120);
+  }
+
+  container.addEventListener("scroll", updateActiveSection);
+  updateActiveSection();
 }
 
 const PROJECT_CREATE_DRAFT_KEY = "specbridge:create-project-draft";
@@ -602,6 +807,9 @@ async function postJson(url, payload = {}, method = "POST") {
 }
 
 document.addEventListener("submit", async (event) => {
+  if (event.defaultPrevented) {
+    return;
+  }
   const authForm = event.target.closest("[data-auth-form]");
   if (authForm) {
     event.preventDefault();
@@ -668,7 +876,7 @@ document.addEventListener("submit", async (event) => {
     openAuthModal("login");
     return;
   }
-  syncExportDocumentSelection(form);
+  syncExportSelection(form);
   const payload = serializeForm(form);
   const method = form.dataset.apiMethod || "POST";
   try {
@@ -740,6 +948,19 @@ document.addEventListener("click", async (event) => {
 
   if (!event.target.closest("[data-document-create-shell]")) {
     closeDocumentSuggestionMenus();
+  }
+
+  const specLink = event.target.closest("a[href^='#spec-section-']");
+  if (specLink) {
+    const workspace = document.querySelector("[data-spec-workspace]");
+    const sectionId = specLink.getAttribute("href")?.replace("#spec-section-", "") || "";
+    if (workspace && sectionId) {
+      event.preventDefault();
+      if (scrollToSpecSection(workspace, sectionId)) {
+        window.history.replaceState(null, "", `#spec-section-${sectionId}`);
+      }
+      return;
+    }
   }
 
   const button = event.target.closest("[data-api-post]");
@@ -840,8 +1061,8 @@ document.addEventListener("input", (event) => {
   }
 
   const apiForm = event.target.closest("[data-api-form]");
-  if (apiForm?.querySelector?.("[data-document-slugs-input]")) {
-    syncExportDocumentSelection(apiForm);
+  if (apiForm?.querySelector?.("[data-section-ids-input]")) {
+    syncExportSelection(apiForm);
   }
 
   const projectCreateForm = event.target.closest("[data-project-create-form]");
@@ -853,6 +1074,8 @@ document.addEventListener("input", (event) => {
 
 initializeDocumentCreateControls();
 initializeDocumentEditorAutosave();
+initializeSpecSectionAutosave();
+initializeSpecNavigation();
 setAuthMode("login");
 
 const autoRefreshMs = Number(document.body.dataset.autoRefresh || 0);

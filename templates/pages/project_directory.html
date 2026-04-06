@@ -22,7 +22,7 @@
                     Sign-in no longer falls back to the demo workspace. You only see projects you actively belong to.
                   </h2>
                   <p class="mt-4 max-w-2xl text-lg leading-relaxed text-gray-600">
-                    Continue from your latest workspace, or create a new project when you need a fresh document set, decision log,
+                    Continue from your latest workspace, or create a new project when you need a fresh spec scaffold, decision log,
                     and alignment thread.
                   </p>
                   <div class="mt-8 flex flex-wrap gap-4">
@@ -41,7 +41,7 @@
                   </h2>
                   <p class="mt-4 max-w-2xl text-lg leading-relaxed text-gray-600">
                     This page now lists only your active memberships. Create your first workspace to start capturing the
-                    documents, decisions, blockers, and handoff artifacts.
+                    spec, decisions, blockers, and handoff artifacts.
                   </p>
                   <div class="mt-8 flex flex-wrap gap-4">
                     <button type="button" class="primary-button" data-project-modal-trigger>
@@ -57,11 +57,11 @@
                   Agent-Driven Spec System
                 </span>
                 <h2 class="mt-5 max-w-2xl font-display text-4xl font-bold tracking-tight text-gray-900">
-                  Keep the CEO, PM, and engineering team aligned on one revisable multi-document source of truth.
+                  Keep the CEO, PM, and engineering team aligned on one revisable spec workspace.
                 </h2>
                 <p class="mt-4 max-w-2xl text-lg leading-relaxed text-gray-600">
-                  SpecBridge tracks documents, decisions, assumptions, blockers, and agent suggestions as structured system state,
-                  not just document edits.
+                  SpecBridge tracks spec sections, decisions, assumptions, blockers, and agent suggestions as structured system state,
+                  not just freeform edits.
                 </p>
                 <div class="mt-8 flex flex-wrap gap-4">
                   <a href="{% url 'project-workspace' current_project.slug %}" class="primary-button">
@@ -79,13 +79,13 @@
             <div class="grid gap-4 bg-gray-50/70 p-8 sm:grid-cols-2 lg:grid-cols-1">
               <div class="metric-card border-brand-decision/20">
                 <div class="flex items-center justify-between">
-                  <div class="text-sm font-medium text-gray-500">Primary document model</div>
+                  <div class="text-sm font-medium text-gray-500">Primary spec model</div>
                   <div class="rounded-full bg-green-50 p-2 text-brand-decision">
                     <iconify-icon icon="lucide:file-stack"></iconify-icon>
                   </div>
                 </div>
-                <div class="mt-4 text-2xl font-display font-bold text-gray-900">Structured Documents</div>
-                <p class="mt-2 text-sm text-gray-500">Preset and custom documents with status, assumptions, and decision links.</p>
+                <div class="mt-4 text-2xl font-display font-bold text-gray-900">Structured Sections</div>
+                <p class="mt-2 text-sm text-gray-500">Typed top-level sections with status, assumptions, and decision links.</p>
               </div>
               <div class="metric-card border-brand-agent/20">
                 <div class="flex items-center justify-between">
@@ -161,7 +161,7 @@
                     <div class="rounded-xl bg-purple-100 p-2 text-brand-agent"><iconify-icon icon="lucide:flask-conical"></iconify-icon></div>
                     <div>
                       <div class="text-sm font-medium text-gray-900">Assumptions Register</div>
-                      <p class="mt-1 text-xs text-gray-500">Track validation state and link assumptions back to project documents.</p>
+                      <p class="mt-1 text-xs text-gray-500">Track validation state and link assumptions back to anchored spec sections.</p>
                     </div>
                   </a>
                   <a href="{% url 'project-members' current_project.slug %}" class="flex items-start gap-3 rounded-xl border border-gray-200 bg-gray-50 p-4">
@@ -187,11 +187,11 @@
               <div class="space-y-4">
                 <div class="rounded-xl border border-gray-200 p-4">
                   <div class="text-sm font-medium text-gray-900">1. Refine in Workspace</div>
-                  <p class="mt-1 text-xs text-gray-500">Discussion stream, decisions, questions, and agent suggestions update one multi-document workspace.</p>
+                  <p class="mt-1 text-xs text-gray-500">Discussion stream, decisions, questions, and agent suggestions update one shared spec workspace.</p>
                 </div>
                 <div class="rounded-xl border border-gray-200 p-4">
                   <div class="text-sm font-medium text-gray-900">2. Audit via History & Timeline</div>
-                  <p class="mt-1 text-xs text-gray-500">Trace why a document changed and which decision or assumption drove it.</p>
+                  <p class="mt-1 text-xs text-gray-500">Trace why a section changed and which decision or assumption drove it.</p>
                 </div>
                 <div class="rounded-xl border border-gray-200 p-4">
                   <div class="text-sm font-medium text-gray-900">3. Export for Handoff</div>

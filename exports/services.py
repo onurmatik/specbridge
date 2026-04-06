@@ -4,68 +4,78 @@ from django.utils import timezone
 
 from exports.models import ExportArtifact, ExportFormat
 from specs.models import AuditEventType
-from specs.services import log_audit_event
+from specs.services import (
+    log_audit_event,
+    section_summaries,
+    section_title_for_ref,
+)
 
 
-def selected_documents_for_export(project, configuration: dict | None = None):
+def selected_sections_for_export(project, configuration: dict | None = None):
     configuration = configuration or {}
-    document_slugs = configuration.get("document_slugs", "")
-    if isinstance(document_slugs, str):
-        allowed = {slug.strip() for slug in document_slugs.split(",") if slug.strip()}
-    elif isinstance(document_slugs, list):
-        allowed = {slug for slug in document_slugs if slug}
+    section_ids = configuration.get("section_ids", "")
+    if isinstance(section_ids, str):
+        allowed = {section_id.strip() for section_id in section_ids.split(",") if section_id.strip()}
+    elif isinstance(section_ids, list):
+        allowed = {section_id for section_id in section_ids if section_id}
     else:
         allowed = set()
 
-    documents = list(project.documents.order_by("order", "created_at"))
+    sections = list(section_summaries(project))
     if not allowed:
-        return documents
-    return [document for document in documents if document.slug in allowed]
+        return sections
+    return [section for section in sections if section["id"] in allowed]
 
 
 def build_export_content(project, export_format: str, configuration: dict | None = None) -> str:
     configuration = configuration or {}
     include_resolved_questions = configuration.get("include_resolved_questions", False)
-    documents = selected_documents_for_export(project, configuration)
+    sections = selected_sections_for_export(project, configuration)
+    allowed_ids = {section["id"] for section in sections}
     lines = [
         f"# {project.name}",
         "",
         project.summary,
         "",
-        "## Documents",
+        "## Sections",
     ]
-    for document in documents:
+    for index, section in enumerate(sections, start=1):
         lines.extend(
             [
-                f"### {document.order}. {document.title}",
-                f"- Status: {document.get_status_display()}",
-                f"- Type: {document.get_document_type_display()}",
+                f"### {index}. {section['title']}",
+                f"- Status: {section['status'].replace('-', ' ').title()}",
+                f"- Type: {section['kind']}",
                 "",
-                document.body or "_No content yet._",
+                section["body"] or "_No content yet._",
                 "",
             ]
         )
     lines.append("## Decisions")
-    for decision in project.decisions.select_related("related_document").all():
-        if decision.related_document and decision.related_document not in documents:
+    for decision in project.decisions.all():
+        primary_ref = decision.primary_ref or {}
+        if primary_ref.get("section_id") and primary_ref["section_id"] not in allowed_ids:
             continue
-        related_label = f" ({decision.related_document.title})" if decision.related_document else ""
+        related_label = f" ({section_title_for_ref(project, primary_ref)})" if primary_ref else ""
         lines.append(f"- [{decision.status}] {decision.title}{related_label}: {decision.summary}")
     lines.append("")
     lines.append("## Assumptions")
-    for assumption in project.assumptions.select_related("document").all():
-        if assumption.document and assumption.document not in documents:
+    for assumption in project.assumptions.all():
+        primary_ref = assumption.primary_ref or {}
+        if primary_ref.get("section_id") and primary_ref["section_id"] not in allowed_ids:
             continue
-        related_label = f" ({assumption.document.title})" if assumption.document else ""
+        related_label = f" ({section_title_for_ref(project, primary_ref)})" if primary_ref else ""
         lines.append(f"- [{assumption.status}] {assumption.title}{related_label}: {assumption.description}")
     if include_resolved_questions:
         lines.append("")
         lines.append("## Questions")
-        for question in project.questions.select_related("related_document").all():
-            related_label = f" ({question.related_document.title})" if question.related_document else ""
+        for question in project.questions.all():
+            primary_ref = question.primary_ref or {}
+            if primary_ref.get("section_id") and primary_ref["section_id"] not in allowed_ids:
+                continue
+            related_label = f" ({section_title_for_ref(project, primary_ref)})" if primary_ref else ""
             lines.append(f"- [{question.status}] {question.title}{related_label}")
     if export_format == ExportFormat.AGENT:
-        lines.insert(0, "You are implementing a multi-document project workspace in SpecBridge.")
+        lines.insert(0, "You are implementing a single spec document workspace in SpecBridge.")
     return "\n".join(lines)
 
 

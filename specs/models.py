@@ -11,11 +11,6 @@ class DocumentStatus(models.TextChoices):
     BLOCKED = "blocked", "Blocked"
 
 
-class DocumentSourceKind(models.TextChoices):
-    PRESET = "preset", "Preset"
-    CUSTOM = "custom", "Custom"
-
-
 class DocumentType(models.TextChoices):
     OVERVIEW = "overview", "Overview"
     GOALS = "goals", "Goals"
@@ -130,36 +125,24 @@ class ConsistencyIssueStatus(models.TextChoices):
     DISMISSED = "dismissed", "Dismissed"
 
 
-class ProjectDocument(TimeStampedModel):
-    project = models.ForeignKey("projects.Project", on_delete=models.CASCADE, related_name="documents")
-    slug = models.SlugField(max_length=96)
-    title = models.CharField(max_length=255)
-    document_type = models.CharField(max_length=64, choices=DocumentType.choices, default=DocumentType.CUSTOM)
-    source_kind = models.CharField(max_length=16, choices=DocumentSourceKind.choices, default=DocumentSourceKind.CUSTOM)
-    body = models.TextField(blank=True)
-    status = models.CharField(max_length=16, choices=DocumentStatus.choices, default=DocumentStatus.ITERATING)
-    order = models.PositiveIntegerField(default=0)
-    is_required = models.BooleanField(default=False)
+class ProjectSpecDocument(TimeStampedModel):
+    project = models.OneToOneField("projects.Project", on_delete=models.CASCADE, related_name="spec_document")
+    title = models.CharField(max_length=255, default="Product Spec")
+    schema_version = models.PositiveIntegerField(default=1)
+    content_json = models.JSONField(default=dict, blank=True)
 
     class Meta:
-        ordering = ["order", "created_at"]
-        unique_together = ("project", "slug")
+        ordering = ["created_at"]
 
     def __str__(self):
-        return f"{self.project.slug}:{self.title}"
+        return f"{self.project.slug}:spec"
 
 
 class Assumption(TimeStampedModel):
     project = models.ForeignKey("projects.Project", on_delete=models.CASCADE, related_name="assumptions")
-    document = models.ForeignKey(
-        ProjectDocument,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="assumptions",
-    )
     title = models.CharField(max_length=255)
     description = models.TextField()
+    primary_ref = models.JSONField(default=dict, blank=True)
     impact = models.CharField(max_length=64, default="medium")
     status = models.CharField(max_length=16, choices=AssumptionStatus.choices, default=AssumptionStatus.OPEN)
     source_post = models.ForeignKey(
@@ -248,8 +231,8 @@ class ProjectRevision(TimeStampedModel):
         return f"{self.project.slug} r{self.number}"
 
 
-class DocumentRevision(TimeStampedModel):
-    document = models.ForeignKey(ProjectDocument, on_delete=models.CASCADE, related_name="revisions")
+class SpecDocumentRevision(TimeStampedModel):
+    spec_document = models.ForeignKey(ProjectSpecDocument, on_delete=models.CASCADE, related_name="revisions")
     number = models.PositiveIntegerField()
     title = models.CharField(max_length=255)
     summary = models.TextField(blank=True)
@@ -259,14 +242,14 @@ class DocumentRevision(TimeStampedModel):
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="created_document_revisions",
+        related_name="created_spec_document_revisions",
     )
     project_revision = models.ForeignKey(
         ProjectRevision,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="document_revisions",
+        related_name="spec_document_revisions",
     )
     previous_revision = models.ForeignKey(
         "self",
@@ -278,10 +261,10 @@ class DocumentRevision(TimeStampedModel):
 
     class Meta:
         ordering = ["number"]
-        unique_together = ("document", "number")
+        unique_together = ("spec_document", "number")
 
     def __str__(self):
-        return f"{self.document.slug} r{self.number}"
+        return f"{self.spec_document.project.slug} spec r{self.number}"
 
 
 class ConcernRun(TimeStampedModel):
@@ -319,7 +302,7 @@ class ProjectConcern(TimeStampedModel):
         blank=True,
         related_name="raised_concerns",
     )
-    documents = models.ManyToManyField(ProjectDocument, related_name="concerns", blank=True)
+    node_refs = models.JSONField(default=list, blank=True)
     fingerprint = models.CharField(max_length=128)
     concern_type = models.CharField(max_length=32, choices=ConcernType.choices, default=ConcernType.HUMAN_FLAG)
     raised_by_kind = models.CharField(
@@ -398,7 +381,11 @@ class ConcernProposal(TimeStampedModel):
 
 class ConcernProposalChange(TimeStampedModel):
     proposal = models.ForeignKey(ConcernProposal, on_delete=models.CASCADE, related_name="changes")
-    document = models.ForeignKey(ProjectDocument, on_delete=models.CASCADE, related_name="concern_proposal_changes")
+    section_ref = models.JSONField(default=dict, blank=True)
+    section_id = models.CharField(max_length=64, blank=True)
+    section_title = models.CharField(max_length=255, blank=True)
+    original_section_json = models.JSONField(default=dict, blank=True)
+    proposed_section_json = models.JSONField(default=dict, blank=True)
     summary = models.CharField(max_length=255, blank=True)
     original_body = models.TextField(blank=True)
     proposed_body = models.TextField(blank=True)
@@ -418,10 +405,10 @@ class ConcernProposalChange(TimeStampedModel):
 
     class Meta:
         ordering = ["created_at"]
-        unique_together = ("proposal", "document")
+        unique_together = ("proposal", "section_id")
 
     def __str__(self):
-        return f"{self.proposal_id}:{self.document.slug}"
+        return f"{self.proposal_id}:{self.section_title or self.section_id or 'section-change'}"
 
 
 class ConsistencyRun(TimeStampedModel):

@@ -13,7 +13,7 @@
           <div>
             <span class="workspace-badge border-purple-100 bg-purple-50 text-brand-agent">Gap-closing surface</span>
             <h1 class="mt-4 font-display text-3xl font-bold tracking-tight text-gray-900">Assumptions Register</h1>
-            <p class="mt-2 text-sm text-gray-500">Make hidden bets explicit, then validate or invalidate them against the evolving document set.</p>
+            <p class="mt-2 text-sm text-gray-500">Make hidden bets explicit, then validate or invalidate them against the evolving spec.</p>
             {% if not request.user.is_authenticated %}
               <p class="mt-2 text-xs font-medium uppercase tracking-wider text-gray-400">Public preview. Sign in to add or review assumptions.</p>
             {% endif %}
@@ -56,8 +56,8 @@
                       {{ assumption.get_status_display }}
                     </span>
                     <span class="workspace-badge border-gray-200 bg-gray-50 text-gray-600">{{ assumption.impact|title }} impact</span>
-                    {% if assumption.document %}
-                      <a href="{% url 'project-workspace' project.slug %}?document={{ assumption.document.slug }}" class="workspace-badge border-blue-100 bg-blue-50 text-blue-700">{{ assumption.document.title }}</a>
+                    {% if assumption.related_label %}
+                      <a href="{% url 'project-workspace' project.slug %}{% if assumption.primary_ref.section_id %}#spec-section-{{ assumption.primary_ref.section_id }}{% endif %}" class="workspace-badge border-blue-100 bg-blue-50 text-blue-700">{{ assumption.related_label }}</a>
                     {% endif %}
                   </div>
                   <h2 class="font-display text-2xl font-bold text-gray-900">{{ assumption.title }}</h2>

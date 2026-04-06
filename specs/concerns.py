@@ -3,6 +3,7 @@ from __future__ import annotations
 import difflib
 import hashlib
 import json
+from copy import deepcopy
 from dataclasses import dataclass
 from urllib import error, request
 
@@ -23,7 +24,23 @@ from specs.models import (
     ConcernType,
     ProjectConcern,
 )
-from specs.services import build_project_snapshot, log_audit_event, update_document
+from specs.services import (
+    build_primary_ref_for_identifier,
+    build_project_snapshot,
+    ensure_spec_document,
+    log_audit_event,
+    update_spec_section,
+)
+from specs.spec_document import (
+    blocks_to_markdown,
+    build_primary_ref,
+    collect_refs_from_text,
+    find_section,
+    markdown_to_blocks,
+    normalized_spec_content,
+    section_catalog,
+    section_summary,
+)
 
 OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
 AI_CONCERN_SCOPES = (
@@ -43,10 +60,7 @@ CONCERN_ANALYSIS_SCHEMA = {
                 "type": "object",
                 "additionalProperties": False,
                 "properties": {
-                    "concern_type": {
-                        "type": "string",
-                        "enum": list(AI_CONCERN_SCOPES),
-                    },
+                    "concern_type": {"type": "string", "enum": list(AI_CONCERN_SCOPES)},
                     "fingerprint": {"type": "string"},
                     "title": {"type": "string"},
                     "summary": {"type": "string"},
@@ -118,11 +132,11 @@ CONCERN_PROPOSAL_SCHEMA = {
                 "type": "object",
                 "additionalProperties": False,
                 "properties": {
-                    "document_slug": {"type": "string"},
+                    "section_id": {"type": "string"},
                     "summary": {"type": "string"},
                     "proposed_body": {"type": "string"},
                 },
-                "required": ["document_slug", "summary", "proposed_body"],
+                "required": ["section_id", "summary", "proposed_body"],
             },
         },
     },
@@ -257,7 +271,7 @@ def _project_concern_prompt(snapshot: dict, scopes: tuple[str, ...]) -> str:
         "Raise only important project issues that the team should discuss or fix.\n"
         "Available concern types: consistency, implementability, usability, business_viability.\n"
         f"Only use these concern types: {', '.join(scopes)}.\n"
-        "Ground every concern in the provided documents, decisions, or assumptions.\n"
+        "Ground every concern in the provided spec sections, decisions, or assumptions.\n"
         "Do not invent product requirements outside the snapshot.\n"
         "Prefer fewer, higher-signal concerns.\n"
         f"Project snapshot JSON:\n{json.dumps(snapshot, ensure_ascii=True)}"
@@ -267,60 +281,36 @@ def _project_concern_prompt(snapshot: dict, scopes: tuple[str, ...]) -> str:
 def _targeted_reevaluation_prompt(snapshot: dict, concern: ProjectConcern) -> str:
     return (
         "You are re-evaluating whether a previously raised project concern is still valid.\n"
-        "Return 'resolved' only when the current documents and decisions materially address the concern.\n"
+        "Return 'resolved' only when the current spec sections and decisions materially address the concern.\n"
         "Otherwise keep it 'open'.\n"
         f"Concern JSON:\n{json.dumps(_serialize_concern(concern), ensure_ascii=True)}\n\n"
         f"Project snapshot JSON:\n{json.dumps(snapshot, ensure_ascii=True)}"
     )
 
 
-def _proposal_prompt(snapshot: dict, concern: ProjectConcern, documents: list) -> str:
-    document_payload = [
+def _proposal_prompt(snapshot: dict, concern: ProjectConcern, sections: list[dict]) -> str:
+    payload = [
         {
-            "slug": document.slug,
-            "title": document.title,
-            "body": document.body,
-            "status": document.status,
+            "section_id": section["id"],
+            "section_title": section["title"],
+            "status": section["status"],
+            "body": section["body"],
         }
-        for document in documents
+        for section in sections
     ]
     return (
         "You are helping a team resolve a project concern.\n"
-        "Produce reviewable per-document body rewrites. Do not rename documents.\n"
-        "Only return changes for documents that should actually be edited.\n"
+        "Produce reviewable per-section body rewrites. Do not rename or reorder sections.\n"
+        "Only return changes for sections that should actually be edited.\n"
         "Keep the edits concrete and internally consistent.\n"
         f"Concern JSON:\n{json.dumps(_serialize_concern(concern), ensure_ascii=True)}\n\n"
-        f"Relevant documents JSON:\n{json.dumps(document_payload, ensure_ascii=True)}\n\n"
+        f"Relevant sections JSON:\n{json.dumps(payload, ensure_ascii=True)}\n\n"
         f"Project snapshot JSON:\n{json.dumps(snapshot, ensure_ascii=True)}"
     )
 
 
-def _infer_documents_from_text(project, text: str):
-    lowered = (text or "").lower()
-    matches = []
-    for document in project.documents.all():
-        title_tokens = {
-            document.slug.lower(),
-            document.title.lower(),
-            document.title.lower().replace("&", "and"),
-        }
-        if any(token and token in lowered for token in title_tokens):
-            matches.append(document)
-    return matches
-
-
-def _link_documents_from_refs(project, source_refs: list[dict]):
-    identifiers = {
-        ref.get("identifier", "").strip()
-        for ref in source_refs
-        if ref.get("kind") == "document" and ref.get("identifier")
-    }
-    if not identifiers:
-        return []
-    return list(project.documents.filter(slug__in=identifiers).order_by("order", "created_at"))
-
-
 def _serialize_concern(concern: ProjectConcern) -> dict:
+    refs = concern.node_refs or []
     return {
         "id": concern.id,
         "fingerprint": concern.fingerprint,
@@ -332,11 +322,65 @@ def _serialize_concern(concern: ProjectConcern) -> dict:
         "status": concern.status,
         "recommendation": concern.recommendation,
         "source_refs": concern.source_refs,
-        "documents": [
-            {"slug": document.slug, "title": document.title}
-            for document in concern.documents.order_by("order", "created_at")
-        ],
+        "node_refs": refs,
     }
+
+
+def _normalized_ref(ref: dict) -> dict:
+    return {
+        "section_id": ref.get("section_id", ""),
+        "node_id": ref.get("node_id", ""),
+        "label": ref.get("label", ""),
+        "excerpt": ref.get("excerpt", ""),
+    }
+
+
+def _unique_refs(refs: list[dict]) -> list[dict]:
+    seen: set[str] = set()
+    unique: list[dict] = []
+    for ref in refs:
+        normalized = _normalized_ref(ref)
+        section_id = normalized["section_id"]
+        if not section_id or section_id in seen:
+            continue
+        seen.add(section_id)
+        unique.append(normalized)
+    return unique
+
+
+def _link_section_refs_from_refs(project, source_refs: list[dict]) -> list[dict]:
+    refs: list[dict] = []
+    for source_ref in source_refs or []:
+        kind = source_ref.get("kind", "")
+        if kind not in {"document", "section"}:
+            continue
+        primary_ref = build_primary_ref_for_identifier(project, source_ref.get("identifier", ""))
+        if not primary_ref:
+            continue
+        if source_ref.get("label"):
+            primary_ref["label"] = source_ref["label"]
+        refs.append(primary_ref)
+    return _unique_refs(refs)
+
+
+def _spec_section_catalog(project) -> list[dict]:
+    return section_catalog(ensure_spec_document(project).content_json)
+
+
+def _find_sections_for_refs(project, refs: list[dict]) -> list[dict]:
+    spec_document = ensure_spec_document(project)
+    sections: list[dict] = []
+    seen: set[str] = set()
+    for ref in refs:
+        section_id = ref.get("section_id", "")
+        if not section_id or section_id in seen:
+            continue
+        section = find_section(spec_document.content_json, section_id)
+        if not section:
+            continue
+        seen.add(section_id)
+        sections.append(section_summary(section))
+    return sections
 
 
 def concern_sort_key(concern: ProjectConcern):
@@ -360,16 +404,19 @@ def concern_sort_key(concern: ProjectConcern):
 
 
 def ordered_concerns(project):
-    concerns = list(project.concerns.prefetch_related("documents", "proposals__changes__document").all())
+    concerns = list(project.concerns.prefetch_related("proposals__changes", "posts").all())
     return sorted(concerns, key=concern_sort_key)
 
 
 def render_proposal_change_diff(change: ConcernProposalChange) -> str:
+    current_body = change.original_body or blocks_to_markdown(change.original_section_json.get("content", []))
+    proposed_body = change.proposed_body or blocks_to_markdown(change.proposed_section_json.get("content", []))
+    section_name = change.section_title or change.section_ref.get("label") or "section"
     diff_lines = difflib.unified_diff(
-        (change.original_body or "").splitlines(),
-        (change.proposed_body or "").splitlines(),
-        fromfile=f"{change.document.slug}:current",
-        tofile=f"{change.document.slug}:proposal",
+        (current_body or "").splitlines(),
+        (proposed_body or "").splitlines(),
+        fromfile=f"{section_name}:current",
+        tofile=f"{section_name}:proposal",
         lineterm="",
     )
     return "\n".join(diff_lines) or "No textual diff available."
@@ -405,11 +452,11 @@ def reevaluate_concern_with_ai(snapshot: dict, concern: ProjectConcern) -> Conce
     )
 
 
-def build_concern_proposal_with_ai(snapshot: dict, concern: ProjectConcern, documents: list) -> ConcernProposalResult:
+def build_concern_proposal_with_ai(snapshot: dict, concern: ProjectConcern, sections: list[dict]) -> ConcernProposalResult:
     model, parsed_output = _request_openai(
         schema_name="concern_resolution_proposal",
         schema=CONCERN_PROPOSAL_SCHEMA,
-        prompt=_proposal_prompt(snapshot, concern, documents),
+        prompt=_proposal_prompt(snapshot, concern, sections),
     )
     return ConcernProposalResult(
         provider="openai",
@@ -419,15 +466,11 @@ def build_concern_proposal_with_ai(snapshot: dict, concern: ProjectConcern, docu
     )
 
 
-def _assign_concern_documents(concern: ProjectConcern, documents: list):
-    concern.documents.set([document.id for document in documents])
-
-
 def create_human_concern_from_post(post, actor=None):
     if getattr(post, "concern_id", None):
         return post.concern
 
-    inferred_documents = _infer_documents_from_text(post.project, post.body)
+    inferred_refs = collect_refs_from_text(ensure_spec_document(post.project).content_json, post.body)
     title = post.body.splitlines()[0].strip()[:120] or "Team concern"
     concern = ProjectConcern.objects.create(
         project=post.project,
@@ -439,19 +482,19 @@ def create_human_concern_from_post(post, actor=None):
         summary=post.body,
         severity=ConcernSeverity.MEDIUM,
         status=ConcernStatus.OPEN,
-        recommendation="Discuss the concern and update the linked documents before re-evaluating it.",
+        recommendation="Discuss the concern and update the linked sections before re-evaluating it.",
         source_refs=[
             {"kind": "stream_post", "identifier": str(post.id), "label": f"Activity post #{post.id}"},
             *[
-                {"kind": "document", "identifier": document.slug, "label": document.title}
-                for document in inferred_documents
+                {"kind": "section", "identifier": ref["section_id"], "label": ref["label"]}
+                for ref in inferred_refs
             ],
         ],
+        node_refs=_unique_refs(inferred_refs),
         detected_at=post.created_at,
         last_seen_at=post.created_at,
         created_by=actor if getattr(actor, "pk", None) else post.author,
     )
-    _assign_concern_documents(concern, inferred_documents)
     post.concern = concern
     post.save(update_fields=["concern", "updated_at"])
     log_audit_event(
@@ -482,6 +525,7 @@ def upsert_ai_concerns(*, project, run: ConcernRun, concerns: list[dict]):
             sort_keys=True,
         )
         fingerprint = _normalize_fingerprint(concern_payload.get("fingerprint", ""), fallback_seed)
+        node_refs = _link_section_refs_from_refs(project, concern_payload.get("source_refs", []))
         concern, created = ProjectConcern.objects.get_or_create(
             project=project,
             fingerprint=fingerprint,
@@ -495,6 +539,7 @@ def upsert_ai_concerns(*, project, run: ConcernRun, concerns: list[dict]):
                 "status": ConcernStatus.OPEN,
                 "recommendation": concern_payload.get("recommendation", ""),
                 "source_refs": concern_payload.get("source_refs", []),
+                "node_refs": node_refs,
                 "detected_at": now,
                 "last_seen_at": now,
                 "last_reevaluated_at": now,
@@ -509,6 +554,7 @@ def upsert_ai_concerns(*, project, run: ConcernRun, concerns: list[dict]):
             concern.severity = _normalize_severity(concern_payload.get("severity", concern.severity))
             concern.recommendation = concern_payload.get("recommendation", concern.recommendation)
             concern.source_refs = concern_payload.get("source_refs", concern.source_refs)
+            concern.node_refs = node_refs
             concern.last_seen_at = now
             concern.last_reevaluated_at = now
             concern.reevaluation_requested_at = None
@@ -517,8 +563,6 @@ def upsert_ai_concerns(*, project, run: ConcernRun, concerns: list[dict]):
                 concern.resolved_at = None
                 concern.dismissed_at = None
             concern.save()
-        linked_documents = _link_documents_from_refs(project, concern.source_refs)
-        _assign_concern_documents(concern, linked_documents)
         seen += 1
     run.concern_count = seen
     run.save(update_fields=["concern_count", "updated_at"])
@@ -561,7 +605,7 @@ def run_project_concerns(project, actor=None, scopes: tuple[str, ...] = AI_CONCE
     return run
 
 
-def queue_concern_reevaluation(concern: ProjectConcern, *, actor=None, trigger: str = "document_update"):
+def queue_concern_reevaluation(concern: ProjectConcern, *, actor=None, trigger: str = "spec_section_update"):
     if concern.status == ConcernStatus.DISMISSED:
         return None
 
@@ -600,17 +644,15 @@ def queue_concern_reevaluation(concern: ProjectConcern, *, actor=None, trigger: 
     return pending_run
 
 
-def mark_linked_concerns_stale(*, project, documents: list, actor=None, trigger: str = "document_update"):
-    document_ids = [document.id for document in documents if getattr(document, "id", None)]
-    if not document_ids:
+def mark_linked_concerns_stale(*, project, section_ids: list[str], actor=None, trigger: str = "spec_section_update"):
+    normalized_ids = {section_id for section_id in section_ids if section_id}
+    if not normalized_ids:
         return
-    concerns = (
-        project.concerns.filter(documents__in=document_ids)
-        .exclude(status=ConcernStatus.DISMISSED)
-        .distinct()
-    )
+    concerns = project.concerns.exclude(status=ConcernStatus.DISMISSED)
     for concern in concerns:
-        queue_concern_reevaluation(concern, actor=actor, trigger=trigger)
+        concern_section_ids = {ref.get("section_id", "") for ref in concern.node_refs or []}
+        if concern_section_ids.intersection(normalized_ids):
+            queue_concern_reevaluation(concern, actor=actor, trigger=trigger)
 
 
 def re_evaluate_concern(concern: ProjectConcern, *, actor=None):
@@ -656,6 +698,7 @@ def re_evaluate_concern(concern: ProjectConcern, *, actor=None):
     concern.severity = result.severity
     concern.recommendation = result.recommendation
     concern.source_refs = result.source_refs
+    concern.node_refs = _link_section_refs_from_refs(concern.project, concern.source_refs)
     concern.last_seen_at = now
     concern.last_reevaluated_at = now
     concern.reevaluation_requested_at = None
@@ -663,8 +706,6 @@ def re_evaluate_concern(concern: ProjectConcern, *, actor=None):
     concern.resolved_by = actor if result.status == ConcernStatus.RESOLVED else None
     concern.status = ConcernStatus.RESOLVED if result.status == ConcernStatus.RESOLVED else ConcernStatus.OPEN
     concern.save()
-    linked_documents = _link_documents_from_refs(concern.project, concern.source_refs)
-    _assign_concern_documents(concern, linked_documents)
     log_audit_event(
         project=concern.project,
         actor=actor,
@@ -694,17 +735,26 @@ def dismiss_concern(concern: ProjectConcern, *, actor=None):
     return concern
 
 
+def _sections_for_concern(concern: ProjectConcern) -> list[dict]:
+    sections = _find_sections_for_refs(concern.project, concern.node_refs or [])
+    if sections:
+        return sections
+    if concern.source_post_id:
+        inferred_refs = collect_refs_from_text(ensure_spec_document(concern.project).content_json, concern.source_post.body)
+        if inferred_refs:
+            concern.node_refs = _unique_refs(inferred_refs)
+            concern.save(update_fields=["node_refs", "updated_at"])
+            return _find_sections_for_refs(concern.project, concern.node_refs)
+    return []
+
+
 def resolve_concern_with_ai(concern: ProjectConcern, *, actor=None):
-    documents = list(concern.documents.order_by("order", "created_at"))
-    if not documents:
-        documents = _link_documents_from_refs(concern.project, concern.source_refs)
-    if not documents and concern.source_post_id:
-        documents = _infer_documents_from_text(concern.project, concern.source_post.body)
-    if not documents:
-        raise ConcernError("This concern is not linked to any documents yet.")
+    sections = _sections_for_concern(concern)
+    if not sections:
+        raise ConcernError("This concern is not linked to any sections yet.")
 
     snapshot = build_project_snapshot(concern.project)
-    result = build_concern_proposal_with_ai(snapshot, concern, documents)
+    result = build_concern_proposal_with_ai(snapshot, concern, sections)
     proposal = ConcernProposal.objects.create(
         project=concern.project,
         concern=concern,
@@ -714,16 +764,40 @@ def resolve_concern_with_ai(concern: ProjectConcern, *, actor=None):
         requested_by=actor,
         status=ConcernProposalStatus.OPEN,
     )
-    change_documents = {document.slug: document for document in documents}
+    section_lookup = {section["id"]: section for section in sections}
     for change_payload in result.changes:
-        document = change_documents.get(change_payload.get("document_slug", ""))
-        if not document:
+        section = section_lookup.get(change_payload.get("section_id", ""))
+        if not section:
             continue
+        proposed_section_json = {
+            "type": "specSection",
+            "attrs": {
+                "id": section["id"],
+                "key": section["key"],
+                "title": section["title"],
+                "kind": section["kind"],
+                "status": section["status"],
+                "required": section["required"],
+                "legacy_slug": section["legacy_slug"],
+            },
+            "content": markdown_to_blocks(change_payload.get("proposed_body", "")),
+        }
         ConcernProposalChange.objects.create(
             proposal=proposal,
-            document=document,
+            section_ref={
+                "section_id": section["id"],
+                "node_id": "",
+                "label": section["title"],
+                "excerpt": section["body"][:240],
+            },
+            section_id=section["id"],
+            section_title=section["title"],
+            original_section_json=deepcopy(
+                find_section(ensure_spec_document(concern.project).content_json, section["id"]) or {}
+            ),
+            proposed_section_json=proposed_section_json,
             summary=(change_payload.get("summary") or "").strip(),
-            original_body=document.body,
+            original_body=section["body"],
             proposed_body=change_payload.get("proposed_body", ""),
         )
     log_audit_event(
@@ -754,23 +828,33 @@ def _refresh_proposal_status(proposal: ConcernProposal):
 def accept_concern_proposal_change(change: ConcernProposalChange, *, actor=None):
     if change.status == ConcernProposalChangeStatus.ACCEPTED:
         return change
-    update_document(document=change.document, actor=actor, body=change.proposed_body)
+    section_id = change.section_id or change.section_ref.get("section_id", "")
+    if not section_id:
+        raise ConcernError("This proposal change is not linked to a section.")
+    section_payload = change.proposed_section_json or {}
+    update_spec_section(
+        project=change.proposal.project,
+        section_id=section_id,
+        actor=actor,
+        title=section_payload.get("attrs", {}).get("title"),
+        status=section_payload.get("attrs", {}).get("status"),
+        content_json=section_payload.get("content", []),
+    )
     change.status = ConcernProposalChangeStatus.ACCEPTED
     change.decided_by = actor
     change.decided_at = timezone.now()
     change.save(update_fields=["status", "decided_by", "decided_at", "updated_at"])
-    queue_concern_reevaluation(change.proposal.concern, actor=actor, trigger="proposal_change_applied")
     _refresh_proposal_status(change.proposal)
     log_audit_event(
         project=change.proposal.project,
         actor=actor,
         event_type=AuditEventType.CONCERN_PROPOSAL_CHANGE_ACCEPTED,
-        title=f"Accepted AI change for {change.document.title}",
+        title=f"Accepted AI change for {change.section_title or 'section'}",
         description=change.summary,
         metadata={
             "proposal_id": change.proposal_id,
             "concern_id": change.proposal.concern_id,
-            "document_slug": change.document.slug,
+            "section_id": section_id,
         },
     )
     return change
@@ -788,12 +872,12 @@ def reject_concern_proposal_change(change: ConcernProposalChange, *, actor=None)
         project=change.proposal.project,
         actor=actor,
         event_type=AuditEventType.CONCERN_PROPOSAL_CHANGE_REJECTED,
-        title=f"Rejected AI change for {change.document.title}",
+        title=f"Rejected AI change for {change.section_title or 'section'}",
         description=change.summary,
         metadata={
             "proposal_id": change.proposal_id,
             "concern_id": change.proposal.concern_id,
-            "document_slug": change.document.slug,
+            "section_id": change.section_id,
         },
     )
     return change

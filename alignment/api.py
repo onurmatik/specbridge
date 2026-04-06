@@ -6,6 +6,7 @@ from alignment.models import Decision, OpenQuestion, StreamPost
 from alignment.services import approve_decision, mark_decision_implemented, reject_decision, reopen_issue, resolve_issue
 from projects.services import get_project_or_404, resolve_actor
 from specs.concerns import create_human_concern_from_post
+from specs.services import build_primary_ref_for_section
 
 router = Router(tags=["alignment"])
 
@@ -18,7 +19,7 @@ class StreamPayload(Schema):
 class DecisionPayload(Schema):
     title: str
     summary: str
-    related_document_slug: str = ""
+    section_id: str = ""
 
 
 @router.get("/{slug}/stream")
@@ -106,15 +107,13 @@ def reopen_blocker(request, slug: str, blocker_id: int):
 def create_decision(request, slug: str, payload: DecisionPayload):
     project = get_project_or_404(slug, request.user)
     actor = resolve_actor(request, project)
-    related_document = (
-        project.documents.filter(slug=payload.related_document_slug).first() if payload.related_document_slug else None
-    )
+    primary_ref = build_primary_ref_for_section(project, payload.section_id) if payload.section_id else {}
     decision = Decision.objects.create(
         project=project,
         title=payload.title,
         summary=payload.summary,
         proposed_by=actor,
-        related_document=related_document,
+        primary_ref=primary_ref,
     )
     return {"id": decision.id, "code": decision.code, "title": decision.title, "status": decision.status}
 

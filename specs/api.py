@@ -14,49 +14,46 @@ from specs.concerns import (
     run_project_concerns,
 )
 from specs.consistency import dismiss_consistency_issue, resolve_consistency_issue, run_project_consistency
-from specs.models import (
-    Assumption,
-    AssumptionStatus,
-    AuditEventType,
-    DocumentStatus,
-    DocumentType,
-)
+from specs.models import Assumption, AssumptionStatus, AuditEventType
 from specs.services import (
+    build_primary_ref_for_section,
+    build_project_snapshot,
+    build_spec_snapshot,
     capture_project_revision,
-    create_document,
-    delete_document,
+    ensure_spec_document,
     log_audit_event,
-    reorder_documents,
-    update_document,
+    update_spec_section,
 )
+from specs.spec_document import markdown_to_blocks
 
 router = Router(tags=["specs"])
 
 
-class DocumentCreatePayload(Schema):
-    title: str
-    body: str = ""
-    document_type: str = DocumentType.CUSTOM
-    status: str = DocumentStatus.ITERATING
-    is_required: bool = False
-
-
-class DocumentUpdatePayload(Schema):
+class SpecSectionUpdatePayload(Schema):
     title: str | None = None
-    body: str | None = None
     status: str | None = None
-    is_required: bool | None = None
-
-
-class DocumentReorderPayload(Schema):
-    slugs: list[str]
+    body: str | None = None
+    content_json: list[dict] | None = None
 
 
 class AssumptionPayload(Schema):
     title: str
     description: str
-    document_slug: str | None = None
+    section_id: str | None = None
     impact: str = "medium"
+
+
+def _serialize_sections(project):
+    return [
+        {
+            "id": section["id"],
+            "title": section["title"],
+            "kind": section["kind"],
+            "status": section["status"],
+            "required": section["required"],
+        }
+        for section in build_spec_snapshot(project)["sections"]
+    ]
 
 
 def serialize_concern(concern):
@@ -71,10 +68,7 @@ def serialize_concern(concern):
         "status": concern.status,
         "recommendation": concern.recommendation,
         "source_refs": concern.source_refs,
-        "document_refs": [
-            {"slug": document.slug, "title": document.title}
-            for document in concern.documents.order_by("order", "created_at")
-        ],
+        "node_refs": concern.node_refs or [],
         "detected_at": concern.detected_at.isoformat(),
         "last_seen_at": concern.last_seen_at.isoformat(),
         "reevaluation_requested_at": concern.reevaluation_requested_at.isoformat() if concern.reevaluation_requested_at else None,
@@ -93,114 +87,56 @@ def serialize_proposal(proposal):
         "changes": [
             {
                 "id": change.id,
-                "document_slug": change.document.slug,
-                "document_title": change.document.title,
+                "section_ref": change.section_ref,
+                "section_id": change.section_id,
+                "section_title": change.section_title,
                 "summary": change.summary,
                 "status": change.status,
                 "diff": render_proposal_change_diff(change),
                 "created_at": change.created_at.isoformat(),
             }
-            for change in proposal.changes.select_related("document").all()
+            for change in proposal.changes.all()
         ],
     }
 
 
-@router.get("/{slug}/documents")
-def list_documents(request, slug: str):
+@router.get("/{slug}/spec")
+def get_spec(request, slug: str):
     project = get_project_or_404(slug, request.user)
+    snapshot = build_spec_snapshot(project)
     return {
-        "items": [
-            {
-                "id": document.id,
-                "slug": document.slug,
-                "title": document.title,
-                "body": document.body,
-                "status": document.status,
-                "document_type": document.document_type,
-                "source_kind": document.source_kind,
-                "is_required": document.is_required,
-                "order": document.order,
-            }
-            for document in project.documents.all()
-        ]
+        "id": snapshot["id"],
+        "title": snapshot["title"],
+        "schema_version": snapshot["schema_version"],
+        "content_json": snapshot["content_json"],
+        "sections": _serialize_sections(project),
     }
 
 
-@router.post("/{slug}/documents", auth=django_auth)
-def create_document_endpoint(request, slug: str, payload: DocumentCreatePayload):
+@router.patch("/{slug}/spec/sections/{section_id}", auth=django_auth)
+def patch_spec_section(request, slug: str, section_id: str, payload: SpecSectionUpdatePayload):
     project = get_project_or_404(slug, request.user)
     actor = resolve_actor(request, project)
     try:
-        document = create_document(
+        update_spec_section(
             project=project,
+            section_id=section_id,
             actor=actor,
             title=payload.title,
-            body=payload.body,
-            document_type=payload.document_type,
             status=payload.status,
-            is_required=payload.is_required,
+            content_json=payload.content_json if payload.content_json is not None else (
+                markdown_to_blocks(payload.body) if payload.body is not None else None
+            ),
         )
     except ValueError as exc:
-        return 422, {"ok": False, "errors": {"title": [str(exc)]}}
-    return {"id": document.id, "slug": document.slug, "status": document.status}
+        return 404, {"ok": False, "errors": {"section": [str(exc)]}}
+    return {"ok": True, "section_id": section_id}
 
 
-@router.get("/{slug}/documents/{document_slug}")
-def get_document(request, slug: str, document_slug: str):
+@router.get("/{slug}/spec/revisions")
+def list_spec_revisions(request, slug: str):
     project = get_project_or_404(slug, request.user)
-    document = project.documents.get(slug=document_slug)
-    return {
-        "id": document.id,
-        "slug": document.slug,
-        "title": document.title,
-        "body": document.body,
-        "status": document.status,
-        "document_type": document.document_type,
-        "source_kind": document.source_kind,
-        "order": document.order,
-        "is_required": document.is_required,
-    }
-
-
-@router.patch("/{slug}/documents/{document_slug}", auth=django_auth)
-def patch_document(request, slug: str, document_slug: str, payload: DocumentUpdatePayload):
-    project = get_project_or_404(slug, request.user)
-    actor = resolve_actor(request, project)
-    document = project.documents.get(slug=document_slug)
-    if payload.is_required is not None:
-        document.is_required = payload.is_required
-        document.save(update_fields=["is_required", "updated_at"])
-    update_document(
-        document=document,
-        actor=actor,
-        title=payload.title,
-        body=payload.body,
-        status=payload.status,
-    )
-    return {"ok": True, "document": document.slug, "status": document.status}
-
-
-@router.delete("/{slug}/documents/{document_slug}", auth=django_auth)
-def delete_document_endpoint(request, slug: str, document_slug: str):
-    project = get_project_or_404(slug, request.user)
-    actor = resolve_actor(request, project)
-    document = project.documents.get(slug=document_slug)
-    delete_document(document=document, actor=actor)
-    return {"ok": True}
-
-
-@router.post("/{slug}/documents/reorder", auth=django_auth)
-def reorder_documents_endpoint(request, slug: str, payload: DocumentReorderPayload):
-    project = get_project_or_404(slug, request.user)
-    actor = resolve_actor(request, project)
-    reorder_documents(project=project, ordered_slugs=payload.slugs, actor=actor)
-    return {"ok": True}
-
-
-@router.get("/{slug}/documents/{document_slug}/revisions")
-def list_document_revisions(request, slug: str, document_slug: str):
-    project = get_project_or_404(slug, request.user)
-    document = project.documents.get(slug=document_slug)
+    spec_document = ensure_spec_document(project)
     return {
         "items": [
             {
@@ -210,7 +146,7 @@ def list_document_revisions(request, slug: str, document_slug: str):
                 "summary": revision.summary,
                 "created_at": revision.created_at.isoformat(),
             }
-            for revision in document.revisions.order_by("-number")
+            for revision in spec_document.revisions.order_by("-number")
         ]
     }
 
@@ -219,13 +155,13 @@ def list_document_revisions(request, slug: str, document_slug: str):
 def create_assumption(request, slug: str, payload: AssumptionPayload):
     project = get_project_or_404(slug, request.user)
     actor = resolve_actor(request, project)
-    document = project.documents.filter(slug=payload.document_slug).first() if payload.document_slug else None
+    primary_ref = build_primary_ref_for_section(project, payload.section_id or "") if payload.section_id else {}
     assumption = Assumption.objects.create(
         project=project,
-        document=document,
         title=payload.title,
         description=payload.description,
         impact=payload.impact,
+        primary_ref=primary_ref,
         created_by=actor,
     )
     revision = capture_project_revision(
@@ -243,7 +179,7 @@ def create_assumption(request, slug: str, payload: AssumptionPayload):
         description=assumption.description,
         source_assumption=assumption,
         project_revision=revision,
-        metadata={"assumption_id": assumption.id, "document_slug": document.slug if document else ""},
+        metadata={"assumption_id": assumption.id, "section_id": primary_ref.get("section_id", "")},
     )
     return {"id": assumption.id, "status": assumption.status}
 
@@ -344,7 +280,7 @@ def list_concerns(request, slug: str):
 @router.get("/{slug}/concerns/{concern_id}")
 def get_concern(request, slug: str, concern_id: int):
     project = get_project_or_404(slug, request.user)
-    concern = project.concerns.prefetch_related("documents", "proposals__changes__document", "posts").get(pk=concern_id)
+    concern = project.concerns.prefetch_related("proposals__changes", "posts").get(pk=concern_id)
     return {
         "concern": serialize_concern(concern),
         "posts": [
@@ -358,7 +294,7 @@ def get_concern(request, slug: str, concern_id: int):
             }
             for post in concern.posts.all()
         ],
-        "proposals": [serialize_proposal(proposal) for proposal in concern.proposals.prefetch_related("changes__document").all()],
+        "proposals": [serialize_proposal(proposal) for proposal in concern.proposals.prefetch_related("changes").all()],
     }
 
 
@@ -384,7 +320,7 @@ def re_evaluate_concern_endpoint(request, slug: str, concern_id: int):
 def resolve_concern_with_ai_endpoint(request, slug: str, concern_id: int):
     project = get_project_or_404(slug, request.user)
     actor = resolve_actor(request, project)
-    concern = project.concerns.prefetch_related("documents").get(pk=concern_id)
+    concern = project.concerns.get(pk=concern_id)
     try:
         proposal = resolve_concern_with_ai(concern, actor=actor)
     except ConcernError as exc:
@@ -408,7 +344,7 @@ def list_concern_proposals(request, slug: str, concern_id: int):
     return {
         "items": [
             serialize_proposal(proposal)
-            for proposal in concern.proposals.prefetch_related("changes__document").all()
+            for proposal in concern.proposals.prefetch_related("changes").all()
         ]
     }
 
@@ -418,7 +354,7 @@ def accept_concern_proposal_change_endpoint(request, slug: str, proposal_id: int
     project = get_project_or_404(slug, request.user)
     actor = resolve_actor(request, project)
     proposal = project.concern_proposals.get(pk=proposal_id)
-    change = proposal.changes.select_related("document", "proposal__concern").get(pk=change_id)
+    change = proposal.changes.select_related("proposal__concern").get(pk=change_id)
     accept_concern_proposal_change(change, actor=actor)
     return {"ok": True, "status": change.status}
 
@@ -428,7 +364,7 @@ def reject_concern_proposal_change_endpoint(request, slug: str, proposal_id: int
     project = get_project_or_404(slug, request.user)
     actor = resolve_actor(request, project)
     proposal = project.concern_proposals.get(pk=proposal_id)
-    change = proposal.changes.select_related("document", "proposal__concern").get(pk=change_id)
+    change = proposal.changes.select_related("proposal__concern").get(pk=change_id)
     reject_concern_proposal_change(change, actor=actor)
     return {"ok": True, "status": change.status}
 

@@ -11,7 +11,7 @@
       <aside class="z-10 flex w-80 flex-shrink-0 flex-col border-r border-gray-200 bg-white">
         <div class="border-b border-gray-100 p-5">
           <h2 class="font-display text-lg font-bold text-gray-900">Project Revisions</h2>
-          <p class="mt-1 text-xs text-gray-500">Project-level snapshots across all documents.</p>
+          <p class="mt-1 text-xs text-gray-500">Project-level snapshots across the single spec.</p>
         </div>
         <div class="flex-1 overflow-y-auto p-5">
           <div class="relative">
@@ -40,13 +40,13 @@
       <section class="flex min-w-0 flex-1 flex-col overflow-hidden">
         <div class="border-b border-gray-200 bg-white px-8 py-6">
           <div class="mb-5">
-            <h1 class="font-display text-3xl font-bold tracking-tight text-gray-900">Document Revision History</h1>
-            <p class="mt-1 text-sm text-gray-500">Inspect revisions for a specific project document.</p>
+            <h1 class="font-display text-3xl font-bold tracking-tight text-gray-900">Section Revision History</h1>
+            <p class="mt-1 text-sm text-gray-500">Inspect revisions for a specific top-level section.</p>
           </div>
           <div class="flex flex-wrap gap-2">
-            {% for document in documents %}
-              <a href="{% url 'project-history' project.slug %}?document={{ document.slug }}" class="rounded-full border px-3 py-1.5 text-sm font-medium transition {% if active_document and document.id == active_document.id %}border-gray-900 bg-gray-900 text-white{% else %}border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-gray-50{% endif %}">
-                {{ document.title }}
+            {% for section in sections %}
+              <a href="{% url 'project-history' project.slug %}?section={{ section.id }}" class="rounded-full border px-3 py-1.5 text-sm font-medium transition {% if active_section and section.id == active_section.id %}border-gray-900 bg-gray-900 text-white{% else %}border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-gray-50{% endif %}">
+                {{ section.title }}
               </a>
             {% endfor %}
           </div>
@@ -55,22 +55,22 @@
         <div class="flex min-h-0 flex-1 overflow-hidden">
           <aside class="flex w-80 flex-shrink-0 flex-col border-r border-gray-200 bg-white">
             <div class="border-b border-gray-100 px-5 py-4">
-              <h2 class="font-display text-lg font-bold text-gray-900">{% if active_document %}{{ active_document.title }}{% else %}Document{% endif %}</h2>
+              <h2 class="font-display text-lg font-bold text-gray-900">{% if active_section %}{{ active_section.title }}{% else %}Section{% endif %}</h2>
             </div>
             <div class="flex-1 overflow-y-auto p-5">
               <div class="space-y-3">
-                {% for revision in document_revisions %}
-                  <div class="rounded-xl border p-4 {% if right_document_revision and revision.id == right_document_revision.id %}border-gray-900 bg-gray-900 text-white{% else %}border-gray-200 bg-white{% endif %}">
+                {% for revision in spec_revisions %}
+                  <div class="rounded-xl border p-4 {% if right_spec_revision and revision.id == right_spec_revision.id %}border-gray-900 bg-gray-900 text-white{% else %}border-gray-200 bg-white{% endif %}">
                     <div class="flex items-baseline justify-between gap-3">
                       <span class="text-sm font-semibold">r{{ revision.number }}</span>
-                      <span class="text-xs {% if right_document_revision and revision.id == right_document_revision.id %}text-white/60{% else %}text-gray-400{% endif %}">{{ revision.created_at|date:"M j, g:i A" }}</span>
+                      <span class="text-xs {% if right_spec_revision and revision.id == right_spec_revision.id %}text-white/60{% else %}text-gray-400{% endif %}">{{ revision.created_at|date:"M j, g:i A" }}</span>
                     </div>
-                    <div class="mt-2 text-sm {% if right_document_revision and revision.id == right_document_revision.id %}text-white{% else %}text-gray-900{% endif %}">{{ revision.title }}</div>
-                    <div class="mt-1 text-xs {% if right_document_revision and revision.id == right_document_revision.id %}text-white/70{% else %}text-gray-500{% endif %}">{{ revision.summary|default:"Document revision captured." }}</div>
+                    <div class="mt-2 text-sm {% if right_spec_revision and revision.id == right_spec_revision.id %}text-white{% else %}text-gray-900{% endif %}">{{ revision.title }}</div>
+                    <div class="mt-1 text-xs {% if right_spec_revision and revision.id == right_spec_revision.id %}text-white/70{% else %}text-gray-500{% endif %}">{{ revision.summary|default:"Spec revision captured." }}</div>
                   </div>
                 {% empty %}
                   <div class="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-4 text-sm text-gray-500">
-                    This document has no revisions yet.
+                    This spec has no revisions yet.
                   </div>
                 {% endfor %}
               </div>
@@ -79,13 +79,13 @@
 
           <section class="min-h-0 flex-1 overflow-y-auto">
             <div class="mx-auto max-w-5xl px-8 py-8 pb-24">
-              {% if left_document_revision and right_document_revision and document_diff %}
+              {% if left_spec_revision and right_spec_revision and section_diff %}
                 <div class="mb-6 flex items-center justify-between">
                   <div class="flex items-center gap-3">
                     <span class="text-sm font-medium text-gray-600">Comparing:</span>
-                    <span class="rounded bg-gray-100 px-2 py-1 text-sm font-medium text-gray-700">r{{ left_document_revision.number }}</span>
+                    <span class="rounded bg-gray-100 px-2 py-1 text-sm font-medium text-gray-700">r{{ left_spec_revision.number }}</span>
                     <iconify-icon icon="lucide:arrow-right" class="text-gray-400"></iconify-icon>
-                    <span class="rounded border border-green-100 bg-green-50 px-2 py-1 text-sm font-medium text-green-700">r{{ right_document_revision.number }}</span>
+                    <span class="rounded border border-green-100 bg-green-50 px-2 py-1 text-sm font-medium text-green-700">r{{ right_spec_revision.number }}</span>
                   </div>
                   {% if right_project_revision %}
                     <span class="text-xs text-gray-400">Latest project revision r{{ right_project_revision.number }}</span>
@@ -96,20 +96,20 @@
                   <div class="workspace-panel p-6 opacity-80">
                     <div class="mb-3 flex items-center justify-between">
                       <h3 class="font-display text-lg font-bold text-gray-900">Previous</h3>
-                      <span class="text-xs text-gray-400">r{{ left_document_revision.number }}</span>
+                      <span class="text-xs text-gray-400">r{{ left_spec_revision.number }}</span>
                     </div>
                     <div class="space-y-4">
                       <div>
                         <div class="text-xs font-medium uppercase tracking-wider text-gray-500">Title</div>
-                        <div class="mt-2 text-sm text-gray-700">{{ document_diff.previous.title }}</div>
+                        <div class="mt-2 text-sm text-gray-700">{{ section_diff.previous.title }}</div>
                       </div>
                       <div>
                         <div class="text-xs font-medium uppercase tracking-wider text-gray-500">Status</div>
-                        <div class="mt-2 text-sm text-gray-700">{{ document_diff.previous.status }}</div>
+                        <div class="mt-2 text-sm text-gray-700">{{ section_diff.previous.status }}</div>
                       </div>
                       <div>
                         <div class="text-xs font-medium uppercase tracking-wider text-gray-500">Body</div>
-                        <div class="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-gray-700">{{ document_diff.previous.body }}</div>
+                        <div class="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-gray-700">{{ section_diff.previous.body }}</div>
                       </div>
                     </div>
                   </div>
@@ -117,13 +117,13 @@
                     <div class="mb-3 flex items-center justify-between">
                       <h3 class="font-display text-lg font-bold text-gray-900">Current</h3>
                       <div class="flex gap-2">
-                        {% if document_diff.title_changed %}
+                        {% if section_diff.title_changed %}
                           <span class="rounded bg-amber-100 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-700">Title</span>
                         {% endif %}
-                        {% if document_diff.status_changed %}
+                        {% if section_diff.status_changed %}
                           <span class="rounded bg-blue-100 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-blue-700">Status</span>
                         {% endif %}
-                        {% if document_diff.body_changed %}
+                        {% if section_diff.body_changed %}
                           <span class="rounded bg-green-100 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-green-700">Body</span>
                         {% endif %}
                       </div>
@@ -131,22 +131,22 @@
                     <div class="space-y-4">
                       <div>
                         <div class="text-xs font-medium uppercase tracking-wider text-gray-500">Title</div>
-                        <div class="mt-2 text-sm text-gray-900">{{ document_diff.current.title }}</div>
+                        <div class="mt-2 text-sm text-gray-900">{{ section_diff.current.title }}</div>
                       </div>
                       <div>
                         <div class="text-xs font-medium uppercase tracking-wider text-gray-500">Status</div>
-                        <div class="mt-2 text-sm text-gray-900">{{ document_diff.current.status }}</div>
+                        <div class="mt-2 text-sm text-gray-900">{{ section_diff.current.status }}</div>
                       </div>
                       <div>
                         <div class="text-xs font-medium uppercase tracking-wider text-gray-500">Body</div>
-                        <div class="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-gray-800">{{ document_diff.current.body }}</div>
+                        <div class="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-gray-800">{{ section_diff.current.body }}</div>
                       </div>
                     </div>
                   </div>
                 </div>
               {% else %}
                 <div class="workspace-panel p-8 text-sm text-gray-500">
-                  Select a document with at least one revision to inspect its history.
+                  Select a section with at least one revision to inspect its history.
                 </div>
               {% endif %}
             </div>

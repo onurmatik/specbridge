@@ -62,17 +62,11 @@ class OpenQuestion(TimeStampedModel):
     project = models.ForeignKey("projects.Project", on_delete=models.CASCADE, related_name="questions")
     title = models.CharField(max_length=255)
     details = models.TextField()
+    primary_ref = models.JSONField(default=dict, blank=True)
     severity = models.CharField(max_length=16, choices=IssueSeverity.choices, default=IssueSeverity.MEDIUM)
     status = models.CharField(max_length=16, choices=IssueStatus.choices, default=IssueStatus.OPEN)
     source_post = models.ForeignKey(
         StreamPost,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="questions",
-    )
-    related_document = models.ForeignKey(
-        "specs.ProjectDocument",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -112,17 +106,11 @@ class Blocker(TimeStampedModel):
     project = models.ForeignKey("projects.Project", on_delete=models.CASCADE, related_name="blockers")
     title = models.CharField(max_length=255)
     details = models.TextField()
+    primary_ref = models.JSONField(default=dict, blank=True)
     severity = models.CharField(max_length=16, choices=IssueSeverity.choices, default=IssueSeverity.HIGH)
     status = models.CharField(max_length=16, choices=IssueStatus.choices, default=IssueStatus.OPEN)
     source_post = models.ForeignKey(
         StreamPost,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="blockers",
-    )
-    related_document = models.ForeignKey(
-        "specs.ProjectDocument",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -163,6 +151,7 @@ class Decision(TimeStampedModel):
     code = models.CharField(max_length=32, blank=True)
     title = models.CharField(max_length=255)
     summary = models.TextField()
+    primary_ref = models.JSONField(default=dict, blank=True)
     status = models.CharField(max_length=16, choices=DecisionStatus.choices, default=DecisionStatus.PENDING)
     proposed_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -173,13 +162,6 @@ class Decision(TimeStampedModel):
     )
     source_post = models.ForeignKey(
         StreamPost,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="decisions",
-    )
-    related_document = models.ForeignKey(
-        "specs.ProjectDocument",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

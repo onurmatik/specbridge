@@ -5,8 +5,9 @@ from django.test import Client, TestCase
 
 from projects.demo import ensure_demo_workspace
 from specs.concerns import ConcernAnalysisResult, ConcernProposalResult, ConcernReevaluationResult
-from specs.models import Assumption, ConcernProposalChange, ConcernRun, ProjectConcern, ProjectDocument
-from specs.services import update_document
+from specs.models import Assumption, ConcernProposalChange, ConcernRun, ProjectConcern
+from specs.services import section_markdown_for_ref, section_summaries, update_spec_section
+from specs.spec_document import markdown_to_blocks
 
 
 class SpecsServiceTests(TestCase):
@@ -15,33 +16,48 @@ class SpecsServiceTests(TestCase):
         self.client = Client()
         self.client.force_login(self.project.created_by)
 
-    def test_document_update_creates_new_revisions(self):
-        document = ProjectDocument.objects.get(project=self.project, slug="requirements")
-        project_revision_count = self.project.revisions.count()
-        document_revision_count = document.revisions.count()
+    def _section(self, key):
+        return next(section for section in section_summaries(self.project) if section["key"] == key)
 
-        update_document(document=document, body=f"{document.body}\n\nExtra detail.")
+    def test_section_update_creates_new_revisions(self):
+        section = self._section("requirements")
+        project_revision_count = self.project.revisions.count()
+        spec_revision_count = self.project.spec_document.revisions.count()
+
+        update_spec_section(
+            project=self.project,
+            section_id=section["id"],
+            content_json=markdown_to_blocks(f"{section['body']}\n\nExtra detail."),
+        )
 
         self.assertEqual(self.project.revisions.count(), project_revision_count + 1)
-        document.refresh_from_db()
-        self.assertEqual(document.revisions.count(), document_revision_count + 1)
+        self.project.spec_document.refresh_from_db()
+        self.assertEqual(self.project.spec_document.revisions.count(), spec_revision_count + 1)
 
-    def test_document_update_noop_does_not_create_revisions(self):
-        document = ProjectDocument.objects.get(project=self.project, slug="requirements")
+    def test_section_update_noop_does_not_create_revisions(self):
+        section = self._section("requirements")
         project_revision_count = self.project.revisions.count()
-        document_revision_count = document.revisions.count()
+        spec_revision_count = self.project.spec_document.revisions.count()
 
-        update_document(document=document, body=document.body)
+        update_spec_section(
+            project=self.project,
+            section_id=section["id"],
+            content_json=markdown_to_blocks(section["body"]),
+        )
 
         self.assertEqual(self.project.revisions.count(), project_revision_count)
-        document.refresh_from_db()
-        self.assertEqual(document.revisions.count(), document_revision_count)
+        self.project.spec_document.refresh_from_db()
+        self.assertEqual(self.project.spec_document.revisions.count(), spec_revision_count)
 
-    def test_document_update_marks_linked_concern_stale_and_queues_recheck(self):
+    def test_section_update_marks_linked_concern_stale_and_queues_recheck(self):
         concern = ProjectConcern.objects.get(project=self.project, fingerprint="fallback-mismatch")
-        document = ProjectDocument.objects.get(project=self.project, slug="requirements")
+        section = self._section("requirements")
 
-        update_document(document=document, body=f"{document.body}\n\nAligned fallback language.")
+        update_spec_section(
+            project=self.project,
+            section_id=section["id"],
+            content_json=markdown_to_blocks(f"{section['body']}\n\nAligned fallback language."),
+        )
 
         concern.refresh_from_db()
         self.assertEqual(concern.status, "stale")
@@ -54,20 +70,21 @@ class SpecsServiceTests(TestCase):
             ).exists()
         )
 
-    def test_document_revisions_endpoint_returns_items(self):
-        response = self.client.get(f"/api/projects/{self.project.slug}/documents/requirements/revisions")
+    def test_spec_revisions_endpoint_returns_items(self):
+        response = self.client.get(f"/api/projects/{self.project.slug}/spec/revisions")
 
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json()["items"])
 
     def test_create_and_validate_assumption_endpoints(self):
+        section = self._section("requirements")
         response = self.client.post(
             f"/api/projects/{self.project.slug}/assumptions",
             data=json.dumps(
                 {
                     "title": "New assumption",
                     "description": "A test assumption",
-                    "document_slug": "requirements",
+                    "section_id": section["id"],
                     "impact": "medium",
                 }
             ),
@@ -75,7 +92,7 @@ class SpecsServiceTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         assumption = Assumption.objects.get(title="New assumption")
-        self.assertEqual(assumption.document.slug, "requirements")
+        self.assertEqual(assumption.primary_ref["section_id"], section["id"])
         validate = self.client.post(
             f"/api/projects/{self.project.slug}/assumptions/{assumption.id}/validate",
             data=json.dumps({}),
@@ -95,7 +112,7 @@ class SpecsServiceTests(TestCase):
                     "concern_type": "usability",
                     "fingerprint": "ui-fallback-copy",
                     "title": "Fallback copy is still too vague",
-                    "summary": "The UI/UX doc does not define the exact copy for delayed delivery.",
+                    "summary": "The UI/UX section does not define the exact copy for delayed delivery.",
                     "severity": "medium",
                     "recommendation": "Spell out the fallback copy and escalation language.",
                     "source_refs": [
@@ -115,6 +132,7 @@ class SpecsServiceTests(TestCase):
         concern = ProjectConcern.objects.get(project=self.project, fingerprint__isnull=False, title="Fallback copy is still too vague")
         self.assertEqual(concern.concern_type, "usability")
         self.assertEqual(concern.status, "open")
+        self.assertTrue(concern.node_refs)
 
     @patch("specs.concerns.reevaluate_concern_with_ai")
     def test_re_evaluate_concern_endpoint_updates_status(self, mock_reevaluate):
@@ -124,7 +142,7 @@ class SpecsServiceTests(TestCase):
             model="gpt-5-mini",
             status="resolved",
             title=concern.title,
-            summary="Ownership is now clear in the linked documents.",
+            summary="Ownership is now clear in the linked sections.",
             severity="low",
             recommendation="Keep the owner listed in requirements and infra.",
             source_refs=[
@@ -142,22 +160,25 @@ class SpecsServiceTests(TestCase):
         self.assertEqual(response.status_code, 200)
         concern.refresh_from_db()
         self.assertEqual(concern.status, "resolved")
+        self.assertEqual(len(concern.node_refs), 2)
 
     @patch("specs.concerns.build_concern_proposal_with_ai")
     def test_resolve_concern_with_ai_endpoint_creates_reviewable_proposal(self, mock_build_proposal):
         concern = ProjectConcern.objects.get(project=self.project, fingerprint="human-fallback-ownership")
+        requirements_section = self._section("requirements")
+        infra_section = self._section("infra")
         mock_build_proposal.return_value = ConcernProposalResult(
             provider="openai",
             model="gpt-5-mini",
             summary="Apply one ownership note to requirements and infra.",
             changes=[
                 {
-                    "document_slug": "requirements",
+                    "section_id": requirements_section["id"],
                     "summary": "Name the fallback owner in requirements.",
                     "proposed_body": "Updated requirements body",
                 },
                 {
-                    "document_slug": "infra",
+                    "section_id": infra_section["id"],
                     "summary": "Mirror the same owner in infra.",
                     "proposed_body": "Updated infra body",
                 },
@@ -175,10 +196,14 @@ class SpecsServiceTests(TestCase):
         proposal = concern.proposals.first()
         self.assertIsNotNone(proposal)
         self.assertEqual(proposal.changes.count(), 2)
+        self.assertEqual(
+            set(proposal.changes.values_list("section_id", flat=True)),
+            {requirements_section["id"], infra_section["id"]},
+        )
 
-    def test_accepting_proposal_change_updates_document_and_marks_concern_stale(self):
-        change = ConcernProposalChange.objects.select_related("proposal__concern", "document").first()
-        document_revision_count = change.document.revisions.count()
+    def test_accepting_proposal_change_updates_section_and_marks_concern_stale(self):
+        change = ConcernProposalChange.objects.select_related("proposal__concern").first()
+        spec_revision_count = self.project.spec_document.revisions.count()
 
         response = self.client.post(
             f"/api/projects/{self.project.slug}/concern-proposals/{change.proposal_id}/changes/{change.id}/accept",
@@ -189,8 +214,12 @@ class SpecsServiceTests(TestCase):
         self.assertEqual(response.status_code, 200)
         change.refresh_from_db()
         self.assertEqual(change.status, "accepted")
-        change.document.refresh_from_db()
-        self.assertEqual(change.document.body, change.proposed_body)
-        self.assertEqual(change.document.revisions.count(), document_revision_count + 1)
+        self.project.refresh_from_db()
+        self.assertEqual(
+            section_markdown_for_ref(self.project, {"section_id": change.section_id}).strip(),
+            change.proposed_body.strip(),
+        )
+        self.project.spec_document.refresh_from_db()
+        self.assertEqual(self.project.spec_document.revisions.count(), spec_revision_count + 1)
         change.proposal.concern.refresh_from_db()
         self.assertEqual(change.proposal.concern.status, "stale")

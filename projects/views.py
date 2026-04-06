@@ -178,7 +178,11 @@ def project_workspace(request, slug):
     return render(
         request,
         "pages/workspace.html",
-        workspace_context(project, active_concern_id=request.GET.get("concern")),
+        workspace_context(
+            project,
+            active_concern_id=request.GET.get("concern"),
+            active_section_id=request.GET.get("section"),
+        ),
     )
 
 
@@ -197,7 +201,7 @@ def project_history(request, slug):
     return render(
         request,
         "pages/history.html",
-        history_context(project, active_document_slug=request.GET.get("document")),
+        history_context(project, active_section_id=request.GET.get("section")),
     )
 
 

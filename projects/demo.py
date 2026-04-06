@@ -35,13 +35,10 @@ from specs.models import (
     ConsistencyIssueStatus,
     ConsistencyRun,
     ConsistencyRunStatus,
-    DocumentSourceKind,
-    DocumentStatus,
-    DocumentType,
-    ProjectDocument,
     ProjectConcern,
 )
-from specs.services import bootstrap_documents, capture_document_revision, capture_project_revision
+from specs.services import bootstrap_spec_document, capture_project_revision, ensure_spec_document, section_summaries
+from specs.spec_document import markdown_to_blocks, update_section_content
 
 DEMO_PROJECT_SLUG = "q3-auth-revamp"
 DEMO_USERNAMES = {"sarah", "marcus", "lena"}
@@ -51,6 +48,28 @@ def _set_timestamp(instance, when):
     instance.__class__.objects.filter(pk=instance.pk).update(created_at=when, updated_at=when)
     instance.created_at = when
     instance.updated_at = when
+
+
+def _section_lookup(project):
+    return {section["key"]: section for section in section_summaries(project)}
+
+
+def _apply_section_bodies(project, payloads: dict[str, dict]):
+    spec_document = ensure_spec_document(project)
+    content_json = spec_document.content_json
+    lookup = _section_lookup(project)
+    for key, payload in payloads.items():
+        section = lookup[key]
+        content_json, _, _ = update_section_content(
+            content_json,
+            section["id"],
+            title=payload.get("title"),
+            status=payload.get("status"),
+            content_blocks=markdown_to_blocks(payload.get("body", "")),
+        )
+    spec_document.content_json = content_json
+    spec_document.save(update_fields=["content_json", "updated_at"])
+    return _section_lookup(project)
 
 
 def ensure_demo_workspace():
@@ -112,9 +131,9 @@ def ensure_demo_workspace():
             defaults={
                 "organization": org,
                 "name": "Authentication Revamp",
-                "tagline": "Collaborative, agent-driven refinement for a multi-document auth rollout.",
+                "tagline": "Collaborative, agent-driven refinement for a single-spec auth rollout.",
                 "summary": (
-                    "A multi-document workspace for shifting from passwords to magic-link-first "
+                    "A single-spec workspace for shifting from passwords to magic-link-first "
                     "authentication while keeping product, design, and engineering aligned."
                 ),
                 "status_label": "Aligning",
@@ -138,131 +157,96 @@ def ensure_demo_workspace():
             defaults={"role": MembershipRole.DESIGN, "invited_by": lena},
         )
 
-        documents = {document.slug: document for document in bootstrap_documents(project)}
-        for index, payload in enumerate(
-            (
-                {"slug": "goals", "title": "Goals", "document_type": DocumentType.GOALS},
-                {"slug": "requirements", "title": "Requirements", "document_type": DocumentType.REQUIREMENTS},
-                {"slug": "ui-ux", "title": "UI/UX", "document_type": DocumentType.UI_UX},
-                {"slug": "tech-stack", "title": "Tech Stack", "document_type": DocumentType.TECH_STACK},
-                {"slug": "infra", "title": "Infra", "document_type": DocumentType.INFRA},
-                {
-                    "slug": "risks-open-questions",
-                    "title": "Risks & Open Questions",
-                    "document_type": DocumentType.RISKS_OPEN_QUESTIONS,
+        bootstrap_spec_document(project)
+        sections = _apply_section_bodies(
+            project,
+            {
+                "overview": {
+                    "body": (
+                        "Authentication is moving to a single spec workspace so product, design, "
+                        "and engineering can maintain one structured source of truth while still tracking alignment."
+                    ),
+                    "status": "aligned",
                 },
-            ),
-            start=2,
-        ):
-            document = ProjectDocument.objects.create(
-                project=project,
-                slug=payload["slug"],
-                title=payload["title"],
-                document_type=payload["document_type"],
-                source_kind=DocumentSourceKind.PRESET,
-                body="",
-                status=DocumentStatus.ITERATING,
-                order=index,
-                is_required=False,
-            )
-            documents[document.slug] = document
-
-        seed_content = {
-            "overview": {
-                "body": (
-                    "Authentication is moving to a multi-document planning model so product, design, "
-                    "and engineering can maintain separate source documents while still tracking alignment."
-                ),
-                "status": DocumentStatus.ALIGNED,
+                "goals": {
+                    "body": (
+                        "- Increase signup conversion by 30%.\n"
+                        "- Reduce password-reset support load by 50%.\n"
+                        "- Keep enterprise SSO as a compliant escape hatch."
+                    ),
+                    "status": "aligned",
+                },
+                "requirements": {
+                    "body": (
+                        "- New individual users authenticate with magic links.\n"
+                        "- Existing password users get a 30-day grace period.\n"
+                        "- Enterprise tenants retain SSO."
+                    ),
+                    "status": "iterating",
+                },
+                "ui-ux": {
+                    "body": (
+                        "The login and signup entry points collapse to a single email field. "
+                        "Delayed delivery needs visible recovery guidance and a retry affordance."
+                    ),
+                    "status": "iterating",
+                },
+                "tech-stack": {
+                    "body": (
+                        "Auth services need token issuance, delivery telemetry, and a reversible rollout path "
+                        "for password deprecation."
+                    ),
+                    "status": "iterating",
+                },
+                "infra": {
+                    "body": (
+                        "Infra needs provider health monitoring, retry-safe delivery pipelines, and tenant-aware "
+                        "SSO routing."
+                    ),
+                    "status": "iterating",
+                },
+                "risks-open-questions": {
+                    "body": (
+                        "- Email latency beyond 10s may cause drop-off.\n"
+                        "- Phase 1 payment identity requirements remain unconfirmed."
+                    ),
+                    "status": "blocked",
+                },
             },
-            "goals": {
-                "body": (
-                    "- Increase signup conversion by 30%.\n"
-                    "- Reduce password-reset support load by 50%.\n"
-                    "- Keep enterprise SSO as a compliant escape hatch."
-                ),
-                "status": DocumentStatus.ALIGNED,
-            },
-            "requirements": {
-                "body": (
-                    "- New individual users authenticate with magic links.\n"
-                    "- Existing password users get a 30-day grace period.\n"
-                    "- Enterprise tenants retain SSO."
-                ),
-                "status": DocumentStatus.ITERATING,
-            },
-            "ui-ux": {
-                "body": (
-                    "The login and signup entry points collapse to a single email field. "
-                    "Delayed delivery needs visible recovery guidance and a retry affordance."
-                ),
-                "status": DocumentStatus.ITERATING,
-            },
-            "tech-stack": {
-                "body": (
-                    "Auth services need token issuance, delivery telemetry, and a reversible rollout path "
-                    "for password deprecation."
-                ),
-                "status": DocumentStatus.ITERATING,
-            },
-            "infra": {
-                "body": (
-                    "Infra needs provider health monitoring, retry-safe delivery pipelines, and tenant-aware "
-                    "SSO routing."
-                ),
-                "status": DocumentStatus.ITERATING,
-            },
-            "risks-open-questions": {
-                "body": (
-                    "- Email latency beyond 10s may cause drop-off.\n"
-                    "- Phase 1 payment identity requirements remain unconfirmed."
-                ),
-                "status": DocumentStatus.BLOCKED,
-            },
-        }
-
-        initial_revision = capture_project_revision(
+        )
+        capture_project_revision(
             project=project,
-            title="Workspace migrated to multi-document model",
-            summary="Created the expanded starter document set for the auth initiative.",
+            title="Workspace migrated to single spec model",
+            summary="Created the expanded starter section set for the auth initiative.",
             actor=marcus,
         )
-        for slug, payload in seed_content.items():
-            document = documents[slug]
-            document.body = payload["body"]
-            document.status = payload["status"]
-            document.save(update_fields=["body", "status", "updated_at"])
-            capture_document_revision(
-                document=document,
-                title=f"Seeded {document.title}",
-                summary=document.body[:160],
-                actor=marcus,
-                project_revision=initial_revision,
-            )
 
-        follow_up_revision = capture_project_revision(
+        sections = _apply_section_bodies(
+            project,
+            {
+                "infra": {
+                    "body": (
+                        "Infra needs provider health monitoring, retry-safe delivery pipelines, and tenant-aware "
+                        "SSO routing.\n\n"
+                        "Delivery health must be exposed in operator tooling every 5 minutes."
+                    ),
+                    "status": "iterating",
+                },
+                "ui-ux": {
+                    "body": (
+                        "The login and signup entry points collapse to a single email field. "
+                        "Delayed delivery needs visible recovery guidance and a retry affordance.\n\n"
+                        "If delivery exceeds the SLA, the UI must explain next steps in plain language."
+                    ),
+                    "status": "iterating",
+                },
+            },
+        )
+        capture_project_revision(
             project=project,
             title="Infra and UI/UX refined",
-            summary="Refined fallback and delivery visibility expectations across docs.",
+            summary="Refined fallback and delivery visibility expectations across sections.",
             actor=lena,
-        )
-        documents["infra"].body += "\n\nDelivery health must be exposed in operator tooling every 5 minutes."
-        documents["infra"].save(update_fields=["body", "updated_at"])
-        capture_document_revision(
-            document=documents["infra"],
-            title="Infra refinement",
-            summary=documents["infra"].body[:160],
-            actor=lena,
-            project_revision=follow_up_revision,
-        )
-        documents["ui-ux"].body += "\n\nIf delivery exceeds the SLA, the UI must explain next steps in plain language."
-        documents["ui-ux"].save(update_fields=["body", "updated_at"])
-        capture_document_revision(
-            document=documents["ui-ux"],
-            title="UI/UX refinement",
-            summary=documents["ui-ux"].body[:160],
-            actor=lena,
-            project_revision=follow_up_revision,
         )
 
         ceo_post = StreamPost.objects.create(
@@ -272,8 +256,8 @@ def ensure_demo_workspace():
             actor_title="CEO",
             kind=StreamPostKind.COMMENT,
             body=(
-                "We need each core planning area in its own document now. I still want magic links to be "
-                "the primary direction, but contradictions across docs must be visible."
+                "We need each core planning area in one shared spec now. I still want magic links to be "
+                "the primary direction, but contradictions across sections must be visible."
             ),
         )
         _set_timestamp(ceo_post, now - timezone.timedelta(hours=1, minutes=8))
@@ -285,7 +269,7 @@ def ensure_demo_workspace():
             kind=StreamPostKind.AGENT,
             body=(
                 "Requirements and infra are close, but the fallback path is still underspecified across the "
-                "document set."
+                "spec."
             ),
         )
         _set_timestamp(agent_post, now - timezone.timedelta(hours=1, minutes=2))
@@ -310,7 +294,7 @@ def ensure_demo_workspace():
             actor_title="CEO",
             kind=StreamPostKind.COMMENT,
             body=(
-                "If the delivery provider slips, the experience degrades quickly. I want the project documents "
+                "If the delivery provider slips, the experience degrades quickly. I want the spec "
                 "to spell out the recovery path."
             ),
         )
@@ -330,6 +314,7 @@ def ensure_demo_workspace():
             analyzed_at=now - timezone.timedelta(minutes=4),
         )
 
+        fallback_refs = [sections["requirements"], sections["ui-ux"], sections["infra"]]
         fallback_concern = ProjectConcern.objects.create(
             project=project,
             run=concern_run,
@@ -338,21 +323,29 @@ def ensure_demo_workspace():
             concern_type=ConcernType.CONSISTENCY,
             raised_by_kind=ConcernRaisedByKind.AI,
             title="Fallback mismatch across requirements, UI/UX, and infra",
-            summary="The delayed-email fallback still differs across the product, UX, and infra documents.",
+            summary="The delayed-email fallback still differs across the product, UX, and infra sections.",
             severity=ConcernSeverity.HIGH,
             status=ConcernStatus.OPEN,
             source_refs=[
-                {"kind": "document", "identifier": "requirements", "label": "Requirements"},
-                {"kind": "document", "identifier": "ui-ux", "label": "UI/UX"},
-                {"kind": "document", "identifier": "infra", "label": "Infra"},
+                {"kind": "section", "identifier": section["id"], "label": section["title"]}
+                for section in fallback_refs
             ],
-            recommendation="Define one shared fallback contract and keep the affected documents in sync.",
+            node_refs=[
+                {
+                    "section_id": section["id"],
+                    "node_id": "",
+                    "label": section["title"],
+                    "excerpt": section["body"][:240],
+                }
+                for section in fallback_refs
+            ],
+            recommendation="Define one shared fallback contract and keep the affected sections in sync.",
             detected_at=now - timezone.timedelta(minutes=4),
             last_seen_at=now - timezone.timedelta(minutes=4),
             last_reevaluated_at=now - timezone.timedelta(minutes=4),
         )
-        fallback_concern.documents.add(documents["requirements"], documents["ui-ux"], documents["infra"])
 
+        viability_refs = [sections["overview"], sections["risks-open-questions"]]
         viability_concern = ProjectConcern.objects.create(
             project=project,
             run=concern_run,
@@ -361,20 +354,29 @@ def ensure_demo_workspace():
             concern_type=ConcernType.BUSINESS_VIABILITY,
             raised_by_kind=ConcernRaisedByKind.AI,
             title="Phase 1 identity scope is still commercially ambiguous",
-            summary="The current project documents still do not make it clear whether identity verification joins Phase 1.",
+            summary="The current spec still does not make it clear whether identity verification joins Phase 1.",
             severity=ConcernSeverity.MEDIUM,
             status=ConcernStatus.OPEN,
             source_refs=[
-                {"kind": "document", "identifier": "risks-open-questions", "label": "Risks & Open Questions"},
-                {"kind": "document", "identifier": "overview", "label": "Overview"},
+                {"kind": "section", "identifier": section["id"], "label": section["title"]}
+                for section in viability_refs
             ],
-            recommendation="Confirm the Phase 1 commercial scope and reflect it in the project overview and risks document.",
+            node_refs=[
+                {
+                    "section_id": section["id"],
+                    "node_id": "",
+                    "label": section["title"],
+                    "excerpt": section["body"][:240],
+                }
+                for section in viability_refs
+            ],
+            recommendation="Confirm the Phase 1 commercial scope and reflect it in the overview and risks sections.",
             detected_at=now - timezone.timedelta(minutes=4),
             last_seen_at=now - timezone.timedelta(minutes=4),
             last_reevaluated_at=now - timezone.timedelta(minutes=4),
         )
-        viability_concern.documents.add(documents["overview"], documents["risks-open-questions"])
 
+        human_refs = [sections["requirements"], sections["infra"]]
         human_concern = ProjectConcern.objects.create(
             project=project,
             source_post=eng_post,
@@ -387,16 +389,26 @@ def ensure_demo_workspace():
             status=ConcernStatus.STALE,
             source_refs=[
                 {"kind": "stream_post", "identifier": str(eng_post.id), "label": "Marcus comment"},
-                {"kind": "document", "identifier": "requirements", "label": "Requirements"},
-                {"kind": "document", "identifier": "infra", "label": "Infra"},
+                *[
+                    {"kind": "section", "identifier": section["id"], "label": section["title"]}
+                    for section in human_refs
+                ],
             ],
-            recommendation="Assign one owner, update the documents, and then re-evaluate this concern.",
+            node_refs=[
+                {
+                    "section_id": section["id"],
+                    "node_id": "",
+                    "label": section["title"],
+                    "excerpt": section["body"][:240],
+                }
+                for section in human_refs
+            ],
+            recommendation="Assign one owner, update the sections, and then re-evaluate this concern.",
             detected_at=eng_post.created_at,
             last_seen_at=eng_post.created_at,
             reevaluation_requested_at=now - timezone.timedelta(minutes=10),
             created_by=marcus,
         )
-        human_concern.documents.add(documents["requirements"], documents["infra"])
 
         concern_post = StreamPost.objects.create(
             project=project,
@@ -405,7 +417,7 @@ def ensure_demo_workspace():
             actor_title="Lead Eng",
             kind=StreamPostKind.COMMENT,
             concern=fallback_concern,
-            body="We need the same SLA and same operator playbook spelled out in all three docs.",
+            body="We need the same SLA and same operator playbook spelled out in all three sections.",
         )
         _set_timestamp(concern_post, now - timezone.timedelta(minutes=7))
 
@@ -430,22 +442,71 @@ def ensure_demo_workspace():
         )
         ConcernProposalChange.objects.create(
             proposal=fallback_proposal,
-            document=documents["requirements"],
+            section_ref={
+                "section_id": sections["requirements"]["id"],
+                "node_id": "",
+                "label": sections["requirements"]["title"],
+                "excerpt": sections["requirements"]["body"][:240],
+            },
+            section_id=sections["requirements"]["id"],
+            section_title=sections["requirements"]["title"],
+            original_section_json={},
+            proposed_section_json={
+                "type": "specSection",
+                "attrs": {
+                    "id": sections["requirements"]["id"],
+                    "key": sections["requirements"]["key"],
+                    "title": sections["requirements"]["title"],
+                    "kind": sections["requirements"]["kind"],
+                    "status": sections["requirements"]["status"],
+                    "required": sections["requirements"]["required"],
+                    "legacy_slug": sections["requirements"]["legacy_slug"],
+                },
+                "content": markdown_to_blocks(
+                    f"{sections['requirements']['body']}\n"
+                    "- If delivery exceeds 15 seconds, the UI shows retry guidance and a support escalation path.\n"
+                    "- The same 15 second threshold becomes the shared fallback contract across product and infra.\n"
+                ),
+            },
             summary="Add one explicit fallback flow and SLA to the product requirement.",
-            original_body=documents["requirements"].body,
+            original_body=sections["requirements"]["body"],
             proposed_body=(
-                f"{documents['requirements'].body}\n"
+                f"{sections['requirements']['body']}\n"
                 "- If delivery exceeds 15 seconds, the UI shows retry guidance and a support escalation path.\n"
                 "- The same 15 second threshold becomes the shared fallback contract across product and infra.\n"
             ),
         )
         ConcernProposalChange.objects.create(
             proposal=fallback_proposal,
-            document=documents["infra"],
+            section_ref={
+                "section_id": sections["infra"]["id"],
+                "node_id": "",
+                "label": sections["infra"]["title"],
+                "excerpt": sections["infra"]["body"][:240],
+            },
+            section_id=sections["infra"]["id"],
+            section_title=sections["infra"]["title"],
+            original_section_json={},
+            proposed_section_json={
+                "type": "specSection",
+                "attrs": {
+                    "id": sections["infra"]["id"],
+                    "key": sections["infra"]["key"],
+                    "title": sections["infra"]["title"],
+                    "kind": sections["infra"]["kind"],
+                    "status": sections["infra"]["status"],
+                    "required": sections["infra"]["required"],
+                    "legacy_slug": sections["infra"]["legacy_slug"],
+                },
+                "content": markdown_to_blocks(
+                    f"{sections['infra']['body']}\n\n"
+                    "Delayed email recovery uses the same 15 second SLA as product. Operator tooling must show when that SLA is breached and what escalation path is active."
+                ),
+            },
             summary="Mirror the same fallback contract in operator-facing infra notes.",
-            original_body=documents["infra"].body,
+            original_body=sections["infra"]["body"],
             proposed_body=(
-                f"{documents['infra'].body}\n\n"
+                f"{sections['infra']['body']}\n\n"
                 "Delayed email recovery uses the same 15 second SLA as product. Operator tooling must show when that SLA is breached and what escalation path is active."
             ),
         )
@@ -457,7 +518,12 @@ def ensure_demo_workspace():
             severity=IssueSeverity.HIGH,
             status=IssueStatus.OPEN,
             source_post=fallback_post,
-            related_document=documents["requirements"],
+            primary_ref={
+                "section_id": sections["requirements"]["id"],
+                "node_id": "",
+                "label": sections["requirements"]["title"],
+                "excerpt": sections["requirements"]["body"][:240],
+            },
             raised_by=sarah,
             owner=marcus,
         )
@@ -469,7 +535,12 @@ def ensure_demo_workspace():
             severity=IssueSeverity.MEDIUM,
             status=IssueStatus.RESOLVED,
             source_post=agent_post,
-            related_document=documents["requirements"],
+            primary_ref={
+                "section_id": sections["requirements"]["id"],
+                "node_id": "",
+                "label": sections["requirements"]["title"],
+                "excerpt": sections["requirements"]["body"][:240],
+            },
             raised_by=sarah,
             owner=marcus,
             resolved_by=marcus,
@@ -482,7 +553,12 @@ def ensure_demo_workspace():
             details="Cannot finalize auth rollout without confirming whether identity verification joins Phase 1.",
             severity=IssueSeverity.CRITICAL,
             status=IssueStatus.OPEN,
-            related_document=documents["risks-open-questions"],
+            primary_ref={
+                "section_id": sections["risks-open-questions"]["id"],
+                "node_id": "",
+                "label": sections["risks-open-questions"]["title"],
+                "excerpt": sections["risks-open-questions"]["body"][:240],
+            },
             raised_by=marcus,
             owner=lena,
         )
@@ -493,7 +569,12 @@ def ensure_demo_workspace():
             summary="Delete all passwords on launch day and require magic links instantly.",
             status=DecisionStatus.REJECTED,
             proposed_by=sarah,
-            related_document=documents["requirements"],
+            primary_ref={
+                "section_id": sections["requirements"]["id"],
+                "node_id": "",
+                "label": sections["requirements"]["title"],
+                "excerpt": sections["requirements"]["body"][:240],
+            },
             implementation_progress=0,
         )
         _set_timestamp(old_decision, now - timezone.timedelta(days=1))
@@ -508,7 +589,12 @@ def ensure_demo_workspace():
             status=DecisionStatus.APPROVED,
             proposed_by=sarah,
             source_post=eng_post,
-            related_document=documents["requirements"],
+            primary_ref={
+                "section_id": sections["requirements"]["id"],
+                "node_id": "",
+                "label": sections["requirements"]["title"],
+                "excerpt": sections["requirements"]["body"][:240],
+            },
             supersedes=old_decision,
             implementation_progress=10,
             approved_at=now - timezone.timedelta(minutes=40),
@@ -523,7 +609,12 @@ def ensure_demo_workspace():
             summary="The default login and signup entry point becomes an email-only magic-link flow.",
             status=DecisionStatus.IMPLEMENTED,
             proposed_by=sarah,
-            related_document=documents["requirements"],
+            primary_ref={
+                "section_id": sections["requirements"]["id"],
+                "node_id": "",
+                "label": sections["requirements"]["title"],
+                "excerpt": sections["requirements"]["body"][:240],
+            },
             implementation_progress=100,
             approved_at=now - timezone.timedelta(days=12),
             implemented_at=now - timezone.timedelta(days=11),
@@ -536,12 +627,22 @@ def ensure_demo_workspace():
             status=DecisionStatus.PENDING,
             proposed_by=marcus,
             source_post=fallback_post,
-            related_document=documents["infra"],
+            primary_ref={
+                "section_id": sections["infra"]["id"],
+                "node_id": "",
+                "label": sections["infra"]["title"],
+                "excerpt": sections["infra"]["body"][:240],
+            },
         )
 
         Assumption.objects.create(
             project=project,
-            document=documents["requirements"],
+            primary_ref={
+                "section_id": sections["requirements"]["id"],
+                "node_id": "",
+                "label": sections["requirements"]["title"],
+                "excerpt": sections["requirements"]["body"][:240],
+            },
             title="Enterprise tenants will retain SSO",
             description="Premium organizations require SSO bypass for compliance and DNS-enforced auth.",
             impact="high",
@@ -553,9 +654,14 @@ def ensure_demo_workspace():
 
         Assumption.objects.create(
             project=project,
-            document=documents["risks-open-questions"],
+            primary_ref={
+                "section_id": sections["risks-open-questions"]["id"],
+                "node_id": "",
+                "label": sections["risks-open-questions"]["title"],
+                "excerpt": sections["risks-open-questions"]["body"][:240],
+            },
             title="Email providers can meet a 10 second target",
-            description="The current document set assumes delivery latency is acceptable without a second channel.",
+            description="The current spec assumes delivery latency is acceptable without a second channel.",
             impact="critical",
             status=AssumptionStatus.OPEN,
             source_post=fallback_post,
@@ -565,10 +671,15 @@ def ensure_demo_workspace():
         AgentSuggestion.objects.create(
             project=project,
             title="Clarify delayed-email fallback",
-            summary="The current document set leaves the delayed-email fallback too vague for implementation.",
-            related_document=documents["requirements"],
+            summary="The current spec leaves the delayed-email fallback too vague for implementation.",
+            primary_ref={
+                "section_id": sections["requirements"]["id"],
+                "node_id": "",
+                "label": sections["requirements"]["title"],
+                "excerpt": sections["requirements"]["body"][:240],
+            },
             payload={
-                "status": DocumentStatus.ITERATING,
+                "status": "iterating",
                 "body_append": (
                     "Open issue: define the exact UI fallback and operational SLA for delayed email delivery "
                     "before implementation starts."
@@ -594,10 +705,10 @@ def ensure_demo_workspace():
             severity=ConsistencyIssueSeverity.HIGH,
             status=ConsistencyIssueStatus.OPEN,
             source_refs=[
-                {"kind": "document", "identifier": "requirements", "label": "Requirements"},
-                {"kind": "document", "identifier": "infra", "label": "Infra"},
+                {"kind": "section", "identifier": sections["requirements"]["id"], "label": sections["requirements"]["title"]},
+                {"kind": "section", "identifier": sections["infra"]["id"], "label": sections["infra"]["title"]},
             ],
-            recommendation="Define the same delayed-email fallback contract in both documents.",
+            recommendation="Define the same delayed-email fallback contract in both sections.",
             detected_at=now - timezone.timedelta(minutes=5),
             last_seen_at=now - timezone.timedelta(minutes=5),
         )
@@ -609,7 +720,7 @@ def ensure_demo_workspace():
             filename="q3-auth-revamp_prd_seed.md",
             status=ExportStatus.READY,
             generated_by=sarah,
-            configuration={"document_slugs": "overview,goals,requirements,ui-ux,tech-stack,infra,risks-open-questions"},
+            configuration={"section_ids": ",".join(section["id"] for section in sections.values())},
             content="# Authentication Revamp\n\nSeed export.",
             share_enabled=True,
             share_token="demo-share-token",

@@ -6,7 +6,13 @@ from django.utils import timezone
 
 from alignment.models import DecisionStatus, IssueStatus
 from specs.models import AuditEventType, ConcernStatus, ConcernType, DocumentStatus
-from specs.services import capture_project_revision, log_audit_event
+from specs.services import (
+    capture_project_revision,
+    ensure_spec_document,
+    log_audit_event,
+    section_summaries,
+)
+from specs.spec_document import update_section_content
 
 
 def build_workspace_entries(project):
@@ -24,20 +30,20 @@ def build_workspace_entries(project):
             "created_at": decision.created_at,
             "decision": decision,
         }
-        for decision in project.decisions.select_related("related_document").exclude(status=DecisionStatus.PENDING)
+        for decision in project.decisions.exclude(status=DecisionStatus.PENDING)
     )
     return sorted(entries, key=lambda item: item["created_at"])
 
 
 def compute_dashboard_metrics(project):
-    documents = list(project.documents.all())
-    required_documents = [document for document in documents if document.is_required]
-    aligned_count = sum(1 for document in documents if document.status == DocumentStatus.ALIGNED)
-    iterating_count = sum(1 for document in documents if document.status == DocumentStatus.ITERATING)
-    blocked_count = sum(1 for document in documents if document.status == DocumentStatus.BLOCKED)
+    sections = section_summaries(project)
+    required_sections = [section for section in sections if section["required"]]
+    aligned_count = sum(1 for section in sections if section["status"] == DocumentStatus.ALIGNED)
+    iterating_count = sum(1 for section in sections if section["status"] == DocumentStatus.ITERATING)
+    blocked_count = sum(1 for section in sections if section["status"] == DocumentStatus.BLOCKED)
     completeness = 0
-    if required_documents:
-        completeness = sum(1 for document in required_documents if document.body.strip()) / len(required_documents)
+    if required_sections:
+        completeness = sum(1 for section in required_sections if section["body"].strip()) / len(required_sections)
 
     active_concerns = project.concerns.filter(status__in=[ConcernStatus.OPEN, ConcernStatus.STALE])
     critical_concerns = active_concerns.filter(severity="critical").count()
@@ -66,8 +72,8 @@ def compute_dashboard_metrics(project):
     ).count()
     decision_velocity = round(approved_in_week / 7, 1)
 
-    alignment = round((aligned_count / len(documents)) * 100) if documents else 0
-    by_status = Counter(document.status for document in documents)
+    alignment = round((aligned_count / len(sections)) * 100) if sections else 0
+    by_status = Counter(section["status"] for section in sections)
     return {
         "alignment_percentage": alignment,
         "maturity_score": maturity_score,
@@ -101,9 +107,17 @@ def approve_decision(decision, actor):
     decision.status = DecisionStatus.APPROVED
     decision.approved_at = timezone.now()
     decision.save(update_fields=["status", "approved_at", "updated_at"])
-    if decision.related_document:
-        decision.related_document.status = DocumentStatus.ALIGNED
-        decision.related_document.save(update_fields=["status", "updated_at"])
+    primary_ref = decision.primary_ref or {}
+    if primary_ref.get("section_id"):
+        spec_document = ensure_spec_document(decision.project)
+        next_content, _, changed = update_section_content(
+            spec_document.content_json,
+            primary_ref["section_id"],
+            status=DocumentStatus.ALIGNED,
+        )
+        if changed:
+            spec_document.content_json = next_content
+            spec_document.save(update_fields=["content_json", "updated_at"])
     revision = capture_project_revision(
         project=decision.project,
         title=f"Decision approved: {decision.title}",

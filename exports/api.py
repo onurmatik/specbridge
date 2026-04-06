@@ -12,7 +12,7 @@ class ExportPayload(Schema):
     extension: str = "md"
     share_enabled: bool = False
     include_resolved_questions: bool = False
-    document_slugs: str | None = None
+    section_ids: str | None = None
 
 
 class SharePayload(Schema):

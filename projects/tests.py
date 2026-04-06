@@ -73,16 +73,16 @@ class ProjectPageTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-api-method="PATCH"', html=False)
-        self.assertContains(response, 'data-workspace-document-pane', html=False)
-        self.assertContains(response, 'data-document-editor-form', html=False)
-        self.assertContains(response, 'data-document-editor-input', html=False)
-        self.assertContains(response, "Issues &amp; Concerns", html=True)
+        self.assertContains(response, 'data-spec-section-form', html=False)
+        self.assertContains(response, 'data-spec-section-input', html=False)
+        self.assertContains(response, 'data-spec-nav-link', html=False)
+        self.assertContains(response, "Issues &amp; Alignment", html=True)
         self.assertContains(response, "Active Queue")
-        self.assertContains(response, "Add Document")
+        self.assertContains(response, "Single Spec")
         self.assertContains(response, self.project.name)
         self.assertContains(response, self.project.tagline)
-        self.assertNotContains(response, "Save Document")
-        self.assertContains(response, "Post to activity")
+        self.assertNotContains(response, "Save Section")
+        self.assertContains(response, "Discuss Concern")
         self.assertContains(response, 'data-stream-input', html=False)
         self.assertNotContains(response, "Ask AI to Help Draft")
         self.assertNotContains(response, "Consistency Inbox")
@@ -112,7 +112,7 @@ class ProjectPageTests(TestCase):
         response = self.client.get(reverse("project-workspace", args=[project.slug]))
 
         self.assertContains(response, "Stats Board")
-        self.assertContains(response, "Issues &amp; Concerns", html=True)
+        self.assertContains(response, "Issues &amp; Alignment", html=True)
         self.assertContains(response, "AI assisted data collection and visualization")
         self.assertNotContains(
             response,
@@ -265,7 +265,8 @@ class ProjectPageTests(TestCase):
         self.assertEqual(payload["redirect_to"], reverse("project-workspace", args=[created_project.slug]))
         self.assertEqual(created_project.organization.name, "Sarah Stone Workspace")
         self.assertEqual(created_project.memberships.count(), 1)
-        self.assertEqual(created_project.documents.count(), 1)
+        self.assertEqual(created_project.spec_document.schema_version, 1)
+        self.assertEqual(created_project.spec_document.revisions.count(), 1)
         self.assertEqual(created_project.revisions.count(), 1)
 
         history_response = self.client.get(reverse("project-history", args=[created_project.slug]))

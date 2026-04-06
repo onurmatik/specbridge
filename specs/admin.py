@@ -5,16 +5,10 @@ from .models import (
     AuditEvent,
     ConsistencyIssue,
     ConsistencyRun,
-    DocumentRevision,
-    ProjectDocument,
     ProjectRevision,
+    ProjectSpecDocument,
+    SpecDocumentRevision,
 )
-
-
-@admin.register(ProjectDocument)
-class ProjectDocumentAdmin(admin.ModelAdmin):
-    list_display = ("title", "project", "document_type", "status", "order", "is_required")
-    list_filter = ("document_type", "status", "project")
 
 
 @admin.register(Assumption)
@@ -28,9 +22,14 @@ class ProjectRevisionAdmin(admin.ModelAdmin):
     list_display = ("project", "number", "title", "created_at")
 
 
-@admin.register(DocumentRevision)
-class DocumentRevisionAdmin(admin.ModelAdmin):
-    list_display = ("document", "number", "title", "created_at")
+@admin.register(ProjectSpecDocument)
+class ProjectSpecDocumentAdmin(admin.ModelAdmin):
+    list_display = ("project", "title", "schema_version", "updated_at")
+
+
+@admin.register(SpecDocumentRevision)
+class SpecDocumentRevisionAdmin(admin.ModelAdmin):
+    list_display = ("spec_document", "number", "title", "created_at")
 
 
 @admin.register(ConsistencyRun)

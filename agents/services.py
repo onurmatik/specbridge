@@ -2,37 +2,32 @@ from django.utils import timezone
 
 from agents.models import AgentSuggestionStatus
 from specs.models import AuditEventType
-from specs.services import capture_document_revision, capture_project_revision, log_audit_event
+from specs.services import (
+    log_audit_event,
+    section_markdown_for_ref,
+    update_spec_section,
+)
+from specs.spec_document import markdown_to_blocks
 
 
 def apply_suggestion(suggestion, actor):
-    target = suggestion.related_document
     payload = suggestion.payload or {}
+    primary_ref = suggestion.primary_ref or {}
     project_revision = None
-    if target:
-        if payload.get("title"):
-            target.title = payload["title"]
-        if payload.get("body_replace") is not None:
-            target.body = payload["body_replace"]
-        if payload.get("body_append"):
-            target.body = f"{target.body}\n\n{payload['body_append']}".strip()
-        if payload.get("status"):
-            target.status = payload["status"]
-        target.save()
-        project_revision = capture_project_revision(
+    section_id = primary_ref.get("section_id", "")
+    if section_id:
+        proposed_body = payload.get("body_replace")
+        if proposed_body is None and payload.get("body_append"):
+            existing_body = section_markdown_for_ref(suggestion.project, primary_ref)
+            proposed_body = f"{existing_body}\n\n{payload['body_append']}".strip()
+        content_blocks = markdown_to_blocks(proposed_body or "") if proposed_body is not None else None
+        project_revision = update_spec_section(
             project=suggestion.project,
-            title=f"Agent suggestion applied: {suggestion.title}",
-            summary=suggestion.summary,
+            section_id=section_id,
             actor=actor,
-            source_agent=suggestion,
-            source_post=suggestion.source_post,
-        )
-        capture_document_revision(
-            document=target,
-            title=f"Agent suggestion applied: {suggestion.title}",
-            summary=suggestion.summary,
-            actor=actor,
-            project_revision=project_revision,
+            title=payload.get("title"),
+            status=payload.get("status"),
+            content_json=content_blocks,
         )
 
     suggestion.status = AgentSuggestionStatus.APPLIED
@@ -50,7 +45,7 @@ def apply_suggestion(suggestion, actor):
         project_revision=project_revision,
         metadata={
             "suggestion_id": suggestion.id,
-            "target": suggestion.related_document.slug if suggestion.related_document else "",
+            "target": primary_ref.get("section_id", ""),
         },
     )
     return suggestion

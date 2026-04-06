@@ -12,7 +12,7 @@
         <div class="mb-6 flex items-end justify-between">
           <div>
             <h1 class="font-display text-3xl font-bold tracking-tight text-gray-900">Decision Timeline</h1>
-            <p class="mt-1 text-sm text-gray-500">Track all key alignment points, conflicts, and resolutions across the project documents.</p>
+            <p class="mt-1 text-sm text-gray-500">Track all key alignment points, conflicts, and resolutions across the spec sections.</p>
             {% if not request.user.is_authenticated %}
               <p class="mt-2 text-xs font-medium uppercase tracking-wider text-gray-400">Public preview. Sign in to record or approve decisions.</p>
             {% endif %}
@@ -69,9 +69,9 @@
                         {{ decision.get_status_display }}
                       </span>
                       <span class="text-xs font-medium text-gray-400">{{ decision.created_at|date:"M j, g:i A" }}</span>
-                      {% if decision.related_document %}
+                      {% if decision.related_label %}
                         <span class="rounded border border-blue-100 bg-blue-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-blue-700">
-                          {{ decision.related_document.title }}
+                          {{ decision.related_label }}
                         </span>
                       {% endif %}
                       {% if decision.supersedes %}
@@ -103,7 +103,7 @@
                     <iconify-icon icon="lucide:alert-triangle" class="mt-0.5 text-brand-warning"></iconify-icon>
                     <div>
                       <h4 class="text-sm font-semibold text-gray-900">Alignment Warning</h4>
-                      <p class="mt-1 text-xs text-gray-700">This decision still needs approval before the document set can move from discussion into committed system state.</p>
+                      <p class="mt-1 text-xs text-gray-700">This decision still needs approval before the spec can move from discussion into committed system state.</p>
                     </div>
                   </div>
                 {% endif %}

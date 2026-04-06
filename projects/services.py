@@ -11,10 +11,12 @@ from alignment.services import build_workspace_entries, compute_dashboard_metric
 from projects.demo import DEMO_PROJECT_SLUG, DEMO_USERNAMES, ensure_demo_workspace
 from projects.models import MembershipRole, Organization, Project, ProjectMembership
 from specs.services import (
-    DOCUMENT_SUGGESTIONS,
-    bootstrap_documents,
+    bootstrap_spec_document,
     capture_project_revision,
-    compare_document_revisions,
+    compare_section_revisions,
+    ensure_spec_document,
+    section_summaries,
+    section_title_for_ref,
 )
 from specs.concerns import ordered_concerns, render_proposal_change_diff
 
@@ -91,11 +93,11 @@ def _default_summary(project_name: str, tagline: str) -> str:
     if tagline:
         lead = tagline if tagline.endswith((".", "!", "?")) else f"{tagline}."
         return (
-            f"{lead} This workspace keeps documents, decisions, assumptions, and delivery intent "
+            f"{lead} This workspace keeps spec sections, decisions, assumptions, and delivery intent "
             f"for {project_name} aligned from the first draft onward."
         )
     return (
-        f"A structured workspace for refining the {project_name} documents, decisions, "
+        f"A structured workspace for refining the {project_name} spec, decisions, "
         "assumptions, and delivery plan."
     )
 
@@ -145,11 +147,11 @@ def create_project_workspace(
         role=_creator_role(actor),
         title=actor.title or "Workspace Owner",
     )
-    bootstrap_documents(project)
+    bootstrap_spec_document(project)
     capture_project_revision(
         project=project,
         title="Initial workspace created",
-        summary="Seeded the first multi-document workspace scaffold from the project directory.",
+        summary="Seeded the first single-spec workspace scaffold from the project directory.",
         actor=actor,
     )
     return project
@@ -219,58 +221,71 @@ def page_context(project, active_item):
     }
 
 
-def workspace_context(project, active_concern_id: str | None = None):
+def workspace_context(project, active_concern_id: str | None = None, active_section_id: str | None = None):
     context = page_context(project, "workspace")
     workspace_tagline, workspace_summary_detail = split_project_summary(project)
-    documents = list(project.documents.prefetch_related("assumptions", "concerns"))
+    sections = section_summaries(project)
+    active_section = next((section for section in sections if section["id"] == active_section_id), None)
     concerns = ordered_concerns(project)
     selected_concern = (
         next((concern for concern in concerns if str(concern.id) == str(active_concern_id)), None)
         or (concerns[0] if concerns else None)
     )
-    concern_lookup = {}
+    concern_lookup: dict[str, list] = {}
     for concern in concerns:
-        for document in concern.documents.all():
-            concern_lookup.setdefault(document.id, []).append(concern)
+        for ref in concern.node_refs or []:
+            section_id = ref.get("section_id", "")
+            if section_id:
+                concern_lookup.setdefault(section_id, []).append(concern)
 
-    document_sections = [
+    spec_sections = [
         {
-            "document": document,
-            "concerns": concern_lookup.get(document.id, []),
+            "section": section,
+            "concerns": concern_lookup.get(section["id"], []),
             "is_selected": bool(
                 selected_concern
-                and any(linked.id == selected_concern.id for linked in concern_lookup.get(document.id, []))
+                and any(linked.id == selected_concern.id for linked in concern_lookup.get(section["id"], []))
             ),
+            "is_active": section["id"] == active_section_id,
         }
-        for document in documents
+        for section in sections
     ]
     selected_concern_posts = list(selected_concern.posts.all()) if selected_concern else []
     selected_concern_proposals = []
     if selected_concern:
-        for proposal in selected_concern.proposals.prefetch_related("changes__document").all():
+        for proposal in selected_concern.proposals.prefetch_related("changes").all():
             selected_concern_proposals.append(
                 {
                     "proposal": proposal,
-                    "changes": [
+            "changes": [
                         {
                             "change": change,
                             "diff": render_proposal_change_diff(change),
                         }
-                        for change in proposal.changes.select_related("document").all()
+                        for change in proposal.changes.all()
                     ],
                 }
             )
+    selected_section_ids = [
+        ref.get("section_id", "")
+        for ref in (selected_concern.node_refs if selected_concern else [])
+        if ref.get("section_id")
+    ]
+    if not selected_section_ids and active_section:
+        selected_section_ids = [active_section["id"]]
     context.update(
         {
             "page_title": "Workspace",
             "page_breadcrumb_label": "Workspace",
             "header_hide_project_identity": True,
-            "documents": documents,
-            "document_sections": document_sections,
-            "document_suggestions": DOCUMENT_SUGGESTIONS,
-            "assumptions": list(project.assumptions.select_related("document")),
+            "spec_document": ensure_spec_document(project),
+            "sections": sections,
+            "spec_sections": spec_sections,
+            "assumptions": list(project.assumptions.select_related("created_by", "validated_by")),
             "concerns": concerns,
             "selected_concern": selected_concern,
+            "selected_section_ids": selected_section_ids,
+            "active_section": active_section,
             "selected_concern_posts": selected_concern_posts,
             "selected_concern_proposals": selected_concern_proposals,
             "activity_entries": build_workspace_entries(project),
@@ -286,9 +301,9 @@ def dashboard_context(project):
     context = page_context(project, "team")
     context.update(
         {
-            "documents": list(project.documents.all()),
+            "sections": section_summaries(project),
             "concerns": ordered_concerns(project)[:8],
-            "decisions": list(project.decisions.select_related("related_document").all()[:4]),
+            "decisions": list(project.decisions.all()[:4]),
         }
     )
     return context
@@ -296,40 +311,42 @@ def dashboard_context(project):
 
 def decisions_context(project):
     context = page_context(project, "decisions")
-    context["decisions"] = list(
-        project.decisions.select_related("proposed_by", "supersedes", "related_document").prefetch_related(
+    decisions = list(
+        project.decisions.select_related("proposed_by", "supersedes").prefetch_related(
             "approvals__approver"
         )
     )
+    for decision in decisions:
+        decision.related_label = section_title_for_ref(project, decision.primary_ref)
+    context["decisions"] = decisions
     return context
 
 
-def history_context(project, active_document_slug: str | None = None):
+def history_context(project, active_section_id: str | None = None):
     context = page_context(project, "history")
     project_revisions = list(project.revisions.order_by("number"))
     left_project_revision = project_revisions[-2] if len(project_revisions) > 1 else (project_revisions[-1] if project_revisions else None)
     right_project_revision = project_revisions[-1] if project_revisions else None
 
-    documents = list(project.documents.order_by("order", "created_at"))
-    active_document = next((doc for doc in documents if doc.slug == active_document_slug), documents[0] if documents else None)
-    document_revisions = list(active_document.revisions.order_by("number")) if active_document else []
-    left_document_revision = (
-        document_revisions[-2] if len(document_revisions) > 1 else (document_revisions[-1] if document_revisions else None)
-    )
-    right_document_revision = document_revisions[-1] if document_revisions else None
+    spec_document = ensure_spec_document(project)
+    sections = section_summaries(project)
+    active_section = next((section for section in sections if section["id"] == active_section_id), sections[0] if sections else None)
+    spec_revisions = list(spec_document.revisions.order_by("number"))
+    left_spec_revision = spec_revisions[-2] if len(spec_revisions) > 1 else (spec_revisions[-1] if spec_revisions else None)
+    right_spec_revision = spec_revisions[-1] if spec_revisions else None
     context.update(
         {
             "project_revisions": project_revisions[::-1],
             "left_project_revision": left_project_revision,
             "right_project_revision": right_project_revision,
-            "documents": documents,
-            "active_document": active_document,
-            "document_revisions": document_revisions[::-1],
-            "left_document_revision": left_document_revision,
-            "right_document_revision": right_document_revision,
-            "document_diff": (
-                compare_document_revisions(left_document_revision, right_document_revision)
-                if left_document_revision and right_document_revision
+            "sections": sections,
+            "active_section": active_section,
+            "spec_revisions": spec_revisions[::-1],
+            "left_spec_revision": left_spec_revision,
+            "right_spec_revision": right_spec_revision,
+            "section_diff": (
+                compare_section_revisions(left_spec_revision, right_spec_revision, active_section["id"])
+                if left_spec_revision and right_spec_revision and active_section
                 else None
             ),
         }
@@ -341,7 +358,7 @@ def handoff_context(project):
     context = page_context(project, "handoff")
     context.update(
         {
-            "documents": list(project.documents.all()),
+            "sections": section_summaries(project),
             "exports": list(project.exports.select_related("generated_by").all()),
             "share_members": [membership.user for membership in project.memberships.select_related("user")[:2]],
         }
@@ -351,7 +368,9 @@ def handoff_context(project):
 
 def assumptions_context(project):
     context = page_context(project, "assumptions")
-    assumptions = list(project.assumptions.select_related("document", "created_by", "validated_by"))
+    assumptions = list(project.assumptions.select_related("created_by", "validated_by"))
+    for assumption in assumptions:
+        assumption.related_label = section_title_for_ref(project, assumption.primary_ref)
     context["assumptions"] = assumptions
     context["assumption_counts"] = {
         "open": sum(1 for assumption in assumptions if assumption.status == "open"),
