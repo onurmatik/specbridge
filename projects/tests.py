@@ -76,15 +76,59 @@ class ProjectPageTests(TestCase):
         self.assertContains(response, 'data-spec-section-form', html=False)
         self.assertContains(response, 'data-spec-section-input', html=False)
         self.assertContains(response, 'data-spec-nav-link', html=False)
-        self.assertContains(response, "Issues &amp; Alignment", html=True)
-        self.assertContains(response, "Active Queue")
+        self.assertContains(response, 'data-spec-nav-fade-left', html=False)
+        self.assertContains(response, "Alignment Stream")
+        self.assertContains(response, "All")
+        self.assertContains(response, "Decisions")
+        self.assertContains(response, "Open")
         self.assertContains(response, self.project.name)
         self.assertContains(response, self.project.tagline)
-        self.assertNotContains(response, "Save Section")
-        self.assertContains(response, "Discuss Concern")
+        self.assertContains(response, "Add to the discussion or propose a decision...")
+        self.assertNotContains(response, "Issues &amp; Alignment", html=True)
+        self.assertNotContains(response, "Active Queue")
         self.assertContains(response, 'data-stream-input', html=False)
         self.assertNotContains(response, "Ask AI to Help Draft")
         self.assertNotContains(response, "Consistency Inbox")
+
+    def test_workspace_open_filter_hides_general_posts_and_decisions(self):
+        self.client.force_login(self.project.created_by)
+
+        response = self.client.get(f"{reverse('project-workspace', args=[self.project.slug])}?stream=open")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Fallback mismatch across requirements, UI/UX, and infra")
+        self.assertNotContains(
+            response,
+            "We need each core planning area in one shared spec now. I still want magic links to be the primary direction, but contradictions across sections must be visible.",
+        )
+        self.assertNotContains(response, "Retain SSO, Migrate Passwords")
+
+    def test_workspace_decisions_filter_only_shows_decisions(self):
+        self.client.force_login(self.project.created_by)
+
+        response = self.client.get(f"{reverse('project-workspace', args=[self.project.slug])}?stream=decisions")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Retain SSO, Migrate Passwords")
+        self.assertContains(response, "Decision Recorded")
+        self.assertNotContains(
+            response,
+            "We need each core planning area in one shared spec now. I still want magic links to be the primary direction, but contradictions across sections must be visible.",
+        )
+
+    def test_workspace_concern_query_focuses_thread_and_composer(self):
+        self.client.force_login(self.project.created_by)
+        concern = self.project.concerns.get(title="Fallback mismatch across requirements, UI/UX, and infra")
+
+        response = self.client.get(f"{reverse('project-workspace', args=[self.project.slug])}?concern={concern.id}")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Focused Concern")
+        self.assertContains(response, concern.title)
+        self.assertContains(response, 'name="concern_id"', html=False)
+        self.assertContains(response, f'value="{concern.id}"', html=False)
+        self.assertContains(response, "Concern thread")
+        self.assertContains(response, "Address in Chat")
 
     def test_workspace_keeps_project_summary_out_of_document_canvas(self):
         actor = User.objects.create_user(
@@ -111,7 +155,7 @@ class ProjectPageTests(TestCase):
         response = self.client.get(reverse("project-workspace", args=[project.slug]))
 
         self.assertContains(response, "Stats Board")
-        self.assertContains(response, "Issues &amp; Alignment", html=True)
+        self.assertContains(response, "Alignment Stream")
         self.assertContains(response, "AI assisted data collection and visualization")
         self.assertNotContains(
             response,

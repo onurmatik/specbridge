@@ -880,14 +880,54 @@ function hashSpecSectionId() {
   return rawHash.startsWith("#spec-section-") ? rawHash.replace("#spec-section-", "") : "";
 }
 
+function focusStreamInput(prompt = "", mode = "replace") {
+  const streamInput = document.querySelector("[data-stream-input]");
+  if (!streamInput) {
+    return false;
+  }
+
+  const nextPrompt = `${prompt || ""}`;
+  if (mode === "append" && streamInput.value.trim()) {
+    const needsSpacer = !streamInput.value.endsWith(" ") && nextPrompt && !nextPrompt.startsWith(" ");
+    streamInput.value = `${streamInput.value}${needsSpacer ? " " : ""}${nextPrompt}`;
+  } else {
+    streamInput.value = nextPrompt;
+  }
+
+  streamInput.scrollIntoView({ block: "nearest" });
+  streamInput.focus();
+  streamInput.dispatchEvent(new Event("input", { bubbles: true }));
+  if (typeof streamInput.setSelectionRange === "function") {
+    streamInput.setSelectionRange(streamInput.value.length, streamInput.value.length);
+  }
+  return true;
+}
+
 function initializeSpecNavigation() {
   const workspace = document.querySelector("[data-spec-workspace]");
   const container = workspace?.querySelector?.("[data-spec-scroll-container]");
+  const navScroller = workspace?.querySelector?.("[data-spec-nav]");
   const sections = Array.from(workspace?.querySelectorAll?.("[data-spec-section]") || []);
   const navLinks = Array.from(workspace?.querySelectorAll?.("[data-spec-nav-link]") || []);
-  if (!workspace || !container || !sections.length || !navLinks.length) {
+  const fadeLeft = workspace?.querySelector?.("[data-spec-nav-fade-left]");
+  const fadeRight = workspace?.querySelector?.("[data-spec-nav-fade-right]");
+  if (!workspace || !container || !navScroller || !sections.length || !navLinks.length) {
     return;
   }
+
+  let activeSectionId = "";
+
+  const updateNavFades = () => {
+    if (!fadeLeft || !fadeRight) {
+      return;
+    }
+    const hasLeftOverflow = navScroller.scrollLeft > 0;
+    const hasRightOverflow = Math.ceil(navScroller.scrollLeft + navScroller.clientWidth) < navScroller.scrollWidth - 2;
+    fadeLeft.classList.toggle("opacity-0", !hasLeftOverflow);
+    fadeLeft.classList.toggle("opacity-100", hasLeftOverflow);
+    fadeRight.classList.toggle("opacity-0", !hasRightOverflow);
+    fadeRight.classList.toggle("opacity-100", hasRightOverflow);
+  };
 
   const updateActiveSection = () => {
     let currentId = sections[0]?.dataset.sectionId || "";
@@ -906,6 +946,16 @@ function initializeSpecNavigation() {
       link.classList.toggle("border-transparent", !isActive);
       link.classList.toggle("text-gray-500", !isActive);
     });
+
+    if (currentId && currentId !== activeSectionId) {
+      activeSectionId = currentId;
+      const activeLink = navLinks.find((link) => link.dataset.sectionId === currentId);
+      activeLink?.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+        inline: "center",
+      });
+    }
   };
 
   navLinks.forEach((link) => {
@@ -927,7 +977,10 @@ function initializeSpecNavigation() {
   }
 
   container.addEventListener("scroll", updateActiveSection);
+  navScroller.addEventListener("scroll", updateNavFades);
+  window.addEventListener("resize", updateNavFades);
   updateActiveSection();
+  window.setTimeout(updateNavFades, 100);
 }
 
 function sectionActionPayload(button) {
@@ -1430,6 +1483,20 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  const streamPromptButton = event.target.closest("[data-stream-prompt]");
+  if (streamPromptButton) {
+    event.preventDefault();
+    if (!isAuthenticated()) {
+      openAuthModal("login");
+      return;
+    }
+    focusStreamInput(
+      streamPromptButton.dataset.streamPrompt || "",
+      streamPromptButton.dataset.streamPromptMode || "replace"
+    );
+    return;
+  }
+
   const aiDraftButton = event.target.closest("[data-ai-draft-request]");
   if (aiDraftButton) {
     event.preventDefault();
@@ -1437,19 +1504,13 @@ document.addEventListener("click", async (event) => {
       openAuthModal("login");
       return;
     }
-    const streamInput = document.querySelector("[data-stream-input]");
-    if (!streamInput) {
-      return;
-    }
     const sectionTitle = aiDraftButton.dataset.sectionTitle || "this section";
     const projectName = aiDraftButton.dataset.projectName || "this project";
     const customPrompt = aiDraftButton.dataset.aiDraftPrompt || "";
-    streamInput.value = customPrompt || `Help me draft the "${sectionTitle}" section for ${projectName}. Propose a concise summary and a detailed body I can paste into the spec.`;
-    streamInput.scrollIntoView({ block: "nearest" });
-    streamInput.focus();
-    streamInput.dispatchEvent(new Event("input", { bubbles: true }));
-    if (typeof streamInput.setSelectionRange === "function") {
-      streamInput.setSelectionRange(streamInput.value.length, streamInput.value.length);
+    if (!focusStreamInput(
+      customPrompt || `Help me draft the "${sectionTitle}" section for ${projectName}. Propose a concise summary and a detailed body I can paste into the spec.`
+    )) {
+      return;
     }
     return;
   }

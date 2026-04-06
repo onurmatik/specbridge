@@ -7,7 +7,13 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.text import slugify
 
-from alignment.services import build_workspace_entries, compute_dashboard_metrics
+from alignment.services import (
+    build_workspace_entries,
+    build_workspace_stream_items,
+    compute_dashboard_metrics,
+    normalize_workspace_stream_filter,
+    workspace_concern_chat_prompt,
+)
 from projects.demo import DEMO_PROJECT_SLUG, DEMO_USERNAMES, ensure_demo_workspace
 from projects.models import MembershipRole, Organization, Project, ProjectMembership
 from specs.services import (
@@ -223,16 +229,20 @@ def page_context(project, active_item):
     }
 
 
-def workspace_context(project, active_concern_id: str | None = None, active_section_id: str | None = None):
+def workspace_context(
+    project,
+    active_concern_id: str | None = None,
+    active_section_id: str | None = None,
+    stream_filter: str | None = None,
+):
     context = page_context(project, "workspace")
+    active_stream_filter = normalize_workspace_stream_filter(stream_filter)
     workspace_tagline, workspace_summary_detail = split_project_summary(project)
+    spec_document = ensure_spec_document(project)
     sections = section_summaries(project)
     active_section = next((section for section in sections if section["id"] == active_section_id), None)
     concerns = ordered_concerns(project)
-    selected_concern = (
-        next((concern for concern in concerns if str(concern.id) == str(active_concern_id)), None)
-        or (concerns[0] if concerns else None)
-    )
+    selected_concern = next((concern for concern in concerns if str(concern.id) == str(active_concern_id)), None)
     concern_lookup: dict[str, list] = {}
     for concern in concerns:
         for ref in concern.node_refs or []:
@@ -252,14 +262,14 @@ def workspace_context(project, active_concern_id: str | None = None, active_sect
         }
         for section in sections
     ]
-    selected_concern_posts = list(selected_concern.posts.all()) if selected_concern else []
+    selected_concern_posts = list(selected_concern.posts.select_related("author").all()) if selected_concern else []
     selected_concern_proposals = []
     if selected_concern:
         for proposal in selected_concern.proposals.prefetch_related("changes").all():
             selected_concern_proposals.append(
                 {
                     "proposal": proposal,
-            "changes": [
+                    "changes": [
                         {
                             "change": change,
                             "diff": render_proposal_change_diff(change),
@@ -275,12 +285,28 @@ def workspace_context(project, active_concern_id: str | None = None, active_sect
     ]
     if not selected_section_ids and active_section:
         selected_section_ids = [active_section["id"]]
+    workspace_stream_items = build_workspace_stream_items(
+        project=project,
+        concerns=concerns,
+        selected_concern=selected_concern,
+        selected_concern_posts=selected_concern_posts,
+        selected_concern_proposals=selected_concern_proposals,
+        stream_filter=active_stream_filter,
+    )
+    latest_project_revision = project.revisions.select_related("created_by", "source_post").order_by("-number").first()
+    spec_last_updated_at = latest_project_revision.created_at if latest_project_revision else spec_document.updated_at
+    spec_last_updated_by = ""
+    if latest_project_revision:
+        if latest_project_revision.created_by:
+            spec_last_updated_by = latest_project_revision.created_by.display_name
+        elif latest_project_revision.source_post:
+            spec_last_updated_by = latest_project_revision.source_post.actor_name
     context.update(
         {
             "page_title": "Workspace",
             "page_breadcrumb_label": "Workspace",
             "header_hide_project_identity": True,
-            "spec_document": ensure_spec_document(project),
+            "spec_document": spec_document,
             "sections": sections,
             "spec_sections": spec_sections,
             "assumptions": list(project.assumptions.select_related("created_by", "validated_by")),
@@ -291,9 +317,29 @@ def workspace_context(project, active_concern_id: str | None = None, active_sect
             "selected_concern_posts": selected_concern_posts,
             "selected_concern_proposals": selected_concern_proposals,
             "activity_entries": build_workspace_entries(project),
+            "workspace_stream_items": workspace_stream_items,
             "activity_posts": list(project.stream_posts.filter(concern__isnull=True).order_by("-created_at")[:8]),
             "workspace_tagline": workspace_tagline,
             "workspace_summary_detail": workspace_summary_detail,
+            "active_stream_filter": active_stream_filter,
+            "stream_filter_options": [
+                {"value": "all", "label": "All", "icon": ""},
+                {
+                    "value": "decisions",
+                    "label": "Decisions",
+                    "icon": "lucide:check-circle-2",
+                    "icon_class": "text-brand-decision",
+                },
+                {
+                    "value": "open",
+                    "label": "Open",
+                    "icon": "lucide:alert-circle",
+                    "icon_class": "text-brand-warning",
+                },
+            ],
+            "selected_concern_chat_prompt": workspace_concern_chat_prompt(selected_concern) if selected_concern else "",
+            "spec_last_updated_at": spec_last_updated_at,
+            "spec_last_updated_by": spec_last_updated_by,
         }
     )
     return context

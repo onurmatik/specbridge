@@ -186,6 +186,7 @@ def project_workspace(request, slug):
             project,
             active_concern_id=request.GET.get("concern"),
             active_section_id=request.GET.get("section"),
+            stream_filter=request.GET.get("stream"),
         ),
     )
 

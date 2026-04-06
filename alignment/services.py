@@ -4,8 +4,14 @@ from collections import Counter
 
 from django.utils import timezone
 
-from alignment.models import DecisionStatus, IssueStatus
-from specs.models import AuditEventType, ConcernStatus, ConcernType, DocumentStatus
+from alignment.models import DecisionStatus, IssueStatus, StreamPostKind
+from specs.models import (
+    AuditEventType,
+    ConcernProposalStatus,
+    ConcernStatus,
+    ConcernType,
+    DocumentStatus,
+)
 from specs.services import (
     capture_project_revision,
     ensure_spec_document,
@@ -33,6 +39,124 @@ def build_workspace_entries(project):
         for decision in project.decisions.exclude(status=DecisionStatus.PENDING)
     )
     return sorted(entries, key=lambda item: item["created_at"])
+
+
+VALID_WORKSPACE_STREAM_FILTERS = {"all", "decisions", "open"}
+
+
+def normalize_workspace_stream_filter(value: str | None) -> str:
+    normalized = (value or "all").strip().lower()
+    return normalized if normalized in VALID_WORKSPACE_STREAM_FILTERS else "all"
+
+
+def workspace_concern_chat_prompt(concern) -> str:
+    prompt = (
+        f'Help me resolve the concern "{concern.title}". '
+        f"Current issue: {concern.summary}"
+    )
+    recommendation = (concern.recommendation or "").strip()
+    if recommendation:
+        prompt = f"{prompt} Suggested next step: {recommendation}"
+    return prompt
+
+
+def _build_workspace_post_item(post, *, concern=None):
+    author = getattr(post, "author", None)
+    avatar_url = author.avatar_url if author else ""
+    is_agent = post.kind == StreamPostKind.AGENT
+    return {
+        "kind": "agent_notice" if is_agent else "message",
+        "created_at": post.created_at,
+        "post": post,
+        "concern": concern,
+        "avatar_url": avatar_url,
+        "is_focus_thread": bool(concern),
+        "is_open_related": bool(concern and concern.status in {ConcernStatus.OPEN, ConcernStatus.STALE}),
+    }
+
+
+def _build_workspace_decision_item(decision):
+    actor_name = (
+        decision.proposed_by.display_name
+        if getattr(decision, "proposed_by", None)
+        else (decision.source_post.actor_name if getattr(decision, "source_post", None) else "Team")
+    )
+    return {
+        "kind": "decision",
+        "created_at": decision.created_at,
+        "decision": decision,
+        "actor_name": actor_name,
+        "is_open_related": False,
+    }
+
+
+def _build_workspace_concern_item(concern, *, is_selected=False):
+    return {
+        "kind": "concern",
+        "created_at": concern.detected_at or concern.created_at,
+        "concern": concern,
+        "is_selected": is_selected,
+        "chat_prompt": workspace_concern_chat_prompt(concern),
+        "is_open_related": concern.status in {ConcernStatus.OPEN, ConcernStatus.STALE},
+    }
+
+
+def _build_workspace_proposal_item(bundle, *, concern):
+    proposal = bundle["proposal"]
+    return {
+        "kind": "proposal",
+        "created_at": proposal.created_at,
+        "proposal": proposal,
+        "changes": bundle["changes"],
+        "concern": concern,
+        "is_open_related": (
+            concern.status in {ConcernStatus.OPEN, ConcernStatus.STALE}
+            and proposal.status in {ConcernProposalStatus.OPEN, ConcernProposalStatus.PARTIALLY_APPLIED}
+        ),
+    }
+
+
+def build_workspace_stream_items(
+    *,
+    project,
+    concerns,
+    selected_concern=None,
+    selected_concern_posts=None,
+    selected_concern_proposals=None,
+    stream_filter="all",
+):
+    normalized_filter = normalize_workspace_stream_filter(stream_filter)
+    items = []
+    top_level_posts = list(project.stream_posts.select_related("author").filter(concern__isnull=True))
+    approved_decisions = list(
+        project.decisions.select_related("proposed_by", "source_post").exclude(status=DecisionStatus.PENDING)
+    )
+
+    items.extend(_build_workspace_post_item(post) for post in top_level_posts)
+    items.extend(_build_workspace_decision_item(decision) for decision in approved_decisions)
+    items.extend(
+        _build_workspace_concern_item(concern, is_selected=bool(selected_concern and concern.id == selected_concern.id))
+        for concern in concerns
+        if not (selected_concern and concern.id == selected_concern.id)
+    )
+
+    if selected_concern:
+        items.extend(
+            _build_workspace_post_item(post, concern=selected_concern)
+            for post in (selected_concern_posts or [])
+        )
+        items.extend(
+            _build_workspace_proposal_item(bundle, concern=selected_concern)
+            for bundle in (selected_concern_proposals or [])
+        )
+
+    items.sort(key=lambda item: item["created_at"])
+
+    if normalized_filter == "decisions":
+        return [item for item in items if item["kind"] == "decision"]
+    if normalized_filter == "open":
+        return [item for item in items if item["is_open_related"]]
+    return items
 
 
 def compute_dashboard_metrics(project):
