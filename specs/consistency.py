@@ -128,8 +128,8 @@ def _analysis_prompt(snapshot: dict) -> str:
 
 
 def _truncate_prompt(prompt: str) -> str:
-    max_chars = max(getattr(settings, "OPENAI_DEFAULT_MAX_INSTRUCTION_CHARS", 20000), 0)
-    if not max_chars or len(prompt) <= max_chars:
+    max_chars = getattr(settings, "OPENAI_DEFAULT_MAX_INSTRUCTION_CHARS", None)
+    if max_chars is None or max_chars <= 0 or len(prompt) <= max_chars:
         return prompt
     return prompt[:max_chars].rstrip() + "\n\n[TRUNCATED]"
 
@@ -140,14 +140,16 @@ def analyze_project_consistency(snapshot: dict) -> ConsistencyAnalysisResult:
         raise ConsistencyError("OPENAI_API_KEY is not configured.")
 
     model = getattr(settings, "OPENAI_DEFAULT_MODEL", "gpt-5-mini")
-    timeout_seconds = max(getattr(settings, "OPENAI_DEFAULT_TIMEOUT_SECONDS", 60), 1)
-    max_output_tokens = max(getattr(settings, "OPENAI_DEFAULT_MAX_OUTPUT_TOKENS", 1200), 1)
-    reasoning_effort = getattr(settings, "OPENAI_DEFAULT_REASONING_EFFORT", "low")
+    timeout_seconds = getattr(settings, "OPENAI_DEFAULT_TIMEOUT_SECONDS", None)
+    if timeout_seconds is not None:
+        timeout_seconds = max(timeout_seconds, 1)
+    max_output_tokens = getattr(settings, "OPENAI_DEFAULT_MAX_OUTPUT_TOKENS", None)
+    if max_output_tokens is not None:
+        max_output_tokens = max(max_output_tokens, 1)
+    reasoning_effort = getattr(settings, "OPENAI_DEFAULT_REASONING_EFFORT", None)
     payload = {
         "model": model,
         "input": _truncate_prompt(_analysis_prompt(snapshot)),
-        "max_output_tokens": max_output_tokens,
-        "reasoning": {"effort": reasoning_effort},
         "text": {
             "format": {
                 "type": "json_schema",
@@ -157,6 +159,10 @@ def analyze_project_consistency(snapshot: dict) -> ConsistencyAnalysisResult:
             }
         },
     }
+    if max_output_tokens is not None:
+        payload["max_output_tokens"] = max_output_tokens
+    if reasoning_effort:
+        payload["reasoning"] = {"effort": reasoning_effort}
     response = request.Request(
         OPENAI_RESPONSES_URL,
         data=json.dumps(payload).encode("utf-8"),
@@ -168,7 +174,11 @@ def analyze_project_consistency(snapshot: dict) -> ConsistencyAnalysisResult:
     )
 
     try:
-        with request.urlopen(response, timeout=timeout_seconds) as http_response:
+        if timeout_seconds is None:
+            http_response_context = request.urlopen(response)
+        else:
+            http_response_context = request.urlopen(response, timeout=timeout_seconds)
+        with http_response_context as http_response:
             body = http_response.read().decode("utf-8")
     except error.HTTPError as exc:
         details = exc.read().decode("utf-8", errors="replace")

@@ -1,10 +1,17 @@
 import json
 from unittest.mock import patch
 
-from django.test import Client, TestCase
+from django.test import Client, TestCase, override_settings
 
 from projects.demo import ensure_demo_workspace
-from specs.concerns import ConcernAnalysisResult, ConcernProposalResult, ConcernReevaluationResult
+from specs.concerns import (
+    ConcernAnalysisResult,
+    ConcernError,
+    ConcernProposalResult,
+    ConcernReevaluationResult,
+    _request_openai,
+    build_concern_proposal_with_ai,
+)
 from specs.models import Assumption, ConcernProposalChange, ConcernRun, ProjectConcern
 from specs.section_ai import _section_revision_prompt
 from specs.services import (
@@ -16,6 +23,20 @@ from specs.services import (
     update_spec_section,
 )
 from specs.spec_document import markdown_to_blocks
+
+
+class _FakeHTTPResponse:
+    def __init__(self, payload: dict):
+        self.payload = payload
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def read(self):
+        return json.dumps(self.payload).encode("utf-8")
 
 
 class SpecsServiceTests(TestCase):
@@ -386,6 +407,166 @@ class SpecsServiceTests(TestCase):
             set(proposal.changes.values_list("section_id", flat=True)),
             {requirements_section["id"], infra_section["id"]},
         )
+
+    @patch("specs.concerns.build_concern_proposal_with_ai")
+    def test_resolve_concern_with_ai_endpoint_returns_validation_error(self, mock_build_proposal):
+        concern = ProjectConcern.objects.get(project=self.project, fingerprint="human-fallback-ownership")
+        mock_build_proposal.side_effect = ConcernError("AI could not produce a valid proposal.")
+
+        response = self.client.post(
+            f"/api/projects/{self.project.slug}/concerns/{concern.id}/resolve-with-ai",
+            data=json.dumps({}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(
+            response.json()["errors"]["concern"][0],
+            "AI could not produce a valid proposal.",
+        )
+
+    @patch("specs.concerns.build_concern_proposal_with_ai")
+    def test_resolve_concern_with_ai_endpoint_falls_back_to_full_spec_for_unlinked_concern(self, mock_build_proposal):
+        requirements_section = self._section("requirements")
+        concern = ProjectConcern.objects.create(
+            project=self.project,
+            fingerprint="business-model-unclear",
+            concern_type="human_flag",
+            raised_by_kind="human",
+            title="Business model needs clarification",
+            summary="We need to clarify the business model.",
+            severity="medium",
+            status="open",
+            recommendation="Clarify the monetization and pricing assumptions in the spec.",
+            source_refs=[{"kind": "stream_post", "identifier": "999", "label": "Activity post #999"}],
+            node_refs=[],
+            created_by=self.project.created_by,
+        )
+        mock_build_proposal.return_value = ConcernProposalResult(
+            provider="openai",
+            model="gpt-5-mini",
+            summary="Add monetization guidance to the requirements.",
+            changes=[
+                {
+                    "section_id": requirements_section["id"],
+                    "summary": "Add business model detail.",
+                    "proposed_body": "Updated requirements body",
+                }
+            ],
+        )
+
+        response = self.client.post(
+            f"/api/projects/{self.project.slug}/concerns/{concern.id}/resolve-with-ai",
+            data=json.dumps({}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        sections = mock_build_proposal.call_args.args[2]
+        self.assertEqual(
+            {section["id"] for section in sections},
+            {section["id"] for section in section_summaries(self.project)},
+        )
+        concern.refresh_from_db()
+        self.assertEqual(
+            {ref["section_id"] for ref in concern.node_refs},
+            {requirements_section["id"]},
+        )
+
+    @override_settings(OPENAI_API_KEY="test-key")
+    @patch("specs.concerns.request.urlopen")
+    def test_request_openai_reports_incomplete_json_schema_response(self, mock_urlopen):
+        mock_urlopen.return_value = _FakeHTTPResponse(
+            {
+                "status": "incomplete",
+                "incomplete_details": {"reason": "max_output_tokens"},
+                "output_text": "{\"summary\":\"cut off",
+            }
+        )
+
+        with self.assertRaisesMessage(
+            ConcernError,
+            "OpenAI response was incomplete (reason: max_output_tokens).",
+        ):
+            _request_openai(
+                schema_name="test_schema",
+                schema={
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {"summary": {"type": "string"}},
+                    "required": ["summary"],
+                },
+                prompt="Return a summary.",
+            )
+
+    @override_settings(OPENAI_API_KEY="test-key", OPENAI_CONCERN_PROPOSAL_MAX_OUTPUT_TOKENS=4321)
+    @patch("specs.concerns.request.urlopen")
+    def test_build_concern_proposal_with_ai_uses_json_schema_and_custom_token_budget(self, mock_urlopen):
+        captured_payload: dict[str, object] = {}
+
+        def fake_urlopen(http_request, timeout):
+            captured_payload.update(json.loads(http_request.data.decode("utf-8")))
+            return _FakeHTTPResponse(
+                {
+                    "status": "completed",
+                    "output_text": json.dumps({"summary": "Proposal summary", "changes": []}),
+                }
+            )
+
+        mock_urlopen.side_effect = fake_urlopen
+        concern = ProjectConcern.objects.get(project=self.project, fingerprint="human-fallback-ownership")
+
+        result = build_concern_proposal_with_ai(
+            {"project": {"slug": self.project.slug}},
+            concern,
+            [self._section("requirements")],
+        )
+
+        self.assertEqual(result.summary, "Proposal summary")
+        self.assertEqual(captured_payload["max_output_tokens"], 4321)
+        self.assertEqual(captured_payload["text"]["format"]["type"], "json_schema")
+        self.assertTrue(captured_payload["text"]["format"]["strict"])
+
+    @override_settings(
+        OPENAI_API_KEY="test-key",
+        OPENAI_DEFAULT_TIMEOUT_SECONDS=None,
+        OPENAI_DEFAULT_MAX_INSTRUCTION_CHARS=None,
+        OPENAI_DEFAULT_MAX_OUTPUT_TOKENS=None,
+        OPENAI_DEFAULT_REASONING_EFFORT=None,
+    )
+    @patch("specs.concerns.request.urlopen")
+    def test_request_openai_omits_optional_request_fields_when_settings_are_unset(self, mock_urlopen):
+        captured_payload: dict[str, object] = {}
+
+        def fake_urlopen(*args, **kwargs):
+            http_request = args[0]
+            captured_payload.update(json.loads(http_request.data.decode("utf-8")))
+            self.assertNotIn("timeout", kwargs)
+            self.assertEqual(len(args), 1)
+            return _FakeHTTPResponse(
+                {
+                    "status": "completed",
+                    "output_text": json.dumps({"summary": "ok"}),
+                }
+            )
+
+        mock_urlopen.side_effect = fake_urlopen
+
+        model, parsed_output = _request_openai(
+            schema_name="test_schema",
+            schema={
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {"summary": {"type": "string"}},
+                "required": ["summary"],
+            },
+            prompt="Return a summary.",
+        )
+
+        self.assertEqual(model, "gpt-5-mini")
+        self.assertEqual(parsed_output["summary"], "ok")
+        self.assertNotIn("max_output_tokens", captured_payload)
+        self.assertNotIn("reasoning", captured_payload)
 
     def test_accepting_proposal_change_updates_section_and_marks_concern_stale(self):
         change = ConcernProposalChange.objects.select_related("proposal__concern").first()

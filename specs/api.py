@@ -149,7 +149,7 @@ def patch_spec_section(request, slug: str, section_id: str, payload: SpecSection
             ),
         )
     except ValueError as exc:
-        return 404, {"ok": False, "errors": {"section": [str(exc)]}}
+        return JsonResponse({"ok": False, "errors": {"section": [str(exc)]}}, status=404)
     return {"ok": True, "section_id": section_id}
 
 
@@ -417,7 +417,7 @@ def resolve_concern_with_ai_endpoint(request, slug: str, concern_id: int):
     try:
         proposal = resolve_concern_with_ai(concern, actor=actor)
     except ConcernError as exc:
-        return 422, {"ok": False, "errors": {"concern": [str(exc)]}}
+        return JsonResponse({"ok": False, "errors": {"concern": [str(exc)]}}, status=422)
     return {"ok": True, "proposal_id": proposal.id, "status": proposal.status}
 
 

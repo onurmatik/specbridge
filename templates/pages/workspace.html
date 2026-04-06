@@ -10,7 +10,7 @@
   <main class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
     {% include "components/page_header.html" %}
     <div class="flex min-h-0 flex-1 overflow-hidden bg-gray-50">
-      <section class="flex min-w-[420px] max-w-[520px] flex-[0_0_45%] flex-col border-r border-gray-200 bg-white">
+      <section class="flex min-w-[440px] max-w-[560px] flex-[0_0_47%] flex-col border-r border-gray-200 bg-white">
         <div class="border-b border-gray-100 bg-white/80 px-6 py-4 backdrop-blur-sm">
           <div class="flex items-center justify-between gap-3">
             <div class="min-w-0">
@@ -282,7 +282,7 @@
         <div class="h-8 w-0.5 rounded-full bg-gray-400"></div>
       </div>
 
-      <section class="min-h-0 min-w-0 flex-1 overflow-hidden bg-gray-50">
+      <section class="min-h-0 min-w-0 flex-1 overflow-hidden bg-white">
         <div class="flex h-full flex-col" data-spec-workspace data-scroll-target-section="{% if selected_section_ids %}{{ selected_section_ids.0 }}{% elif active_section %}{{ active_section.id }}{% endif %}">
           <div class="sticky top-0 z-30 relative border-b border-gray-200 bg-white">
             <div data-spec-nav-fade-left class="pointer-events-none absolute left-0 top-0 bottom-0 z-10 w-12 bg-gradient-to-r from-white via-white/90 to-transparent opacity-0 transition-opacity duration-300"></div>
@@ -304,8 +304,8 @@
           </div>
 
           <div class="min-h-0 flex-1 overflow-y-auto scroll-smooth" data-spec-scroll-container>
-            <div class="sticky top-0 z-10 h-8 bg-gradient-to-b from-gray-50 to-transparent pointer-events-none"></div>
-            <div class="mx-auto max-w-5xl px-8 py-8 pb-32">
+            <div class="sticky top-0 z-10 h-8 bg-gradient-to-b from-white to-transparent pointer-events-none"></div>
+            <div class="mx-auto w-full max-w-[58rem] px-8 py-8 pb-32">
               <div class="mb-12">
                 <div class="mb-4 flex flex-wrap items-center gap-3">
                   <span class="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-bold uppercase tracking-wider text-blue-700">{{ status_label }}</span>
@@ -328,11 +328,11 @@
                     <div class="group relative">
                       <section
                         id="spec-section-{{ section.id }}"
-                        class="relative scroll-mt-28 px-8 py-8 {% if item.is_selected %}bg-red-50/20{% endif %}{% if not forloop.first %} border-t border-gray-200{% endif %}"
+                        class="relative scroll-mt-28 py-8 {% if item.is_selected %}bg-red-50/20{% endif %}{% if not forloop.first %} border-t border-gray-200{% endif %}"
                         data-spec-section
                         data-section-id="{{ section.id }}"
                       >
-                        <div class="absolute right-6 top-6 z-10 flex items-center justify-end gap-2">
+                        <div class="absolute right-0 top-6 z-10 flex items-center justify-end gap-2">
                           {% if request.user.is_authenticated %}
                             <span data-spec-section-autosave-status class="text-[11px] font-medium whitespace-nowrap text-gray-400">Saved</span>
                             <div class="relative" data-section-status-shell>
@@ -498,7 +498,7 @@
                           {% endif %}
                         </div>
 
-                        <div class="lg:pr-72">
+                        <div class="{% if item.concerns %}lg:pr-60{% endif %}">
                           {% if request.user.is_authenticated %}
                             <form
                               class="space-y-4"
@@ -511,7 +511,7 @@
                                 type="text"
                                 name="title"
                                 value="{{ section.title }}"
-                                class="w-full border-0 bg-transparent pr-80 font-display text-2xl font-bold tracking-tight text-gray-900 focus:outline-none focus:ring-0"
+                                class="w-full border-0 bg-transparent pr-40 lg:pr-72 font-display text-2xl font-bold tracking-tight text-gray-900 focus:outline-none focus:ring-0"
                               >
                               <input type="hidden" name="status" value="{{ section.status }}" data-section-status-input>
                               <textarea
@@ -524,14 +524,14 @@
                             </form>
                           {% else %}
                             <div>
-                              <h2 class="pr-80 font-display text-2xl font-bold tracking-tight text-gray-900">{{ section.title }}</h2>
+                              <h2 class="pr-40 lg:pr-72 font-display text-2xl font-bold tracking-tight text-gray-900">{{ section.title }}</h2>
                               <div class="mt-4 whitespace-pre-wrap text-[15px] leading-8 text-gray-700">{{ section.body|default:"No content yet." }}</div>
                             </div>
                           {% endif %}
                         </div>
 
                         {% if item.concerns %}
-                          <aside class="mt-6 lg:absolute lg:right-6 lg:top-24 lg:mt-0 lg:w-56">
+                          <aside class="mt-6 lg:absolute lg:right-0 lg:top-24 lg:mt-0 lg:w-52">
                             <div class="space-y-3">
                               {% for concern in item.concerns|slice:":3" %}
                                 <a

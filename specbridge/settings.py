@@ -26,6 +26,27 @@ def env_int(name: str, default: int) -> int:
         return default
 
 
+def env_optional_int(name: str) -> int | None:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return None
+    normalized = raw_value.strip()
+    if not normalized:
+        return None
+    try:
+        return int(normalized)
+    except ValueError:
+        return None
+
+
+def env_optional_str(name: str) -> str | None:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return None
+    normalized = raw_value.strip()
+    return normalized or None
+
+
 SECRET_KEY = os.getenv(
     "DJANGO_SECRET_KEY",
     "django-insecure-specbridge-local-dev-key-change-in-production",
@@ -124,7 +145,8 @@ LOGOUT_REDIRECT_URL = 'project-directory'
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 OPENAI_DEFAULT_MODEL = os.getenv("OPENAI_DEFAULT_MODEL", "gpt-5-mini")
-OPENAI_DEFAULT_TIMEOUT_SECONDS = env_int("OPENAI_DEFAULT_TIMEOUT_SECONDS", 60)
-OPENAI_DEFAULT_MAX_INSTRUCTION_CHARS = env_int("OPENAI_DEFAULT_MAX_INSTRUCTION_CHARS", 20000)
-OPENAI_DEFAULT_MAX_OUTPUT_TOKENS = env_int("OPENAI_DEFAULT_MAX_OUTPUT_TOKENS", 1200)
-OPENAI_DEFAULT_REASONING_EFFORT = os.getenv("OPENAI_DEFAULT_REASONING_EFFORT", "low")
+OPENAI_DEFAULT_TIMEOUT_SECONDS = env_optional_int("OPENAI_DEFAULT_TIMEOUT_SECONDS")
+OPENAI_DEFAULT_MAX_INSTRUCTION_CHARS = env_optional_int("OPENAI_DEFAULT_MAX_INSTRUCTION_CHARS")
+OPENAI_DEFAULT_MAX_OUTPUT_TOKENS = env_optional_int("OPENAI_DEFAULT_MAX_OUTPUT_TOKENS")
+OPENAI_CONCERN_PROPOSAL_MAX_OUTPUT_TOKENS = env_optional_int("OPENAI_CONCERN_PROPOSAL_MAX_OUTPUT_TOKENS")
+OPENAI_DEFAULT_REASONING_EFFORT = env_optional_str("OPENAI_DEFAULT_REASONING_EFFORT")

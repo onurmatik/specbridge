@@ -314,3 +314,23 @@ class ProjectPageTests(TestCase):
 
         history_response = self.client.get(reverse("project-history", args=[created_project.slug]))
         self.assertEqual(history_response.status_code, 200)
+
+    def test_authenticated_user_cannot_create_project_without_name(self):
+        self.client.force_login(self.project.created_by)
+
+        response = self.client.post(
+            "/api/projects/create",
+            data=json.dumps(
+                {
+                    "project_name": "   ",
+                    "tagline": "Operational control plane for launch readiness and cross-functional alignment.",
+                }
+            ),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(
+            response.json()["errors"]["project_name"][0],
+            "Project name is required.",
+        )

@@ -33,7 +33,6 @@ from specs.services import (
 )
 from specs.spec_document import (
     blocks_to_markdown,
-    build_primary_ref,
     collect_refs_from_text,
     find_section,
     markdown_to_blocks,
@@ -190,8 +189,8 @@ def _extract_output_text(response_payload: dict) -> str:
 
 
 def _truncate_prompt(prompt: str) -> str:
-    max_chars = max(getattr(settings, "OPENAI_DEFAULT_MAX_INSTRUCTION_CHARS", 20000), 0)
-    if not max_chars or len(prompt) <= max_chars:
+    max_chars = getattr(settings, "OPENAI_DEFAULT_MAX_INSTRUCTION_CHARS", None)
+    if max_chars is None or max_chars <= 0 or len(prompt) <= max_chars:
         return prompt
     return prompt[:max_chars].rstrip() + "\n\n[TRUNCATED]"
 
@@ -213,20 +212,26 @@ def _normalize_concern_type(value: str) -> str:
     return value if value in allowed else ConcernType.HUMAN_FLAG
 
 
-def _request_openai(*, schema_name: str, schema: dict, prompt: str) -> tuple[str, dict]:
+def _request_openai(*, schema_name: str, schema: dict, prompt: str, max_output_tokens: int | None = None) -> tuple[str, dict]:
     api_key = getattr(settings, "OPENAI_API_KEY", "")
     if not api_key:
         raise ConcernError("OPENAI_API_KEY is not configured.")
 
     model = getattr(settings, "OPENAI_DEFAULT_MODEL", "gpt-5-mini")
-    timeout_seconds = max(getattr(settings, "OPENAI_DEFAULT_TIMEOUT_SECONDS", 60), 1)
-    max_output_tokens = max(getattr(settings, "OPENAI_DEFAULT_MAX_OUTPUT_TOKENS", 1200), 1)
-    reasoning_effort = getattr(settings, "OPENAI_DEFAULT_REASONING_EFFORT", "low")
+    timeout_seconds = getattr(settings, "OPENAI_DEFAULT_TIMEOUT_SECONDS", None)
+    if timeout_seconds is not None:
+        timeout_seconds = max(timeout_seconds, 1)
+    configured_max_output_tokens = (
+        max_output_tokens
+        if max_output_tokens is not None
+        else getattr(settings, "OPENAI_DEFAULT_MAX_OUTPUT_TOKENS", None)
+    )
+    if configured_max_output_tokens is not None:
+        configured_max_output_tokens = max(configured_max_output_tokens, 1)
+    reasoning_effort = getattr(settings, "OPENAI_DEFAULT_REASONING_EFFORT", None)
     payload = {
         "model": model,
         "input": _truncate_prompt(prompt),
-        "max_output_tokens": max_output_tokens,
-        "reasoning": {"effort": reasoning_effort},
         "text": {
             "format": {
                 "type": "json_schema",
@@ -236,6 +241,10 @@ def _request_openai(*, schema_name: str, schema: dict, prompt: str) -> tuple[str
             }
         },
     }
+    if configured_max_output_tokens is not None:
+        payload["max_output_tokens"] = configured_max_output_tokens
+    if reasoning_effort:
+        payload["reasoning"] = {"effort": reasoning_effort}
     response = request.Request(
         OPENAI_RESPONSES_URL,
         data=json.dumps(payload).encode("utf-8"),
@@ -247,7 +256,11 @@ def _request_openai(*, schema_name: str, schema: dict, prompt: str) -> tuple[str
     )
 
     try:
-        with request.urlopen(response, timeout=timeout_seconds) as http_response:
+        if timeout_seconds is None:
+            http_response_context = request.urlopen(response)
+        else:
+            http_response_context = request.urlopen(response, timeout=timeout_seconds)
+        with http_response_context as http_response:
             body = http_response.read().decode("utf-8")
     except error.HTTPError as exc:
         details = exc.read().decode("utf-8", errors="replace")
@@ -256,6 +269,9 @@ def _request_openai(*, schema_name: str, schema: dict, prompt: str) -> tuple[str
         raise ConcernError(f"OpenAI request failed: {exc.reason}") from exc
 
     response_payload = json.loads(body)
+    if response_payload.get("status") == "incomplete":
+        reason = (response_payload.get("incomplete_details") or {}).get("reason", "unknown")
+        raise ConcernError(f"OpenAI response was incomplete (reason: {reason}).")
     output_text = _extract_output_text(response_payload).strip()
     if not output_text:
         raise ConcernError("OpenAI returned an empty concern response.")
@@ -453,10 +469,16 @@ def reevaluate_concern_with_ai(snapshot: dict, concern: ProjectConcern) -> Conce
 
 
 def build_concern_proposal_with_ai(snapshot: dict, concern: ProjectConcern, sections: list[dict]) -> ConcernProposalResult:
+    max_output_tokens = getattr(
+        settings,
+        "OPENAI_CONCERN_PROPOSAL_MAX_OUTPUT_TOKENS",
+        getattr(settings, "OPENAI_DEFAULT_MAX_OUTPUT_TOKENS", None),
+    )
     model, parsed_output = _request_openai(
         schema_name="concern_resolution_proposal",
         schema=CONCERN_PROPOSAL_SCHEMA,
         prompt=_proposal_prompt(snapshot, concern, sections),
+        max_output_tokens=max_output_tokens,
     )
     return ConcernProposalResult(
         provider="openai",
@@ -745,7 +767,7 @@ def _sections_for_concern(concern: ProjectConcern) -> list[dict]:
             concern.node_refs = _unique_refs(inferred_refs)
             concern.save(update_fields=["node_refs", "updated_at"])
             return _find_sections_for_refs(concern.project, concern.node_refs)
-    return []
+    return _spec_section_catalog(concern.project)
 
 
 def resolve_concern_with_ai(concern: ProjectConcern, *, actor=None):
@@ -765,10 +787,19 @@ def resolve_concern_with_ai(concern: ProjectConcern, *, actor=None):
         status=ConcernProposalStatus.OPEN,
     )
     section_lookup = {section["id"]: section for section in sections}
+    linked_refs: list[dict] = []
     for change_payload in result.changes:
         section = section_lookup.get(change_payload.get("section_id", ""))
         if not section:
             continue
+        linked_refs.append(
+            {
+                "section_id": section["id"],
+                "node_id": "",
+                "label": section["title"],
+                "excerpt": section["body"][:240],
+            }
+        )
         proposed_section_json = {
             "type": "specSection",
             "attrs": {
@@ -800,6 +831,9 @@ def resolve_concern_with_ai(concern: ProjectConcern, *, actor=None):
             original_body=section["body"],
             proposed_body=change_payload.get("proposed_body", ""),
         )
+    if linked_refs and not concern.node_refs:
+        concern.node_refs = _unique_refs(linked_refs)
+        concern.save(update_fields=["node_refs", "updated_at"])
     log_audit_event(
         project=concern.project,
         actor=actor,

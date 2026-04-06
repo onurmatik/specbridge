@@ -1,3 +1,4 @@
+from django.http import JsonResponse
 from django.urls import reverse
 from ninja import Router, Schema
 from ninja.security import django_auth
@@ -37,7 +38,7 @@ def create_project(request, payload: ProjectCreatePayload):
     if not project_name:
         errors["project_name"] = ["Project name is required."]
     if errors:
-        return 422, {"ok": False, "errors": errors}
+        return JsonResponse({"ok": False, "errors": errors}, status=422)
 
     project = create_project_workspace(
         actor=request.user,
