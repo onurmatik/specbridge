@@ -104,6 +104,34 @@ function documentSuggestionMenuIsOpen(shell) {
   return shell?.dataset?.dropdownOpen === "true";
 }
 
+function closeSectionAiMenus(exceptShell = null) {
+  document.querySelectorAll("[data-section-ai-shell]").forEach((shell) => {
+    if (exceptShell && shell === exceptShell) {
+      return;
+    }
+    setSectionAiMenuState(shell, false);
+  });
+}
+
+function setSectionAiMenuState(shell, isOpen) {
+  if (!shell) {
+    return;
+  }
+  const menu = shell.querySelector("[data-section-ai-menu]");
+  const toggle = shell.querySelector("[data-section-ai-toggle]");
+  if (menu) {
+    menu.hidden = !isOpen;
+  }
+  shell.dataset.sectionAiOpen = isOpen ? "true" : "false";
+  if (toggle) {
+    toggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
+  }
+}
+
+function sectionAiMenuIsOpen(shell) {
+  return shell?.dataset?.sectionAiOpen === "true";
+}
+
 const documentEditorAutosaveControllers = [];
 const specSectionAutosaveControllers = [];
 
@@ -448,6 +476,129 @@ function initializeSpecSectionAutosave() {
       flushSpecSectionAutosave(controller, { force: true }).catch((error) => {
         console.error(error);
       });
+    });
+  });
+}
+
+function initializeSectionAiControls() {
+  document.querySelectorAll("[data-section-ai-shell]").forEach((shell) => {
+    if (shell.dataset.sectionAiInitialized === "true") {
+      return;
+    }
+
+    shell.dataset.sectionAiInitialized = "true";
+
+    const toggle = shell.querySelector("[data-section-ai-toggle]");
+    const menu = shell.querySelector("[data-section-ai-menu]");
+    const sectionNode = shell.closest("[data-spec-section]");
+    const form = sectionNode?.querySelector?.("[data-spec-section-form]");
+    const bodyInput = form?.querySelector?.("[data-spec-section-input]");
+    const titleInput = form?.querySelector?.("input[name='title']");
+    const promptInput = menu?.querySelector?.("[data-section-ai-prompt]");
+    const runButton = menu?.querySelector?.("[data-section-ai-run]");
+
+    if (!toggle || !menu || !form || !bodyInput || !promptInput || !runButton) {
+      return;
+    }
+
+    setSectionAiMenuState(shell, false);
+
+    const setBusy = (isBusy) => {
+      shell.dataset.sectionAiBusy = isBusy ? "true" : "false";
+      toggle.disabled = isBusy;
+      promptInput.disabled = isBusy;
+      runButton.disabled = isBusy;
+      menu.querySelectorAll("[data-section-ai-preset]").forEach((button) => {
+        button.disabled = isBusy;
+      });
+    };
+
+    toggle.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (shell.dataset.sectionAiBusy === "true") {
+        return;
+      }
+      const nextOpenState = !sectionAiMenuIsOpen(shell);
+      closeSectionAiMenus(shell);
+      setSectionAiMenuState(shell, nextOpenState);
+      if (nextOpenState) {
+        promptInput.focus();
+      }
+    });
+
+    menu.querySelectorAll("[data-section-ai-preset]").forEach((button) => {
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        promptInput.value = button.dataset.sectionAiPreset || "";
+        promptInput.focus();
+        if (typeof promptInput.setSelectionRange === "function") {
+          promptInput.setSelectionRange(promptInput.value.length, promptInput.value.length);
+        }
+      });
+    });
+
+    runButton.addEventListener("click", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (!isAuthenticated()) {
+        openAuthModal("login");
+        return;
+      }
+
+      if (!promptInput.value.trim()) {
+        promptInput.focus();
+        window.alert("Enter a revision prompt first.");
+        return;
+      }
+
+      setBusy(true);
+      setSpecSectionAutosaveStatus(form, "saving", "AI editing...");
+
+      try {
+        const responsePayload = await postJson(
+          `${form.dataset.apiForm}/revise-with-ai`,
+          {
+            prompt: promptInput.value || "",
+            title: titleInput?.value || "",
+            body: bodyInput.value || "",
+            __form: form,
+          }
+        );
+        const revisedBody = `${responsePayload?.body || ""}`;
+        if (!revisedBody.trim()) {
+          setSpecSectionAutosaveStatus(form, "error", "AI failed");
+          window.alert("AI revision failed. No revised section text was returned.");
+          return;
+        }
+
+        if (revisedBody.trim() === (bodyInput.value || "").trim()) {
+          setSpecSectionAutosaveStatus(form, "saved", "No AI changes");
+          setSectionAiMenuState(shell, false);
+          return;
+        }
+
+        bodyInput.value = revisedBody;
+        resizeDocumentEditorInput(bodyInput);
+        bodyInput.dispatchEvent(new Event("input", { bubbles: true }));
+        setSectionAiMenuState(shell, false);
+        bodyInput.focus();
+        if (typeof bodyInput.setSelectionRange === "function") {
+          bodyInput.setSelectionRange(bodyInput.value.length, bodyInput.value.length);
+        }
+      } catch (error) {
+        console.error(error);
+        if (error.message.startsWith("Authentication required")) {
+          return;
+        }
+        setSpecSectionAutosaveStatus(form, "error", "AI failed");
+        const message = error.payload?.errors?.section?.[0] || "AI revision failed. Check the console for details.";
+        window.alert(message);
+      } finally {
+        setBusy(false);
+      }
     });
   });
 }
@@ -952,6 +1103,10 @@ document.addEventListener("click", async (event) => {
     closeDocumentSuggestionMenus();
   }
 
+  if (!event.target.closest("[data-section-ai-shell]")) {
+    closeSectionAiMenus();
+  }
+
   const specLink = event.target.closest("a[href^='#spec-section-']");
   if (specLink) {
     const workspace = document.querySelector("[data-spec-workspace]");
@@ -1043,6 +1198,7 @@ document.addEventListener("keydown", (event) => {
     return;
   }
   closeDocumentSuggestionMenus();
+  closeSectionAiMenus();
   closeAuthModal();
   closeProjectModal();
 });
@@ -1077,6 +1233,7 @@ document.addEventListener("input", (event) => {
 initializeDocumentCreateControls();
 initializeDocumentEditorAutosave();
 initializeSpecSectionAutosave();
+initializeSectionAiControls();
 initializeSpecNavigation();
 setAuthMode("login");
 

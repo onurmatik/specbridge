@@ -1,3 +1,4 @@
+from django.http import JsonResponse
 from ninja import Router, Schema
 from ninja.security import django_auth
 
@@ -15,6 +16,7 @@ from specs.concerns import (
 )
 from specs.consistency import dismiss_consistency_issue, resolve_consistency_issue, run_project_consistency
 from specs.models import Assumption, AssumptionStatus, AuditEventType
+from specs.section_ai import SectionRevisionError, revise_section_with_ai
 from specs.services import (
     build_primary_ref_for_section,
     build_project_snapshot,
@@ -34,6 +36,13 @@ class SpecSectionUpdatePayload(Schema):
     status: str | None = None
     body: str | None = None
     content_json: list[dict] | None = None
+
+
+class SpecSectionAiRevisionPayload(Schema):
+    prompt: str | None = None
+    action: str | None = None
+    title: str | None = None
+    body: str | None = None
 
 
 class AssumptionPayload(Schema):
@@ -131,6 +140,30 @@ def patch_spec_section(request, slug: str, section_id: str, payload: SpecSection
     except ValueError as exc:
         return 404, {"ok": False, "errors": {"section": [str(exc)]}}
     return {"ok": True, "section_id": section_id}
+
+
+@router.post("/{slug}/spec/sections/{section_id}/revise-with-ai", auth=django_auth)
+def revise_spec_section_with_ai(request, slug: str, section_id: str, payload: SpecSectionAiRevisionPayload):
+    project = get_project_or_404(slug, request.user)
+    try:
+        result = revise_section_with_ai(
+            project=project,
+            section_id=section_id,
+            prompt=payload.prompt,
+            action=payload.action,
+            title=payload.title,
+            body=payload.body,
+        )
+    except SectionRevisionError as exc:
+        status_code = 404 if str(exc) == "Section not found." else 422
+        return JsonResponse({"ok": False, "errors": {"section": [str(exc)]}}, status=status_code)
+    return {
+        "ok": True,
+        "section_id": section_id,
+        "prompt": result.prompt,
+        "summary": result.summary,
+        "body": result.revised_body,
+    }
 
 
 @router.get("/{slug}/spec/revisions")

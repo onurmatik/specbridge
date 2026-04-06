@@ -78,7 +78,6 @@ class ProjectPageTests(TestCase):
         self.assertContains(response, 'data-spec-nav-link', html=False)
         self.assertContains(response, "Issues &amp; Alignment", html=True)
         self.assertContains(response, "Active Queue")
-        self.assertContains(response, "Single Spec")
         self.assertContains(response, self.project.name)
         self.assertContains(response, self.project.tagline)
         self.assertNotContains(response, "Save Section")

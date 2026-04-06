@@ -76,6 +76,56 @@ class SpecsServiceTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json()["items"])
 
+    @patch("specs.section_ai._request_openai")
+    def test_section_ai_revision_endpoint_returns_revised_body(self, mock_request_openai):
+        section = self._section("requirements")
+        mock_request_openai.return_value = (
+            "gpt-5-mini",
+            {
+                "summary": "Tightened the wording and cleaned up repetition.",
+                "revised_body": "Revised requirements body",
+            },
+        )
+
+        response = self.client.post(
+            f"/api/projects/{self.project.slug}/spec/sections/{section['id']}/revise-with-ai",
+            data=json.dumps(
+                {
+                    "prompt": "Clarify this section and make it easier to scan.",
+                    "title": section["title"],
+                    "body": section["body"],
+                }
+            ),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["prompt"], "Clarify this section and make it easier to scan.")
+        self.assertEqual(payload["body"], "Revised requirements body")
+        self.assertEqual(payload["summary"], "Tightened the wording and cleaned up repetition.")
+
+    def test_section_ai_revision_endpoint_rejects_empty_prompt(self):
+        section = self._section("requirements")
+
+        response = self.client.post(
+            f"/api/projects/{self.project.slug}/spec/sections/{section['id']}/revise-with-ai",
+            data=json.dumps(
+                {
+                    "prompt": "   ",
+                    "title": section["title"],
+                    "body": section["body"],
+                }
+            ),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(
+            response.json()["errors"]["section"][0],
+            "Enter a revision prompt before running AI.",
+        )
+
     def test_create_and_validate_assumption_endpoints(self):
         section = self._section("requirements")
         response = self.client.post(
