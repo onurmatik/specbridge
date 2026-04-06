@@ -21,6 +21,15 @@ from projects.models import MembershipRole, Organization, Project, ProjectInvite
 from specs.models import (
     Assumption,
     AssumptionStatus,
+    ConcernProposal,
+    ConcernProposalChange,
+    ConcernProposalStatus,
+    ConcernRaisedByKind,
+    ConcernRun,
+    ConcernRunStatus,
+    ConcernSeverity,
+    ConcernStatus,
+    ConcernType,
     ConsistencyIssue,
     ConsistencyIssueSeverity,
     ConsistencyIssueStatus,
@@ -30,6 +39,7 @@ from specs.models import (
     DocumentStatus,
     DocumentType,
     ProjectDocument,
+    ProjectConcern,
 )
 from specs.services import bootstrap_documents, capture_document_revision, capture_project_revision
 
@@ -305,6 +315,140 @@ def ensure_demo_workspace():
             ),
         )
         _set_timestamp(fallback_post, now - timezone.timedelta(minutes=12))
+
+        concern_run = ConcernRun.objects.create(
+            project=project,
+            provider="openai",
+            model="gpt-5-mini",
+            status=ConcernRunStatus.COMPLETED,
+            concern_count=3,
+            scopes=[
+                ConcernType.CONSISTENCY,
+                ConcernType.IMPLEMENTABILITY,
+                ConcernType.BUSINESS_VIABILITY,
+            ],
+            analyzed_at=now - timezone.timedelta(minutes=4),
+        )
+
+        fallback_concern = ProjectConcern.objects.create(
+            project=project,
+            run=concern_run,
+            source_post=agent_post,
+            fingerprint="fallback-mismatch",
+            concern_type=ConcernType.CONSISTENCY,
+            raised_by_kind=ConcernRaisedByKind.AI,
+            title="Fallback mismatch across requirements, UI/UX, and infra",
+            summary="The delayed-email fallback still differs across the product, UX, and infra documents.",
+            severity=ConcernSeverity.HIGH,
+            status=ConcernStatus.OPEN,
+            source_refs=[
+                {"kind": "document", "identifier": "requirements", "label": "Requirements"},
+                {"kind": "document", "identifier": "ui-ux", "label": "UI/UX"},
+                {"kind": "document", "identifier": "infra", "label": "Infra"},
+            ],
+            recommendation="Define one shared fallback contract and keep the affected documents in sync.",
+            detected_at=now - timezone.timedelta(minutes=4),
+            last_seen_at=now - timezone.timedelta(minutes=4),
+            last_reevaluated_at=now - timezone.timedelta(minutes=4),
+        )
+        fallback_concern.documents.add(documents["requirements"], documents["ui-ux"], documents["infra"])
+
+        viability_concern = ProjectConcern.objects.create(
+            project=project,
+            run=concern_run,
+            source_post=fallback_post,
+            fingerprint="phase-one-identity-scope",
+            concern_type=ConcernType.BUSINESS_VIABILITY,
+            raised_by_kind=ConcernRaisedByKind.AI,
+            title="Phase 1 identity scope is still commercially ambiguous",
+            summary="The current project documents still do not make it clear whether identity verification joins Phase 1.",
+            severity=ConcernSeverity.MEDIUM,
+            status=ConcernStatus.OPEN,
+            source_refs=[
+                {"kind": "document", "identifier": "risks-open-questions", "label": "Risks & Open Questions"},
+                {"kind": "document", "identifier": "overview", "label": "Overview"},
+            ],
+            recommendation="Confirm the Phase 1 commercial scope and reflect it in the project overview and risks document.",
+            detected_at=now - timezone.timedelta(minutes=4),
+            last_seen_at=now - timezone.timedelta(minutes=4),
+            last_reevaluated_at=now - timezone.timedelta(minutes=4),
+        )
+        viability_concern.documents.add(documents["overview"], documents["risks-open-questions"])
+
+        human_concern = ProjectConcern.objects.create(
+            project=project,
+            source_post=eng_post,
+            fingerprint="human-fallback-ownership",
+            concern_type=ConcernType.HUMAN_FLAG,
+            raised_by_kind=ConcernRaisedByKind.HUMAN,
+            title="Need one owner for delayed-email recovery",
+            summary="The team still needs clear ownership for the fallback contract before implementation starts.",
+            severity=ConcernSeverity.MEDIUM,
+            status=ConcernStatus.STALE,
+            source_refs=[
+                {"kind": "stream_post", "identifier": str(eng_post.id), "label": "Marcus comment"},
+                {"kind": "document", "identifier": "requirements", "label": "Requirements"},
+                {"kind": "document", "identifier": "infra", "label": "Infra"},
+            ],
+            recommendation="Assign one owner, update the documents, and then re-evaluate this concern.",
+            detected_at=eng_post.created_at,
+            last_seen_at=eng_post.created_at,
+            reevaluation_requested_at=now - timezone.timedelta(minutes=10),
+            created_by=marcus,
+        )
+        human_concern.documents.add(documents["requirements"], documents["infra"])
+
+        concern_post = StreamPost.objects.create(
+            project=project,
+            author=marcus,
+            actor_name="Marcus",
+            actor_title="Lead Eng",
+            kind=StreamPostKind.COMMENT,
+            concern=fallback_concern,
+            body="We need the same SLA and same operator playbook spelled out in all three docs.",
+        )
+        _set_timestamp(concern_post, now - timezone.timedelta(minutes=7))
+
+        agent_concern_post = StreamPost.objects.create(
+            project=project,
+            actor_name="Align Agent",
+            actor_title="AI Agent",
+            kind=StreamPostKind.AGENT,
+            concern=fallback_concern,
+            body="I can generate a coordinated patch across requirements and infra once the team agrees on the fallback contract.",
+        )
+        _set_timestamp(agent_concern_post, now - timezone.timedelta(minutes=5))
+
+        fallback_proposal = ConcernProposal.objects.create(
+            project=project,
+            concern=fallback_concern,
+            provider="openai",
+            model="gpt-5-mini",
+            summary="Normalize the delayed-email fallback between requirements and infra.",
+            status=ConcernProposalStatus.OPEN,
+            requested_by=lena,
+        )
+        ConcernProposalChange.objects.create(
+            proposal=fallback_proposal,
+            document=documents["requirements"],
+            summary="Add one explicit fallback flow and SLA to the product requirement.",
+            original_body=documents["requirements"].body,
+            proposed_body=(
+                f"{documents['requirements'].body}\n"
+                "- If delivery exceeds 15 seconds, the UI shows retry guidance and a support escalation path.\n"
+                "- The same 15 second threshold becomes the shared fallback contract across product and infra.\n"
+            ),
+        )
+        ConcernProposalChange.objects.create(
+            proposal=fallback_proposal,
+            document=documents["infra"],
+            summary="Mirror the same fallback contract in operator-facing infra notes.",
+            original_body=documents["infra"].body,
+            proposed_body=(
+                f"{documents['infra'].body}\n\n"
+                "Delayed email recovery uses the same 15 second SLA as product. Operator tooling must show when that SLA is breached and what escalation path is active."
+            ),
+        )
 
         OpenQuestion.objects.create(
             project=project,

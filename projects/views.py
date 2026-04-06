@@ -99,9 +99,7 @@ def project_directory(request):
             "active_item": "projects",
             "navigation_items": navigation_items,
             "unresolved_count": (
-                current_project.questions.exclude(status="resolved").count()
-                + current_project.blockers.exclude(status="resolved").count()
-                + current_project.consistency_issues.filter(status="open").count()
+                current_project.concerns.exclude(status__in=["resolved", "dismissed"]).count()
             )
             if current_project
             else 0,
@@ -180,7 +178,7 @@ def project_workspace(request, slug):
     return render(
         request,
         "pages/workspace.html",
-        workspace_context(project, active_document_slug=request.GET.get("document")),
+        workspace_context(project, active_concern_id=request.GET.get("concern")),
     )
 
 

@@ -10,14 +10,14 @@
   <main class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
     {% include "components/page_header.html" %}
     <div class="flex min-h-0 flex-1 overflow-hidden bg-gray-50">
-      <aside class="flex w-[300px] flex-shrink-0 flex-col border-r border-gray-200 bg-white">
+      <aside class="flex w-[320px] flex-shrink-0 flex-col border-r border-gray-200 bg-white">
         <div class="border-b border-gray-100 px-6 py-5">
           <div class="mb-3 flex items-center gap-2">
             <span class="workspace-badge border-gray-200 bg-gray-50 text-gray-600">{{ status_label }}</span>
             {% if request.user.is_authenticated %}
               <span class="inline-flex items-center gap-1.5 rounded-md bg-purple-50 px-2 py-1 text-xs font-medium text-brand-agent">
                 <iconify-icon icon="lucide:bot"></iconify-icon>
-                Polling MVP
+                Agent ready
               </span>
             {% else %}
               <span class="workspace-badge border-blue-100 bg-blue-50 text-blue-700">
@@ -33,40 +33,53 @@
             <p class="mt-2 text-sm leading-relaxed text-gray-500">{{ workspace_summary_detail }}</p>
           {% endif %}
         </div>
+
         <div class="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
-          {% for document in documents %}
-            <div class="group relative">
-              {% if request.user.is_authenticated %}
-                <form class="absolute right-3 top-3 z-10" data-api-form="/api/projects/{{ project.slug }}/documents/{{ document.slug }}" data-api-method="DELETE">
-                  {% csrf_token %}
-                  <button
-                    type="submit"
-                    class="inline-flex h-7 w-7 items-center justify-center rounded-full border transition {% if active_document and document.id == active_document.id %}border-white/20 bg-white/10 text-white opacity-100 hover:bg-white/15{% else %}border-gray-200 bg-white text-gray-400 opacity-0 hover:border-red-200 hover:bg-red-50 hover:text-red-700 group-hover:opacity-100 focus:opacity-100{% endif %}"
-                    aria-label="Delete {{ document.title }}"
-                  >
-                    <iconify-icon icon="lucide:trash-2"></iconify-icon>
-                  </button>
-                </form>
-              {% endif %}
-              <a
-                href="{% url 'project-workspace' project.slug %}?document={{ document.slug }}"
-                data-document-link
-                class="block rounded-2xl border p-4 pr-12 transition {% if active_document and document.id == active_document.id %}border-gray-900 bg-gray-900 text-white shadow-card{% else %}border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50{% endif %}"
-              >
-                <div class="mb-2 flex items-center justify-between gap-3">
-                  <span class="truncate text-sm font-semibold">{{ document.title }}</span>
-                  <span class="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider {% if active_document and document.id == active_document.id %}bg-white/15 text-white{% else %}{% if document.status == 'aligned' %}bg-green-50 text-green-700{% elif document.status == 'blocked' %}bg-red-50 text-red-700{% else %}bg-amber-50 text-amber-700{% endif %}{% endif %}">
-                    {{ document.get_status_display }}
-                  </span>
-                </div>
-                <div class="flex items-center justify-between text-xs {% if active_document and document.id == active_document.id %}text-white/70{% else %}text-gray-500{% endif %}">
-                  <span>{{ document.get_document_type_display }}</span>
-                  <span>{% if document.source_kind == 'preset' %}Preset{% else %}Custom{% endif %}</span>
-                </div>
-              </a>
-            </div>
+          {% for section in document_sections %}
+            {% with document=section.document %}
+              <div class="group relative">
+                {% if request.user.is_authenticated %}
+                  <form class="absolute right-3 top-3 z-10" data-api-form="/api/projects/{{ project.slug }}/documents/{{ document.slug }}" data-api-method="DELETE">
+                    {% csrf_token %}
+                    <button
+                      type="submit"
+                      class="inline-flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-400 opacity-0 transition hover:border-red-200 hover:bg-red-50 hover:text-red-700 group-hover:opacity-100 focus:opacity-100"
+                      aria-label="Delete {{ document.title }}"
+                    >
+                      <iconify-icon icon="lucide:trash-2"></iconify-icon>
+                    </button>
+                  </form>
+                {% endif %}
+                <a
+                  href="#document-{{ document.slug }}"
+                  class="block rounded-2xl border p-4 pr-12 transition {% if section.is_selected %}border-red-100 bg-red-50/40{% else %}border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50{% endif %}"
+                >
+                  <div class="mb-2 flex items-start justify-between gap-3">
+                    <div class="min-w-0">
+                      <div class="truncate text-sm font-semibold text-gray-900">{{ document.title }}</div>
+                      <div class="mt-1 flex items-center gap-2 text-[11px] uppercase tracking-wider text-gray-400">
+                        <span>{{ document.get_document_type_display }}</span>
+                        <span>&middot;</span>
+                        <span>{{ document.get_status_display }}</span>
+                      </div>
+                    </div>
+                    {% if section.concerns %}
+                      <span class="rounded-full bg-gray-900 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
+                        {{ section.concerns|length }}
+                      </span>
+                    {% endif %}
+                  </div>
+                  <div class="flex flex-wrap gap-2">
+                    {% for concern in section.concerns|slice:":2" %}
+                      <span class="rounded-full border border-white/80 bg-white/80 px-2 py-1 text-[11px] font-medium text-gray-600">{{ concern.get_concern_type_display }}</span>
+                    {% endfor %}
+                  </div>
+                </a>
+              </div>
+            {% endwith %}
           {% endfor %}
         </div>
+
         <div class="border-t border-gray-100 bg-gray-50 p-4">
           {% if request.user.is_authenticated %}
             <form class="space-y-3" data-api-form="/api/projects/{{ project.slug }}/documents" data-document-create-form>
@@ -112,155 +125,305 @@
         </div>
       </aside>
 
-      <section class="min-h-0 flex-1 overflow-hidden">
-        <div class="flex h-full flex-col">
-          {% if active_document %}
-            <div data-workspace-document-pane class="workspace-panel flex min-h-0 flex-1 overflow-hidden">
-              {% if request.user.is_authenticated %}
-                <form class="relative flex min-h-0 flex-1" data-api-form="/api/projects/{{ project.slug }}/documents/{{ active_document.slug }}" data-api-method="PATCH" data-document-editor-form>
-                  {% csrf_token %}
-                  <div class="pointer-events-none absolute right-6 top-6 z-10 flex items-center gap-2">
-                    <span data-document-autosave-status class="rounded-full border border-gray-200 bg-white/90 px-3 py-1 text-[11px] font-medium text-gray-500 shadow-sm backdrop-blur-sm">Saved</span>
-                    <span class="rounded-full border border-gray-200 bg-white/90 px-3 py-1 text-[11px] font-medium text-gray-500 shadow-sm backdrop-blur-sm">Markdown Canvas</span>
-                  </div>
-                  <textarea
-                    name="body"
-                    rows="24"
-                    data-document-editor-input
-                    class="h-full min-h-0 w-full flex-1 resize-none border-0 bg-white px-10 py-10 font-mono text-[15px] leading-8 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-0"
-                    placeholder="# {{ active_document.title }}&#10;&#10;Write the current source of truth in Markdown."
-                  >{{ active_document.body }}</textarea>
-                </form>
-              {% else %}
-                <div class="relative flex min-h-0 flex-1">
-                  <div class="pointer-events-none absolute right-6 top-6 z-10">
-                    <span class="rounded-full border border-gray-200 bg-white/90 px-3 py-1 text-[11px] font-medium text-gray-500 shadow-sm backdrop-blur-sm">Markdown Canvas</span>
-                  </div>
-                  <textarea
-                    rows="24"
-                    readonly
-                    class="h-full min-h-0 w-full flex-1 resize-none border-0 bg-white px-10 py-10 font-mono text-[15px] leading-8 text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-0"
-                    placeholder="# {{ active_document.title }}&#10;&#10;Write the current source of truth in Markdown."
-                  >{{ active_document.body }}</textarea>
-                  <div class="absolute inset-x-0 bottom-0 border-t border-gray-100 bg-white/95 p-6 backdrop-blur-sm">
-                    <button type="button" class="primary-button" data-auth-modal-trigger data-auth-mode="login">
-                      <iconify-icon icon="lucide:log-in"></iconify-icon>
-                      Sign In to Edit
-                    </button>
-                  </div>
-                </div>
-              {% endif %}
+      <section class="min-h-0 min-w-0 flex-1 overflow-y-auto bg-white">
+        {% if document_sections %}
+          <div data-workspace-document-pane class="min-h-full">
+            {% for section in document_sections %}
+              {% with document=section.document %}
+                <section id="document-{{ document.slug }}" class="relative border-b border-gray-100 {% if section.is_selected and selected_concern %}{% if selected_concern.severity == 'critical' or selected_concern.severity == 'high' %}bg-red-50/20{% elif selected_concern.severity == 'medium' %}bg-amber-50/20{% else %}bg-blue-50/20{% endif %}{% endif %}">
+
+                  {% if request.user.is_authenticated %}
+                    <form class="relative" data-api-form="/api/projects/{{ project.slug }}/documents/{{ document.slug }}" data-api-method="PATCH" data-document-editor-form>
+                      {% csrf_token %}
+                      <div class="pointer-events-none absolute right-6 top-6 z-10 flex items-center gap-2">
+                        <span class="rounded-full border border-gray-200 bg-white/90 px-3 py-1 text-[11px] font-medium text-gray-500 shadow-sm backdrop-blur-sm">{{ document.title }}</span>
+                        <span data-document-autosave-status class="rounded-full border border-gray-200 bg-white/90 px-3 py-1 text-[11px] font-medium text-gray-500 shadow-sm backdrop-blur-sm">Saved</span>
+                      </div>
+                      {% if section.is_selected and selected_concern %}
+                        <div class="px-10 pt-20 pb-3">
+                          <div class="rounded-2xl border bg-white/95 p-4 shadow-card {% if selected_concern.severity == 'critical' or selected_concern.severity == 'high' %}border-red-100{% elif selected_concern.severity == 'medium' %}border-amber-100{% else %}border-blue-100{% endif %}">
+                            <div class="mb-2 flex items-center justify-between gap-3">
+                              <span class="rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wider {% if selected_concern.severity == 'critical' or selected_concern.severity == 'high' %}bg-red-100 text-red-700{% elif selected_concern.severity == 'medium' %}bg-amber-100 text-amber-700{% else %}bg-blue-100 text-blue-700{% endif %}">{{ selected_concern.get_severity_display }}</span>
+                              <span class="text-[10px] font-medium uppercase tracking-wider text-gray-400">{{ selected_concern.get_concern_type_display }}</span>
+                            </div>
+                            <div class="text-sm font-semibold text-gray-900">{{ selected_concern.title }}</div>
+                            <p class="mt-2 text-xs leading-relaxed text-gray-600">{{ selected_concern.summary }}</p>
+                          </div>
+                        </div>
+                      {% endif %}
+                      <textarea
+                        name="body"
+                        rows="12"
+                        data-document-editor-input
+                        class="block w-full resize-none border-0 bg-transparent px-10 py-8 font-mono text-[15px] leading-8 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-0"
+                        placeholder="# {{ document.title }}&#10;&#10;Write the current source of truth in Markdown."
+                      >{{ document.body }}</textarea>
+                    </form>
+                  {% else %}
+                    <div class="relative">
+                      <div class="pointer-events-none absolute right-6 top-6 z-10">
+                        <span class="rounded-full border border-gray-200 bg-white/90 px-3 py-1 text-[11px] font-medium text-gray-500 shadow-sm backdrop-blur-sm">{{ document.title }}</span>
+                      </div>
+                      {% if section.is_selected and selected_concern %}
+                        <div class="px-10 pt-20 pb-3">
+                          <div class="rounded-2xl border bg-white/95 p-4 shadow-card {% if selected_concern.severity == 'critical' or selected_concern.severity == 'high' %}border-red-100{% elif selected_concern.severity == 'medium' %}border-amber-100{% else %}border-blue-100{% endif %}">
+                            <div class="mb-2 flex items-center justify-between gap-3">
+                              <span class="rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wider {% if selected_concern.severity == 'critical' or selected_concern.severity == 'high' %}bg-red-100 text-red-700{% elif selected_concern.severity == 'medium' %}bg-amber-100 text-amber-700{% else %}bg-blue-100 text-blue-700{% endif %}">{{ selected_concern.get_severity_display }}</span>
+                              <span class="text-[10px] font-medium uppercase tracking-wider text-gray-400">{{ selected_concern.get_concern_type_display }}</span>
+                            </div>
+                            <div class="text-sm font-semibold text-gray-900">{{ selected_concern.title }}</div>
+                            <p class="mt-2 text-xs leading-relaxed text-gray-600">{{ selected_concern.summary }}</p>
+                          </div>
+                        </div>
+                      {% endif %}
+                      <textarea
+                        rows="12"
+                        readonly
+                        class="block w-full resize-none border-0 bg-transparent px-10 py-8 font-mono text-[15px] leading-8 text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-0"
+                        placeholder="# {{ document.title }}&#10;&#10;Write the current source of truth in Markdown."
+                      >{{ document.body }}</textarea>
+                    </div>
+                  {% endif %}
+                </section>
+              {% endwith %}
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="flex h-full items-center justify-center p-10 text-center">
+            <div class="max-w-sm">
+              <h2 class="font-display text-2xl font-bold text-gray-900">No documents yet</h2>
+              <p class="mt-3 text-sm leading-relaxed text-gray-500">Add a document from the left sidebar to start the combined spec.</p>
             </div>
-          {% else %}
-            <div class="workspace-panel flex min-h-0 flex-1 items-center justify-center p-10 text-center">
-              <div class="max-w-sm">
-                <h2 class="font-display text-2xl font-bold text-gray-900">No active document</h2>
-                <p class="mt-3 text-sm leading-relaxed text-gray-500">Create a new document from the left sidebar or pick one from the project list.</p>
-              </div>
-            </div>
-          {% endif %}
-        </div>
+          </div>
+        {% endif %}
       </section>
 
-      <aside class="flex w-[380px] flex-shrink-0 flex-col border-l border-gray-200 bg-white">
+      <aside class="flex w-[430px] flex-shrink-0 flex-col border-l border-gray-200 bg-white">
         <div class="border-b border-gray-100 px-6 py-5">
           <div class="flex items-center justify-between gap-3">
             <div>
-              <h2 class="font-display text-lg font-bold text-gray-900">Consistency Inbox</h2>
-              <p class="mt-1 text-xs text-gray-500">Cross-document issues stay project-level.</p>
+              <h2 class="font-display text-lg font-bold text-gray-900">Issues &amp; Concerns</h2>
+              <p class="mt-1 text-xs text-gray-500">AI and the team raise cross-document risks here.</p>
             </div>
             {% if request.user.is_authenticated %}
-              <button class="secondary-button !px-3 !py-1.5 !text-xs" data-api-post="/api/projects/{{ project.slug }}/consistency-runs">
+              <button class="secondary-button !px-3 !py-1.5 !text-xs" data-api-post="/api/projects/{{ project.slug }}/concern-runs">
                 <iconify-icon icon="lucide:refresh-cw"></iconify-icon>
-                Run now
+                Scan
               </button>
             {% endif %}
           </div>
-          {% if latest_consistency_run and latest_consistency_run.status == 'failed' %}
+          {% if latest_concern_run and latest_concern_run.status == 'failed' %}
             <div class="mt-4 rounded-xl border border-red-100 bg-red-50 p-3 text-xs text-red-700">
-              Check failed: {{ latest_consistency_run.error_message|default:"Provider error." }}
+              Check failed: {{ latest_concern_run.error_message|default:"Provider error." }}
+            </div>
+          {% elif latest_concern_run %}
+            <div class="mt-4 flex items-center gap-2 text-[11px] uppercase tracking-wider text-gray-400">
+              <span>{{ latest_concern_run.get_status_display }}</span>
+              <span>&middot;</span>
+              <span>{{ latest_concern_run.concern_count }} concern{{ latest_concern_run.concern_count|pluralize }}</span>
             </div>
           {% endif %}
         </div>
-        <div class="min-h-0 flex-1 overflow-y-auto p-4">
-          <div class="space-y-4 pb-4">
-            {% for issue in consistency_issues %}
-              <div class="rounded-2xl border p-4 {% if issue.status == 'open' %}{% if issue.severity == 'critical' or issue.severity == 'high' %}border-red-100 bg-red-50/40{% else %}border-amber-100 bg-amber-50/40{% endif %}{% else %}border-gray-200 bg-gray-50 opacity-70{% endif %}">
-                <div class="mb-2 flex items-center justify-between gap-2">
-                  <span class="rounded px-2 py-1 text-[10px] font-bold uppercase tracking-wider {% if issue.severity == 'critical' or issue.severity == 'high' %}bg-red-100 text-red-700{% elif issue.severity == 'medium' %}bg-amber-100 text-amber-700{% else %}bg-blue-100 text-blue-700{% endif %}">
-                    {{ issue.severity }}
-                  </span>
-                  <span class="text-[10px] font-medium uppercase tracking-wider text-gray-400">{{ issue.get_status_display }}</span>
+
+        <div class="min-h-0 flex-1 overflow-y-auto">
+          <div class="border-b border-gray-100 p-4">
+            <div class="mb-3 flex items-center justify-between">
+              <h3 class="font-display text-base font-bold text-gray-900">Active Queue</h3>
+              <span class="text-xs text-gray-400">{{ concerns|length }} total</span>
+            </div>
+            <div class="space-y-3">
+              {% for concern in concerns %}
+                <a
+                  href="{% url 'project-workspace' project.slug %}?concern={{ concern.id }}"
+                  class="block rounded-2xl border p-4 transition {% if selected_concern and concern.id == selected_concern.id %}border-gray-900 bg-gray-900 text-white shadow-card{% else %}border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50{% endif %}"
+                >
+                  <div class="mb-2 flex items-center justify-between gap-2">
+                    <span class="rounded px-2 py-1 text-[10px] font-bold uppercase tracking-wider {% if selected_concern and concern.id == selected_concern.id %}bg-white/15 text-white{% elif concern.severity == 'critical' or concern.severity == 'high' %}bg-red-100 text-red-700{% elif concern.severity == 'medium' %}bg-amber-100 text-amber-700{% else %}bg-blue-100 text-blue-700{% endif %}">
+                      {{ concern.get_severity_display }}
+                    </span>
+                    <span class="text-[10px] font-medium uppercase tracking-wider {% if selected_concern and concern.id == selected_concern.id %}text-white/60{% else %}text-gray-400{% endif %}">
+                      {{ concern.get_status_display }}
+                    </span>
+                  </div>
+                  <div class="text-sm font-semibold {% if selected_concern and concern.id == selected_concern.id %}text-white{% else %}text-gray-900{% endif %}">{{ concern.title }}</div>
+                  <p class="mt-2 text-xs leading-relaxed {% if selected_concern and concern.id == selected_concern.id %}text-white/70{% else %}text-gray-600{% endif %}">{{ concern.summary|truncatechars:160 }}</p>
+                </a>
+              {% empty %}
+                <div class="rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-6 text-sm text-gray-500">
+                  No concerns stored yet. Run a scan or promote an activity post.
                 </div>
-                <h3 class="text-sm font-semibold text-gray-900">{{ issue.title }}</h3>
-                <p class="mt-2 text-sm leading-relaxed text-gray-600">{{ issue.summary }}</p>
-                {% if issue.source_refs %}
-                  <div class="mt-3 flex flex-wrap gap-2">
-                    {% for ref in issue.source_refs %}
+              {% endfor %}
+            </div>
+          </div>
+
+          <div class="space-y-6 p-4 pb-8">
+            {% if selected_concern %}
+              <section class="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                <div class="mb-4 flex items-start justify-between gap-3">
+                  <div>
+                    <div class="flex items-center gap-2">
+                      <span class="workspace-badge border-gray-200 bg-white text-gray-600">{{ selected_concern.get_concern_type_display }}</span>
+                      <span class="workspace-badge border-gray-200 bg-white text-gray-600">{{ selected_concern.raised_by_kind|upper }}</span>
+                    </div>
+                    <h3 class="mt-3 font-display text-lg font-bold text-gray-900">{{ selected_concern.title }}</h3>
+                  </div>
+                  <span class="rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wider {% if selected_concern.severity == 'critical' or selected_concern.severity == 'high' %}bg-red-100 text-red-700{% elif selected_concern.severity == 'medium' %}bg-amber-100 text-amber-700{% else %}bg-blue-100 text-blue-700{% endif %}">
+                    {{ selected_concern.get_severity_display }}
+                  </span>
+                </div>
+
+                <p class="text-sm leading-relaxed text-gray-700">{{ selected_concern.summary }}</p>
+
+                {% if selected_concern.source_refs %}
+                  <div class="mt-4 flex flex-wrap gap-2">
+                    {% for ref in selected_concern.source_refs %}
                       <span class="rounded-full border border-gray-200 bg-white px-2.5 py-1 text-[11px] font-medium text-gray-600">{{ ref.label }}</span>
                     {% endfor %}
                   </div>
                 {% endif %}
-                {% if issue.recommendation %}
-                  <p class="mt-3 text-xs leading-relaxed text-gray-500">Suggested next step: {{ issue.recommendation }}</p>
-                {% endif %}
-                <div class="mt-4 flex items-center justify-between gap-3">
-                  <span class="text-[11px] text-gray-400">Last seen {{ issue.last_seen_at|date:"M j, g:i A" }}</span>
-                  {% if request.user.is_authenticated and issue.status == 'open' %}
-                    <div class="flex gap-2">
-                      <button class="secondary-button !px-3 !py-1.5 !text-xs" data-api-post="/api/projects/{{ project.slug }}/consistency-issues/{{ issue.id }}/dismiss">Dismiss</button>
-                      <button class="primary-button !px-3 !py-1.5 !text-xs" data-api-post="/api/projects/{{ project.slug }}/consistency-issues/{{ issue.id }}/resolve">Resolve</button>
-                    </div>
-                  {% endif %}
-                </div>
-              </div>
-            {% empty %}
-              <div class="rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-6 text-sm text-gray-500">
-                No stored consistency issues yet. Run the analyzer after document updates.
-              </div>
-            {% endfor %}
 
-            <div class="rounded-2xl border border-gray-200 bg-gray-50 p-4">
-              <div class="mb-3 flex items-center justify-between">
-                <h3 class="font-display text-base font-bold text-gray-900">Recent Alignment Stream</h3>
-                <span class="text-xs text-gray-400">{{ stream_entries|length }} entries</span>
+                {% if selected_concern.recommendation %}
+                  <div class="mt-4 rounded-2xl border border-gray-200 bg-white p-4">
+                    <div class="text-[11px] font-medium uppercase tracking-wider text-gray-400">Suggested next step</div>
+                    <p class="mt-2 text-sm leading-relaxed text-gray-700">{{ selected_concern.recommendation }}</p>
+                  </div>
+                {% endif %}
+
+                {% if request.user.is_authenticated %}
+                  <div class="mt-4 flex flex-wrap gap-2">
+                    <button class="secondary-button !px-3 !py-1.5 !text-xs" data-api-post="/api/projects/{{ project.slug }}/concerns/{{ selected_concern.id }}/re-evaluate">Re-evaluate</button>
+                    <button class="primary-button !px-3 !py-1.5 !text-xs" data-api-post="/api/projects/{{ project.slug }}/concerns/{{ selected_concern.id }}/resolve-with-ai">Resolve with AI</button>
+                    <button class="secondary-button !px-3 !py-1.5 !text-xs" data-api-post="/api/projects/{{ project.slug }}/concerns/{{ selected_concern.id }}/dismiss">Dismiss</button>
+                  </div>
+                {% endif %}
+              </section>
+
+              <section class="rounded-2xl border border-gray-200 bg-white p-4">
+                <div class="mb-4 flex items-center justify-between">
+                  <h3 class="font-display text-base font-bold text-gray-900">AI Patch Review</h3>
+                  <span class="text-xs text-gray-400">{{ selected_concern_proposals|length }} proposal{{ selected_concern_proposals|length|pluralize }}</span>
+                </div>
+                <div class="space-y-4">
+                  {% for proposal_bundle in selected_concern_proposals %}
+                    <div class="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                      <div class="mb-2 flex items-center justify-between gap-3">
+                        <div class="text-sm font-semibold text-gray-900">{{ proposal_bundle.proposal.summary|default:"AI proposal" }}</div>
+                        <span class="rounded-full bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-gray-500">{{ proposal_bundle.proposal.get_status_display }}</span>
+                      </div>
+                      <div class="space-y-4">
+                        {% for item in proposal_bundle.changes %}
+                          <div class="rounded-2xl border border-gray-200 bg-white p-4">
+                            <div class="mb-2 flex items-center justify-between gap-3">
+                              <div>
+                                <div class="text-sm font-semibold text-gray-900">{{ item.change.document.title }}</div>
+                                <div class="text-[11px] uppercase tracking-wider text-gray-400">{{ item.change.get_status_display }}</div>
+                              </div>
+                              {% if request.user.is_authenticated and item.change.status == 'pending' %}
+                                <div class="flex gap-2">
+                                  <button class="secondary-button !px-3 !py-1.5 !text-xs" data-api-post="/api/projects/{{ project.slug }}/concern-proposals/{{ proposal_bundle.proposal.id }}/changes/{{ item.change.id }}/reject">Reject</button>
+                                  <button class="primary-button !px-3 !py-1.5 !text-xs" data-api-post="/api/projects/{{ project.slug }}/concern-proposals/{{ proposal_bundle.proposal.id }}/changes/{{ item.change.id }}/accept">Accept</button>
+                                </div>
+                              {% endif %}
+                            </div>
+                            {% if item.change.summary %}
+                              <p class="mb-3 text-sm leading-relaxed text-gray-600">{{ item.change.summary }}</p>
+                            {% endif %}
+                            <pre class="max-h-56 overflow-auto rounded-xl bg-gray-950 px-4 py-3 text-[11px] leading-6 text-gray-100">{{ item.diff }}</pre>
+                          </div>
+                        {% endfor %}
+                      </div>
+                    </div>
+                  {% empty %}
+                    <div class="rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-4 text-sm text-gray-500">
+                      No AI proposal yet. Use <strong>Resolve with AI</strong> to generate a reviewable patch set.
+                    </div>
+                  {% endfor %}
+                </div>
+              </section>
+
+              <section class="rounded-2xl border border-gray-200 bg-white p-4">
+                <div class="mb-4 flex items-center justify-between">
+                  <h3 class="font-display text-base font-bold text-gray-900">Concern Discussion</h3>
+                  <span class="text-xs text-gray-400">{{ selected_concern_posts|length }} message{{ selected_concern_posts|length|pluralize }}</span>
+                </div>
+                <div class="space-y-3">
+                  {% for post in selected_concern_posts %}
+                    <div class="rounded-2xl border border-gray-200 bg-gray-50 p-3">
+                      <div class="text-sm font-medium text-gray-900">{{ post.actor_name }}</div>
+                      <div class="text-[11px] uppercase tracking-wider text-gray-400">{{ post.actor_title|default:"Contributor" }}</div>
+                      <p class="mt-2 text-sm leading-relaxed text-gray-600">{{ post.body }}</p>
+                    </div>
+                  {% empty %}
+                    <div class="rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-4 text-sm text-gray-500">
+                      No discussion yet for this concern.
+                    </div>
+                  {% endfor %}
+                </div>
+              </section>
+            {% else %}
+              <section class="rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-6 text-sm text-gray-500">
+                Select a concern from the queue to inspect its detail, discussion, and AI patch proposals.
+              </section>
+            {% endif %}
+
+            <section class="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+              <div class="mb-4 flex items-center justify-between">
+                <div>
+                  <h3 class="font-display text-base font-bold text-gray-900">Activity</h3>
+                  <p class="mt-1 text-xs text-gray-500">General notes stay separate from issue threads.</p>
+                </div>
+                {% if selected_concern %}
+                  <a href="{% url 'project-workspace' project.slug %}" class="text-xs font-medium text-brand-agent hover:underline">Post to activity</a>
+                {% endif %}
               </div>
               <div class="space-y-3">
-                {% for entry in stream_entries|slice:":5" %}
-                  <div class="rounded-xl border border-gray-200 bg-white p-3">
-                    {% if entry.kind == 'decision' %}
-                      <div class="text-xs font-bold uppercase tracking-wider text-green-700">Decision</div>
-                      <div class="mt-1 text-sm font-medium text-gray-900">{{ entry.decision.title }}</div>
-                      <p class="mt-1 text-xs text-gray-500">{{ entry.decision.summary }}</p>
-                    {% elif entry.kind == 'agent' %}
-                      <div class="text-xs font-bold uppercase tracking-wider text-purple-700">Agent Suggestion</div>
-                      <div class="mt-1 text-sm font-medium text-gray-900">{{ entry.suggestion.title }}</div>
-                      <p class="mt-1 text-xs text-gray-500">{{ entry.suggestion.summary }}</p>
-                    {% else %}
-                      <div class="text-sm font-medium text-gray-900">{{ entry.post.actor_name }}</div>
-                      <p class="mt-1 text-xs text-gray-500">{{ entry.post.body }}</p>
-                    {% endif %}
+                {% for post in activity_posts %}
+                  <div class="rounded-2xl border border-gray-200 bg-white p-4">
+                    <div class="flex items-start justify-between gap-3">
+                      <div class="min-w-0">
+                        <div class="text-sm font-medium text-gray-900">{{ post.actor_name }}</div>
+                        <div class="text-[11px] uppercase tracking-wider text-gray-400">{{ post.actor_title|default:"Contributor" }}</div>
+                      </div>
+                      {% if request.user.is_authenticated %}
+                        <button class="secondary-button !px-3 !py-1.5 !text-xs" data-api-post="/api/projects/{{ project.slug }}/stream/{{ post.id }}/promote-to-concern">Raise concern</button>
+                      {% endif %}
+                    </div>
+                    <p class="mt-2 text-sm leading-relaxed text-gray-600">{{ post.body }}</p>
+                  </div>
+                {% empty %}
+                  <div class="rounded-2xl border border-dashed border-gray-200 bg-white p-4 text-sm text-gray-500">
+                    No general activity yet.
                   </div>
                 {% endfor %}
               </div>
-            </div>
+            </section>
           </div>
         </div>
+
         <div class="border-t border-gray-100 bg-white/95 p-4 backdrop-blur-sm">
           <div class="rounded-2xl border border-gray-200 bg-gray-50 p-4 shadow-card">
             <div class="mb-3 flex items-start justify-between gap-3">
               <div>
-                <h3 class="font-display text-base font-bold text-gray-900">AI + Stream Composer</h3>
-                <p class="mt-1 text-xs leading-relaxed text-gray-500">Keep quick prompts and project updates anchored here while you edit documents.</p>
+                <h3 class="font-display text-base font-bold text-gray-900">{% if selected_concern %}Discuss Concern{% else %}Post to Activity{% endif %}</h3>
+                <p class="mt-1 text-xs leading-relaxed text-gray-500">
+                  {% if selected_concern %}
+                    This message will be added to the selected concern thread.
+                  {% else %}
+                    General notes stay in the project activity feed until someone raises them as concerns.
+                  {% endif %}
+                </p>
               </div>
               <span class="workspace-badge border-blue-100 bg-blue-50 text-blue-700">Docked</span>
             </div>
             {% if request.user.is_authenticated %}
               <form class="space-y-3" data-api-form="/api/projects/{{ project.slug }}/stream">
                 {% csrf_token %}
-                <textarea name="body" rows="4" required data-stream-input class="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm leading-relaxed text-gray-900 placeholder-gray-400 focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-200" placeholder="Post an update, capture a decision seed, or stage a prompt for the AI here."></textarea>
+                {% if selected_concern %}
+                  <input type="hidden" name="concern_id" value="{{ selected_concern.id }}">
+                {% endif %}
+                <textarea name="body" rows="4" required data-stream-input class="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm leading-relaxed text-gray-900 placeholder-gray-400 focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-200" placeholder="{% if selected_concern %}Capture a decision, challenge, or follow-up for this concern.{% else %}Post a general note, then promote it when it deserves its own concern.{% endif %}"></textarea>
                 <div class="flex items-center justify-between gap-3">
-                  <p class="text-[11px] leading-relaxed text-gray-500">Draft helper actions target this box again. Sending posts the text into the alignment stream.</p>
+                  <p class="text-[11px] leading-relaxed text-gray-500">{% if selected_concern %}AI proposals and team replies are kept on the same concern timeline.{% else %}Activity stays secondary until a concrete issue needs focused review.{% endif %}</p>
                   <button type="submit" class="primary-button !px-3">
                     <iconify-icon icon="lucide:send"></iconify-icon>
                     Post

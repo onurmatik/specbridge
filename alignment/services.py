@@ -5,7 +5,7 @@ from collections import Counter
 from django.utils import timezone
 
 from alignment.models import DecisionStatus, IssueStatus
-from specs.models import AuditEventType, ConsistencyIssueStatus, DocumentStatus
+from specs.models import AuditEventType, ConcernStatus, ConcernType, DocumentStatus
 from specs.services import capture_project_revision, log_audit_event
 
 
@@ -16,16 +16,8 @@ def build_workspace_entries(project):
             "created_at": post.created_at,
             "post": post,
         }
-        for post in project.stream_posts.all()
+        for post in project.stream_posts.filter(concern__isnull=True).all()
     ]
-    entries.extend(
-        {
-            "kind": "agent",
-            "created_at": suggestion.created_at,
-            "suggestion": suggestion,
-        }
-        for suggestion in project.agent_suggestions.select_related("related_document").all()
-    )
     entries.extend(
         {
             "kind": "decision",
@@ -47,16 +39,23 @@ def compute_dashboard_metrics(project):
     if required_documents:
         completeness = sum(1 for document in required_documents if document.body.strip()) / len(required_documents)
 
-    open_questions = project.questions.filter(status__in=[IssueStatus.OPEN, IssueStatus.REOPENED]).count()
-    open_blockers = project.blockers.filter(status__in=[IssueStatus.OPEN, IssueStatus.REOPENED]).count()
-    critical_blockers = project.blockers.filter(
-        status__in=[IssueStatus.OPEN, IssueStatus.REOPENED],
-        severity="critical",
+    active_concerns = project.concerns.filter(status__in=[ConcernStatus.OPEN, ConcernStatus.STALE])
+    critical_concerns = active_concerns.filter(severity="critical").count()
+    open_questions = active_concerns.filter(concern_type=ConcernType.HUMAN_FLAG).count()
+    open_blockers = active_concerns.filter(concern_type=ConcernType.IMPLEMENTABILITY).count()
+    open_consistency_issues = active_concerns.filter(concern_type=ConcernType.CONSISTENCY).count()
+    implementability_concerns = active_concerns.filter(concern_type=ConcernType.IMPLEMENTABILITY).count()
+    usability_concerns = active_concerns.filter(concern_type=ConcernType.USABILITY).count()
+    business_viability_concerns = active_concerns.filter(concern_type=ConcernType.BUSINESS_VIABILITY).count()
+    resolved_questions = project.concerns.filter(
+        concern_type=ConcernType.HUMAN_FLAG,
+        status=ConcernStatus.RESOLVED,
     ).count()
-    open_consistency_issues = project.consistency_issues.filter(status=ConsistencyIssueStatus.OPEN).count()
-    resolved_questions = project.questions.filter(status=IssueStatus.RESOLVED).count()
-    resolved_blockers = project.blockers.filter(status=IssueStatus.RESOLVED).count()
-    penalty = open_blockers * 8 + critical_blockers * 15 + open_questions * 5 + open_consistency_issues * 6
+    resolved_blockers = project.concerns.filter(
+        concern_type=ConcernType.IMPLEMENTABILITY,
+        status=ConcernStatus.RESOLVED,
+    ).count()
+    penalty = open_blockers * 8 + critical_concerns * 15 + open_questions * 5 + open_consistency_issues * 6
     base_score = int(completeness * 80) + min(resolved_questions + resolved_blockers, 20)
     maturity_score = max(min(base_score - penalty, 100), 0)
 
@@ -73,18 +72,22 @@ def compute_dashboard_metrics(project):
         "alignment_percentage": alignment,
         "maturity_score": maturity_score,
         "decision_velocity": decision_velocity,
-        "critical_blockers": critical_blockers,
+        "critical_blockers": critical_concerns,
         "open_questions": open_questions,
         "resolved_questions": resolved_questions,
         "resolved_blockers": resolved_blockers,
         "open_consistency_issues": open_consistency_issues,
+        "open_concerns": active_concerns.count(),
+        "implementability_concerns": implementability_concerns,
+        "usability_concerns": usability_concerns,
+        "business_viability_concerns": business_viability_concerns,
         "document_status_counts": {
             "aligned": by_status.get(DocumentStatus.ALIGNED, 0),
             "iterating": by_status.get(DocumentStatus.ITERATING, 0),
             "blocked": by_status.get(DocumentStatus.BLOCKED, 0),
         },
         "active_members": project.memberships.filter(is_active=True).count(),
-        "unresolved_total": open_questions + open_blockers + open_consistency_issues,
+        "unresolved_total": active_concerns.count(),
         "iterating_count": iterating_count,
         "blocked_count": blocked_count,
     }

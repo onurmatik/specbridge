@@ -104,12 +104,22 @@ function documentSuggestionMenuIsOpen(shell) {
   return shell?.dataset?.dropdownOpen === "true";
 }
 
-function documentEditorFormNode() {
-  return document.querySelector("[data-document-editor-form]");
+const documentEditorAutosaveControllers = [];
+
+function documentEditorFormNodes() {
+  return Array.from(document.querySelectorAll("[data-document-editor-form]"));
 }
 
 function documentEditorSnapshot(form) {
   return JSON.stringify(serializeForm(form));
+}
+
+function resizeDocumentEditorInput(input) {
+  if (!input) {
+    return;
+  }
+  input.style.height = "auto";
+  input.style.height = `${Math.max(input.scrollHeight, 320)}px`;
 }
 
 function setDocumentEditorAutosaveStatus(form, state, label = "") {
@@ -173,11 +183,6 @@ async function flushDocumentEditorAutosave(controller, { force = false } = {}) {
   if (!needsSave) {
     controller.dirty = false;
     setDocumentEditorAutosaveStatus(controller.form, "saved");
-    if (controller.navigateTo) {
-      const href = controller.navigateTo;
-      controller.navigateTo = "";
-      window.location.assign(href);
-    }
     return;
   }
 
@@ -217,13 +222,6 @@ async function flushDocumentEditorAutosave(controller, { force = false } = {}) {
         } catch (error) {
           console.error(error);
         }
-        return;
-      }
-
-      if (controller.navigateTo) {
-        const href = controller.navigateTo;
-        controller.navigateTo = "";
-        window.location.assign(href);
       }
     });
 
@@ -231,88 +229,80 @@ async function flushDocumentEditorAutosave(controller, { force = false } = {}) {
 }
 
 function initializeDocumentEditorAutosave() {
-  const form = documentEditorFormNode();
-  if (!form || form.dataset.autosaveInitialized === "true") {
-    return;
-  }
-
-  form.dataset.autosaveInitialized = "true";
-
-  const editorInput = form.querySelector("[data-document-editor-input]");
-  if (!editorInput) {
-    return;
-  }
-
-  const controller = {
-    form,
-    timer: null,
-    inFlight: null,
-    pendingAfterSave: false,
-    dirty: false,
-    navigateTo: "",
-    lastSavedSnapshot: documentEditorSnapshot(form),
-  };
-
-  setDocumentEditorAutosaveStatus(form, "saved");
-
-  const scheduleAutosave = () => {
-    const nextSnapshot = documentEditorSnapshot(form);
-    if (nextSnapshot === controller.lastSavedSnapshot) {
-      controller.dirty = false;
-      setDocumentEditorAutosaveStatus(form, "saved");
-      window.clearTimeout(controller.timer);
-      controller.timer = null;
+  documentEditorFormNodes().forEach((form) => {
+    if (form.dataset.autosaveInitialized === "true") {
       return;
     }
 
-    controller.dirty = true;
-    setDocumentEditorAutosaveStatus(form, "dirty");
-    window.clearTimeout(controller.timer);
-    controller.timer = window.setTimeout(() => {
-      flushDocumentEditorAutosave(controller).catch((error) => {
-        console.error(error);
-      });
-    }, 900);
-  };
+    form.dataset.autosaveInitialized = "true";
 
-  editorInput.addEventListener("input", scheduleAutosave);
-  editorInput.addEventListener("blur", () => {
-    flushDocumentEditorAutosave(controller).catch((error) => {
-      console.error(error);
-    });
-  });
+    const editorInput = form.querySelector("[data-document-editor-input]");
+    if (!editorInput) {
+      return;
+    }
 
-  form.addEventListener("submit", (event) => {
-    event.preventDefault();
-    flushDocumentEditorAutosave(controller, { force: true }).catch((error) => {
-      console.error(error);
-    });
-  });
+    resizeDocumentEditorInput(editorInput);
 
-  document.querySelectorAll("[data-document-link]").forEach((link) => {
-    link.addEventListener("click", async (event) => {
-      if (!controller.dirty && !controller.inFlight && documentEditorSnapshot(form) === controller.lastSavedSnapshot) {
+    const controller = {
+      form,
+      timer: null,
+      inFlight: null,
+      pendingAfterSave: false,
+      dirty: false,
+      lastSavedSnapshot: documentEditorSnapshot(form),
+    };
+
+    documentEditorAutosaveControllers.push(controller);
+    setDocumentEditorAutosaveStatus(form, "saved");
+
+    const scheduleAutosave = () => {
+      resizeDocumentEditorInput(editorInput);
+      const nextSnapshot = documentEditorSnapshot(form);
+      if (nextSnapshot === controller.lastSavedSnapshot) {
+        controller.dirty = false;
+        setDocumentEditorAutosaveStatus(form, "saved");
+        window.clearTimeout(controller.timer);
+        controller.timer = null;
         return;
       }
 
-      event.preventDefault();
-      controller.navigateTo = link.href;
-      try {
-        await flushDocumentEditorAutosave(controller, { force: true });
-      } catch (error) {
+      controller.dirty = true;
+      setDocumentEditorAutosaveStatus(form, "dirty");
+      window.clearTimeout(controller.timer);
+      controller.timer = window.setTimeout(() => {
+        flushDocumentEditorAutosave(controller).catch((error) => {
+          console.error(error);
+        });
+      }, 900);
+    };
+
+    editorInput.addEventListener("input", scheduleAutosave);
+    editorInput.addEventListener("blur", () => {
+      flushDocumentEditorAutosave(controller).catch((error) => {
         console.error(error);
-        const href = controller.navigateTo || link.href;
-        controller.navigateTo = "";
-        window.location.assign(href);
-      }
+      });
+    });
+
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      flushDocumentEditorAutosave(controller, { force: true }).catch((error) => {
+        console.error(error);
+      });
     });
   });
+
+  if (document.body.dataset.documentAutosaveHotkeyInitialized === "true") {
+    return;
+  }
+  document.body.dataset.documentAutosaveHotkeyInitialized = "true";
 
   document.addEventListener("keydown", (event) => {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
       event.preventDefault();
-      flushDocumentEditorAutosave(controller, { force: true }).catch((error) => {
-        console.error(error);
+      documentEditorAutosaveControllers.forEach((controller) => {
+        flushDocumentEditorAutosave(controller, { force: true }).catch((error) => {
+          console.error(error);
+        });
       });
     }
   });

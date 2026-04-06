@@ -47,12 +47,68 @@ class AuditEventType(models.TextChoices):
     ASSUMPTION_INVALIDATED = "assumption_invalidated", "Assumption Invalidated"
     AGENT_APPLIED = "agent_applied", "Agent Applied"
     AGENT_DISMISSED = "agent_dismissed", "Agent Dismissed"
+    CONCERN_RUN_COMPLETED = "concern_run_completed", "Concern Run Completed"
+    CONCERN_RUN_FAILED = "concern_run_failed", "Concern Run Failed"
+    CONCERN_PROMOTED = "concern_promoted", "Concern Promoted"
+    CONCERN_DISMISSED = "concern_dismissed", "Concern Dismissed"
+    CONCERN_REEVALUATED = "concern_reevaluated", "Concern Re-Evaluated"
+    CONCERN_MARKED_STALE = "concern_marked_stale", "Concern Marked Stale"
+    CONCERN_PROPOSAL_CREATED = "concern_proposal_created", "Concern Proposal Created"
+    CONCERN_PROPOSAL_CHANGE_ACCEPTED = "concern_proposal_change_accepted", "Concern Proposal Change Accepted"
+    CONCERN_PROPOSAL_CHANGE_REJECTED = "concern_proposal_change_rejected", "Concern Proposal Change Rejected"
     CONSISTENCY_RUN_COMPLETED = "consistency_run_completed", "Consistency Run Completed"
     CONSISTENCY_RUN_FAILED = "consistency_run_failed", "Consistency Run Failed"
     CONSISTENCY_ISSUE_RESOLVED = "consistency_issue_resolved", "Consistency Issue Resolved"
     CONSISTENCY_ISSUE_DISMISSED = "consistency_issue_dismissed", "Consistency Issue Dismissed"
     EXPORT_CREATED = "export_created", "Export Created"
     MEMBERSHIP_CHANGED = "membership_changed", "Membership Changed"
+
+
+class ConcernType(models.TextChoices):
+    CONSISTENCY = "consistency", "Consistency"
+    IMPLEMENTABILITY = "implementability", "Implementability"
+    USABILITY = "usability", "Usability"
+    BUSINESS_VIABILITY = "business_viability", "Business Viability"
+    HUMAN_FLAG = "human_flag", "Human Flag"
+
+
+class ConcernRaisedByKind(models.TextChoices):
+    AI = "ai", "AI"
+    HUMAN = "human", "Human"
+    SYSTEM = "system", "System"
+
+
+class ConcernStatus(models.TextChoices):
+    OPEN = "open", "Open"
+    STALE = "stale", "Stale"
+    RESOLVED = "resolved", "Resolved"
+    DISMISSED = "dismissed", "Dismissed"
+
+
+class ConcernRunStatus(models.TextChoices):
+    PENDING = "pending", "Pending"
+    COMPLETED = "completed", "Completed"
+    FAILED = "failed", "Failed"
+
+
+class ConcernSeverity(models.TextChoices):
+    LOW = "low", "Low"
+    MEDIUM = "medium", "Medium"
+    HIGH = "high", "High"
+    CRITICAL = "critical", "Critical"
+
+
+class ConcernProposalStatus(models.TextChoices):
+    OPEN = "open", "Open"
+    PARTIALLY_APPLIED = "partially_applied", "Partially Applied"
+    COMPLETED = "completed", "Completed"
+    REJECTED = "rejected", "Rejected"
+
+
+class ConcernProposalChangeStatus(models.TextChoices):
+    PENDING = "pending", "Pending"
+    ACCEPTED = "accepted", "Accepted"
+    REJECTED = "rejected", "Rejected"
 
 
 class ConsistencyRunStatus(models.TextChoices):
@@ -226,6 +282,146 @@ class DocumentRevision(TimeStampedModel):
 
     def __str__(self):
         return f"{self.document.slug} r{self.number}"
+
+
+class ConcernRun(TimeStampedModel):
+    project = models.ForeignKey("projects.Project", on_delete=models.CASCADE, related_name="concern_runs")
+    provider = models.CharField(max_length=64, default="openai")
+    model = models.CharField(max_length=128, blank=True)
+    status = models.CharField(max_length=16, choices=ConcernRunStatus.choices, default=ConcernRunStatus.PENDING)
+    concern_count = models.PositiveIntegerField(default=0)
+    error_message = models.TextField(blank=True)
+    scopes = models.JSONField(default=list, blank=True)
+    trigger = models.CharField(max_length=24, default="manual")
+    target_concern_fingerprint = models.CharField(max_length=128, blank=True)
+    analyzed_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["-analyzed_at", "-created_at"]
+
+    def __str__(self):
+        return f"{self.project.slug}:{self.provider}:{self.status}"
+
+
+class ProjectConcern(TimeStampedModel):
+    project = models.ForeignKey("projects.Project", on_delete=models.CASCADE, related_name="concerns")
+    run = models.ForeignKey(
+        ConcernRun,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="concerns",
+    )
+    source_post = models.ForeignKey(
+        "alignment.StreamPost",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="raised_concerns",
+    )
+    documents = models.ManyToManyField(ProjectDocument, related_name="concerns", blank=True)
+    fingerprint = models.CharField(max_length=128)
+    concern_type = models.CharField(max_length=32, choices=ConcernType.choices, default=ConcernType.HUMAN_FLAG)
+    raised_by_kind = models.CharField(
+        max_length=16,
+        choices=ConcernRaisedByKind.choices,
+        default=ConcernRaisedByKind.SYSTEM,
+    )
+    title = models.CharField(max_length=255)
+    summary = models.TextField()
+    severity = models.CharField(max_length=16, choices=ConcernSeverity.choices, default=ConcernSeverity.MEDIUM)
+    status = models.CharField(max_length=16, choices=ConcernStatus.choices, default=ConcernStatus.OPEN)
+    recommendation = models.TextField(blank=True)
+    source_refs = models.JSONField(default=list, blank=True)
+    detected_at = models.DateTimeField(default=timezone.now)
+    last_seen_at = models.DateTimeField(default=timezone.now)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    dismissed_at = models.DateTimeField(null=True, blank=True)
+    reevaluation_requested_at = models.DateTimeField(null=True, blank=True)
+    last_reevaluated_at = models.DateTimeField(null=True, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_concerns",
+    )
+    resolved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="resolved_concerns",
+    )
+    dismissed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="dismissed_concerns",
+    )
+
+    class Meta:
+        ordering = ["-updated_at", "-detected_at"]
+        unique_together = ("project", "fingerprint")
+
+    def __str__(self):
+        return self.title
+
+
+class ConcernProposal(TimeStampedModel):
+    project = models.ForeignKey("projects.Project", on_delete=models.CASCADE, related_name="concern_proposals")
+    concern = models.ForeignKey(ProjectConcern, on_delete=models.CASCADE, related_name="proposals")
+    provider = models.CharField(max_length=64, default="openai")
+    model = models.CharField(max_length=128, blank=True)
+    summary = models.TextField(blank=True)
+    status = models.CharField(max_length=24, choices=ConcernProposalStatus.choices, default=ConcernProposalStatus.OPEN)
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="requested_concern_proposals",
+    )
+    created_by_kind = models.CharField(
+        max_length=16,
+        choices=ConcernRaisedByKind.choices,
+        default=ConcernRaisedByKind.AI,
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.concern.title} proposal"
+
+
+class ConcernProposalChange(TimeStampedModel):
+    proposal = models.ForeignKey(ConcernProposal, on_delete=models.CASCADE, related_name="changes")
+    document = models.ForeignKey(ProjectDocument, on_delete=models.CASCADE, related_name="concern_proposal_changes")
+    summary = models.CharField(max_length=255, blank=True)
+    original_body = models.TextField(blank=True)
+    proposed_body = models.TextField(blank=True)
+    status = models.CharField(
+        max_length=16,
+        choices=ConcernProposalChangeStatus.choices,
+        default=ConcernProposalChangeStatus.PENDING,
+    )
+    decided_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reviewed_concern_proposal_changes",
+    )
+    decided_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["created_at"]
+        unique_together = ("proposal", "document")
+
+    def __str__(self):
+        return f"{self.proposal_id}:{self.document.slug}"
 
 
 class ConsistencyRun(TimeStampedModel):

@@ -5,12 +5,14 @@ from ninja.security import django_auth
 from alignment.models import Decision, OpenQuestion, StreamPost
 from alignment.services import approve_decision, mark_decision_implemented, reject_decision, reopen_issue, resolve_issue
 from projects.services import get_project_or_404, resolve_actor
+from specs.concerns import create_human_concern_from_post
 
 router = Router(tags=["alignment"])
 
 
 class StreamPayload(Schema):
     body: str
+    concern_id: int | None = None
 
 
 class DecisionPayload(Schema):
@@ -29,6 +31,7 @@ def list_stream(request, slug: str):
                 "actor_name": post.actor_name,
                 "actor_title": post.actor_title,
                 "kind": post.kind,
+                "concern_id": post.concern_id,
                 "body": post.body,
                 "created_at": post.created_at.isoformat(),
             }
@@ -44,14 +47,25 @@ def create_stream_post(request, slug: str, payload: StreamPayload):
     body = payload.body.strip()
     if not body:
         return JsonResponse({"ok": False, "errors": {"body": ["Message is required."]}}, status=422)
+    concern = project.concerns.filter(pk=payload.concern_id).first() if payload.concern_id else None
     post = StreamPost.objects.create(
         project=project,
         author=actor,
         actor_name=actor.display_name,
         actor_title=actor.title,
+        concern=concern,
         body=body,
     )
-    return {"id": post.id, "body": post.body, "actor_name": post.actor_name}
+    return {"id": post.id, "body": post.body, "actor_name": post.actor_name, "concern_id": post.concern_id}
+
+
+@router.post("/{slug}/stream/{post_id}/promote-to-concern", auth=django_auth)
+def promote_stream_post_to_concern(request, slug: str, post_id: int):
+    project = get_project_or_404(slug, request.user)
+    actor = resolve_actor(request, project)
+    post = project.stream_posts.get(pk=post_id)
+    concern = create_human_concern_from_post(post, actor=actor)
+    return {"ok": True, "concern_id": concern.id}
 
 
 @router.post("/{slug}/questions/{question_id}/resolve", auth=django_auth)

@@ -2,8 +2,25 @@ from ninja import Router, Schema
 from ninja.security import django_auth
 
 from projects.services import get_project_or_404, resolve_actor
+from specs.concerns import (
+    ConcernError,
+    accept_concern_proposal_change,
+    dismiss_concern,
+    ordered_concerns,
+    re_evaluate_concern,
+    reject_concern_proposal_change,
+    render_proposal_change_diff,
+    resolve_concern_with_ai,
+    run_project_concerns,
+)
 from specs.consistency import dismiss_consistency_issue, resolve_consistency_issue, run_project_consistency
-from specs.models import Assumption, AssumptionStatus, AuditEventType, DocumentStatus, DocumentType
+from specs.models import (
+    Assumption,
+    AssumptionStatus,
+    AuditEventType,
+    DocumentStatus,
+    DocumentType,
+)
 from specs.services import (
     capture_project_revision,
     create_document,
@@ -40,6 +57,52 @@ class AssumptionPayload(Schema):
     description: str
     document_slug: str | None = None
     impact: str = "medium"
+
+
+def serialize_concern(concern):
+    return {
+        "id": concern.id,
+        "fingerprint": concern.fingerprint,
+        "title": concern.title,
+        "summary": concern.summary,
+        "concern_type": concern.concern_type,
+        "raised_by_kind": concern.raised_by_kind,
+        "severity": concern.severity,
+        "status": concern.status,
+        "recommendation": concern.recommendation,
+        "source_refs": concern.source_refs,
+        "document_refs": [
+            {"slug": document.slug, "title": document.title}
+            for document in concern.documents.order_by("order", "created_at")
+        ],
+        "detected_at": concern.detected_at.isoformat(),
+        "last_seen_at": concern.last_seen_at.isoformat(),
+        "reevaluation_requested_at": concern.reevaluation_requested_at.isoformat() if concern.reevaluation_requested_at else None,
+        "last_reevaluated_at": concern.last_reevaluated_at.isoformat() if concern.last_reevaluated_at else None,
+    }
+
+
+def serialize_proposal(proposal):
+    return {
+        "id": proposal.id,
+        "status": proposal.status,
+        "summary": proposal.summary,
+        "provider": proposal.provider,
+        "model": proposal.model,
+        "created_at": proposal.created_at.isoformat(),
+        "changes": [
+            {
+                "id": change.id,
+                "document_slug": change.document.slug,
+                "document_title": change.document.title,
+                "summary": change.summary,
+                "status": change.status,
+                "diff": render_proposal_change_diff(change),
+                "created_at": change.created_at.isoformat(),
+            }
+            for change in proposal.changes.select_related("document").all()
+        ],
+    }
 
 
 @router.get("/{slug}/documents")
@@ -256,6 +319,118 @@ def list_project_revisions(request, slug: str):
             for revision in project.revisions.order_by("-number")
         ]
     }
+
+
+@router.get("/{slug}/concerns")
+def list_concerns(request, slug: str):
+    project = get_project_or_404(slug, request.user)
+    latest_run = project.concern_runs.first()
+    return {
+        "latest_run": {
+            "id": latest_run.id,
+            "status": latest_run.status,
+            "provider": latest_run.provider,
+            "model": latest_run.model,
+            "error_message": latest_run.error_message,
+            "concern_count": latest_run.concern_count,
+            "analyzed_at": latest_run.analyzed_at.isoformat(),
+        }
+        if latest_run
+        else None,
+        "items": [serialize_concern(concern) for concern in ordered_concerns(project)],
+    }
+
+
+@router.get("/{slug}/concerns/{concern_id}")
+def get_concern(request, slug: str, concern_id: int):
+    project = get_project_or_404(slug, request.user)
+    concern = project.concerns.prefetch_related("documents", "proposals__changes__document", "posts").get(pk=concern_id)
+    return {
+        "concern": serialize_concern(concern),
+        "posts": [
+            {
+                "id": post.id,
+                "actor_name": post.actor_name,
+                "actor_title": post.actor_title,
+                "body": post.body,
+                "kind": post.kind,
+                "created_at": post.created_at.isoformat(),
+            }
+            for post in concern.posts.all()
+        ],
+        "proposals": [serialize_proposal(proposal) for proposal in concern.proposals.prefetch_related("changes__document").all()],
+    }
+
+
+@router.post("/{slug}/concern-runs", auth=django_auth)
+def create_concern_run(request, slug: str):
+    project = get_project_or_404(slug, request.user)
+    actor = resolve_actor(request, project)
+    run = run_project_concerns(project, actor=actor)
+    return {"id": run.id, "status": run.status, "concern_count": run.concern_count, "error_message": run.error_message}
+
+
+@router.post("/{slug}/concerns/{concern_id}/re-evaluate", auth=django_auth)
+def re_evaluate_concern_endpoint(request, slug: str, concern_id: int):
+    project = get_project_or_404(slug, request.user)
+    actor = resolve_actor(request, project)
+    concern = project.concerns.get(pk=concern_id)
+    run = re_evaluate_concern(concern, actor=actor)
+    concern.refresh_from_db()
+    return {"ok": True, "status": concern.status, "run_status": run.status}
+
+
+@router.post("/{slug}/concerns/{concern_id}/resolve-with-ai", auth=django_auth)
+def resolve_concern_with_ai_endpoint(request, slug: str, concern_id: int):
+    project = get_project_or_404(slug, request.user)
+    actor = resolve_actor(request, project)
+    concern = project.concerns.prefetch_related("documents").get(pk=concern_id)
+    try:
+        proposal = resolve_concern_with_ai(concern, actor=actor)
+    except ConcernError as exc:
+        return 422, {"ok": False, "errors": {"concern": [str(exc)]}}
+    return {"ok": True, "proposal_id": proposal.id, "status": proposal.status}
+
+
+@router.post("/{slug}/concerns/{concern_id}/dismiss", auth=django_auth)
+def dismiss_concern_endpoint(request, slug: str, concern_id: int):
+    project = get_project_or_404(slug, request.user)
+    actor = resolve_actor(request, project)
+    concern = project.concerns.get(pk=concern_id)
+    dismiss_concern(concern, actor=actor)
+    return {"ok": True, "status": concern.status}
+
+
+@router.get("/{slug}/concerns/{concern_id}/proposals")
+def list_concern_proposals(request, slug: str, concern_id: int):
+    project = get_project_or_404(slug, request.user)
+    concern = project.concerns.get(pk=concern_id)
+    return {
+        "items": [
+            serialize_proposal(proposal)
+            for proposal in concern.proposals.prefetch_related("changes__document").all()
+        ]
+    }
+
+
+@router.post("/{slug}/concern-proposals/{proposal_id}/changes/{change_id}/accept", auth=django_auth)
+def accept_concern_proposal_change_endpoint(request, slug: str, proposal_id: int, change_id: int):
+    project = get_project_or_404(slug, request.user)
+    actor = resolve_actor(request, project)
+    proposal = project.concern_proposals.get(pk=proposal_id)
+    change = proposal.changes.select_related("document", "proposal__concern").get(pk=change_id)
+    accept_concern_proposal_change(change, actor=actor)
+    return {"ok": True, "status": change.status}
+
+
+@router.post("/{slug}/concern-proposals/{proposal_id}/changes/{change_id}/reject", auth=django_auth)
+def reject_concern_proposal_change_endpoint(request, slug: str, proposal_id: int, change_id: int):
+    project = get_project_or_404(slug, request.user)
+    actor = resolve_actor(request, project)
+    proposal = project.concern_proposals.get(pk=proposal_id)
+    change = proposal.changes.select_related("document", "proposal__concern").get(pk=change_id)
+    reject_concern_proposal_change(change, actor=actor)
+    return {"ok": True, "status": change.status}
 
 
 @router.get("/{slug}/consistency-issues")

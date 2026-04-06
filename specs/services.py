@@ -346,6 +346,9 @@ def update_document(
         metadata={"document_slug": document.slug, "status": document.status},
         project_revision=project_revision,
     )
+    from specs.concerns import mark_linked_concerns_stale
+
+    mark_linked_concerns_stale(project=document.project, documents=[document], actor=actor)
     return project_revision
 
 
@@ -353,6 +356,9 @@ def delete_document(*, document: ProjectDocument, actor=None):
     project = document.project
     metadata = {"document_slug": document.slug, "document_type": document.document_type}
     title = document.title
+    from specs.concerns import mark_linked_concerns_stale
+
+    mark_linked_concerns_stale(project=project, documents=[document], actor=actor, trigger="document_deleted")
     document.delete()
     project_revision = capture_project_revision(
         project=project,

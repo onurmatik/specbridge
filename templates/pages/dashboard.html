@@ -63,7 +63,7 @@
           <div class="metric-card relative overflow-hidden border-brand-danger/30">
             <div class="absolute inset-y-0 left-0 w-1 bg-brand-danger"></div>
             <div class="mb-4 flex items-center justify-between">
-              <div class="text-sm font-medium text-brand-danger">Critical Blockers</div>
+              <div class="text-sm font-medium text-brand-danger">Critical Concerns</div>
               <div class="flex h-8 w-8 items-center justify-center rounded-full bg-red-50 text-brand-danger">
                 <iconify-icon icon="lucide:shield-alert"></iconify-icon>
               </div>
@@ -109,21 +109,25 @@
             <div class="grid grid-cols-1 gap-8 md:grid-cols-2">
               <section class="workspace-panel p-6">
                 <h2 class="mb-6 flex items-center justify-between font-display text-lg font-bold text-gray-900">
-                  Open Questions
-                  <span class="rounded-md bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600">{{ questions|length }} Total</span>
+                  Open Concerns
+                  <span class="rounded-md bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600">{{ concerns|length }} Visible</span>
                 </h2>
                 <div class="space-y-4">
-                  {% for question in questions %}
-                    <div class="flex items-center justify-between rounded-xl border p-3 {% if question.status == 'resolved' %}border-gray-100 bg-gray-50 opacity-60{% else %}border-amber-100 bg-amber-50/40{% endif %}">
+                  {% for concern in concerns|slice:":4" %}
+                    <div class="flex items-center justify-between rounded-xl border p-3 {% if concern.status == 'resolved' %}border-gray-100 bg-gray-50 opacity-60{% elif concern.severity == 'critical' or concern.severity == 'high' %}border-red-100 bg-red-50/40{% else %}border-amber-100 bg-amber-50/40{% endif %}">
                       <div class="flex items-center gap-3">
-                        <div class="flex h-8 w-8 items-center justify-center rounded-lg {% if question.status == 'resolved' %}bg-gray-200 text-gray-500{% else %}bg-amber-100 text-brand-warning{% endif %}">
-                          <iconify-icon icon="{% if question.status == 'resolved' %}lucide:check-circle{% else %}lucide:help-circle{% endif %}"></iconify-icon>
+                        <div class="flex h-8 w-8 items-center justify-center rounded-lg {% if concern.status == 'resolved' %}bg-gray-200 text-gray-500{% elif concern.severity == 'critical' or concern.severity == 'high' %}bg-red-100 text-brand-danger{% else %}bg-amber-100 text-brand-warning{% endif %}">
+                          <iconify-icon icon="{% if concern.status == 'resolved' %}lucide:check-circle{% elif concern.severity == 'critical' or concern.severity == 'high' %}lucide:shield-alert{% else %}lucide:help-circle{% endif %}"></iconify-icon>
                         </div>
                         <div>
-                          <div class="text-sm font-medium text-gray-900">{{ question.title }}</div>
-                          <div class="text-xs {% if question.status == 'resolved' %}text-gray-400{% else %}text-brand-warning{% endif %}">{{ question.get_status_display }}</div>
+                          <div class="text-sm font-medium text-gray-900">{{ concern.title }}</div>
+                          <div class="text-xs {% if concern.status == 'resolved' %}text-gray-400{% else %}text-gray-500{% endif %}">{{ concern.get_concern_type_display }} · {{ concern.get_status_display }}</div>
                         </div>
                       </div>
+                    </div>
+                  {% empty %}
+                    <div class="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-4 text-sm text-gray-500">
+                      No concerns stored yet.
                     </div>
                   {% endfor %}
                 </div>
@@ -132,21 +136,22 @@
               <section class="workspace-panel relative overflow-hidden p-6">
                 <div class="absolute left-0 top-0 h-1 w-full bg-brand-danger"></div>
                 <h2 class="mb-6 flex items-center gap-2 font-display text-lg font-bold text-gray-900">
-                  <iconify-icon icon="lucide:shield-alert" class="text-brand-danger"></iconify-icon>
-                  Active Blockers
+                  <iconify-icon icon="lucide:scan-search" class="text-brand-danger"></iconify-icon>
+                  Concern Mix
                 </h2>
-                <div class="space-y-4">
-                  {% for blocker in blockers %}
-                    <div class="rounded-xl border p-4 {% if blocker.severity == 'critical' %}border-red-100 bg-red-50{% else %}border-gray-200{% endif %}">
-                      <div class="flex items-start gap-3">
-                        <iconify-icon icon="{% if blocker.severity == 'critical' %}lucide:alert-octagon{% else %}lucide:flag{% endif %}" class="{% if blocker.severity == 'critical' %}text-brand-danger{% else %}text-brand-warning{% endif %} mt-0.5"></iconify-icon>
-                        <div>
-                          <h4 class="text-sm font-medium text-gray-900">{{ blocker.title }}</h4>
-                          <p class="mt-1 text-xs leading-relaxed text-gray-600">{{ blocker.details }}</p>
-                        </div>
-                      </div>
-                    </div>
-                  {% endfor %}
+                <div class="space-y-3">
+                  <div class="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                    <div class="text-xs uppercase tracking-wider text-gray-400">Human Flags</div>
+                    <div class="mt-1 text-2xl font-bold text-gray-900">{{ dashboard_metrics.open_questions }}</div>
+                  </div>
+                  <div class="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                    <div class="text-xs uppercase tracking-wider text-gray-400">Implementability</div>
+                    <div class="mt-1 text-2xl font-bold text-gray-900">{{ dashboard_metrics.implementability_concerns }}</div>
+                  </div>
+                  <div class="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                    <div class="text-xs uppercase tracking-wider text-gray-400">Consistency</div>
+                    <div class="mt-1 text-2xl font-bold text-gray-900">{{ dashboard_metrics.open_consistency_issues }}</div>
+                  </div>
                 </div>
               </section>
             </div>
@@ -212,11 +217,11 @@
 
             <section class="workspace-panel p-6">
               <div class="mb-6 flex items-center justify-between">
-                <h2 class="font-display text-lg font-bold text-gray-900">Consistency Watchlist</h2>
-                <span class="rounded-md bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600">{{ consistency_issues|length }} visible</span>
+                <h2 class="font-display text-lg font-bold text-gray-900">Issues &amp; Concerns</h2>
+                <span class="rounded-md bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600">{{ concerns|length }} visible</span>
               </div>
               <div class="space-y-3">
-                {% for issue in consistency_issues %}
+                {% for issue in concerns|slice:":5" %}
                   <div class="rounded-xl border p-4 {% if issue.severity == 'critical' or issue.severity == 'high' %}border-red-100 bg-red-50/40{% else %}border-amber-100 bg-amber-50/40{% endif %}">
                     <div class="mb-2 flex items-center justify-between gap-2">
                       <span class="text-sm font-medium text-gray-900">{{ issue.title }}</span>
@@ -226,7 +231,7 @@
                   </div>
                 {% empty %}
                   <div class="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-4 text-sm text-gray-500">
-                    No project-level consistency issues are stored.
+                    No project-level concerns are stored.
                   </div>
                 {% endfor %}
               </div>

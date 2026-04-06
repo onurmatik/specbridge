@@ -42,6 +42,13 @@ class StreamPost(TimeStampedModel):
     actor_name = models.CharField(max_length=120)
     actor_title = models.CharField(max_length=120, blank=True)
     kind = models.CharField(max_length=24, choices=StreamPostKind.choices, default=StreamPostKind.COMMENT)
+    concern = models.ForeignKey(
+        "specs.ProjectConcern",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="posts",
+    )
     body = models.TextField()
 
     class Meta:

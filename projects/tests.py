@@ -66,7 +66,7 @@ class ProjectPageTests(TestCase):
             response = self.client.get(path)
             self.assertEqual(response.status_code, 200, path)
 
-    def test_authenticated_workspace_renders_document_editor_and_consistency_inbox(self):
+    def test_authenticated_workspace_renders_unified_spec_and_issues_rail(self):
         self.client.force_login(self.project.created_by)
 
         response = self.client.get(reverse("project-workspace", args=[self.project.slug]))
@@ -76,15 +76,16 @@ class ProjectPageTests(TestCase):
         self.assertContains(response, 'data-workspace-document-pane', html=False)
         self.assertContains(response, 'data-document-editor-form', html=False)
         self.assertContains(response, 'data-document-editor-input', html=False)
-        self.assertContains(response, "Consistency Inbox")
+        self.assertContains(response, "Issues &amp; Concerns", html=True)
+        self.assertContains(response, "Active Queue")
         self.assertContains(response, "Add Document")
-        self.assertContains(response, "Markdown Canvas")
         self.assertContains(response, self.project.name)
         self.assertContains(response, self.project.tagline)
         self.assertNotContains(response, "Save Document")
-        self.assertContains(response, "AI + Stream Composer")
+        self.assertContains(response, "Post to activity")
         self.assertContains(response, 'data-stream-input', html=False)
         self.assertNotContains(response, "Ask AI to Help Draft")
+        self.assertNotContains(response, "Consistency Inbox")
 
     def test_workspace_keeps_project_summary_out_of_document_canvas(self):
         actor = User.objects.create_user(
@@ -111,7 +112,7 @@ class ProjectPageTests(TestCase):
         response = self.client.get(reverse("project-workspace", args=[project.slug]))
 
         self.assertContains(response, "Stats Board")
-        self.assertContains(response, "Markdown Canvas")
+        self.assertContains(response, "Issues &amp; Concerns", html=True)
         self.assertContains(response, "AI assisted data collection and visualization")
         self.assertNotContains(
             response,

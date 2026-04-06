@@ -16,6 +16,7 @@ from specs.services import (
     capture_project_revision,
     compare_document_revisions,
 )
+from specs.concerns import ordered_concerns, render_proposal_change_diff
 
 DEFAULT_PROJECT_STATUS_LABEL = "Aligning"
 
@@ -214,30 +215,66 @@ def page_context(project, active_item):
         "unresolved_count": metrics["unresolved_total"],
         "status_label": project.status_label,
         "dashboard_metrics": metrics,
-        "latest_consistency_run": project.consistency_runs.first(),
+        "latest_concern_run": project.concern_runs.first(),
     }
 
 
-def workspace_context(project, active_document_slug: str | None = None):
+def workspace_context(project, active_concern_id: str | None = None):
     context = page_context(project, "workspace")
     workspace_tagline, workspace_summary_detail = split_project_summary(project)
-    documents = list(project.documents.prefetch_related("assumptions"))
-    active_document = next((doc for doc in documents if doc.slug == active_document_slug), documents[0] if documents else None)
-    consistency_issues = list(project.consistency_issues.all()[:8])
+    documents = list(project.documents.prefetch_related("assumptions", "concerns"))
+    concerns = ordered_concerns(project)
+    selected_concern = (
+        next((concern for concern in concerns if str(concern.id) == str(active_concern_id)), None)
+        or (concerns[0] if concerns else None)
+    )
+    concern_lookup = {}
+    for concern in concerns:
+        for document in concern.documents.all():
+            concern_lookup.setdefault(document.id, []).append(concern)
+
+    document_sections = [
+        {
+            "document": document,
+            "concerns": concern_lookup.get(document.id, []),
+            "is_selected": bool(
+                selected_concern
+                and any(linked.id == selected_concern.id for linked in concern_lookup.get(document.id, []))
+            ),
+        }
+        for document in documents
+    ]
+    selected_concern_posts = list(selected_concern.posts.all()) if selected_concern else []
+    selected_concern_proposals = []
+    if selected_concern:
+        for proposal in selected_concern.proposals.prefetch_related("changes__document").all():
+            selected_concern_proposals.append(
+                {
+                    "proposal": proposal,
+                    "changes": [
+                        {
+                            "change": change,
+                            "diff": render_proposal_change_diff(change),
+                        }
+                        for change in proposal.changes.select_related("document").all()
+                    ],
+                }
+            )
     context.update(
         {
             "page_title": "Workspace",
             "page_breadcrumb_label": "Workspace",
             "header_hide_project_identity": True,
-            "stream_entries": build_workspace_entries(project),
             "documents": documents,
-            "active_document": active_document,
-            "document_revisions": list(active_document.revisions.order_by("-number")[:5]) if active_document else [],
+            "document_sections": document_sections,
             "document_suggestions": DOCUMENT_SUGGESTIONS,
-            "questions": list(project.questions.select_related("related_document")),
             "assumptions": list(project.assumptions.select_related("document")),
-            "agent_suggestions": list(project.agent_suggestions.select_related("related_document")),
-            "consistency_issues": consistency_issues,
+            "concerns": concerns,
+            "selected_concern": selected_concern,
+            "selected_concern_posts": selected_concern_posts,
+            "selected_concern_proposals": selected_concern_proposals,
+            "activity_entries": build_workspace_entries(project),
+            "activity_posts": list(project.stream_posts.filter(concern__isnull=True).order_by("-created_at")[:8]),
             "workspace_tagline": workspace_tagline,
             "workspace_summary_detail": workspace_summary_detail,
         }
@@ -250,10 +287,8 @@ def dashboard_context(project):
     context.update(
         {
             "documents": list(project.documents.all()),
-            "questions": list(project.questions.select_related("related_document").all()),
-            "blockers": list(project.blockers.select_related("related_document").all()),
+            "concerns": ordered_concerns(project)[:8],
             "decisions": list(project.decisions.select_related("related_document").all()[:4]),
-            "consistency_issues": list(project.consistency_issues.all()[:5]),
         }
     )
     return context
