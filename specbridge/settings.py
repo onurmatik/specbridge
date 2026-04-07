@@ -154,7 +154,7 @@ OPENAI_DEFAULT_REASONING_EFFORT = env_optional_str("OPENAI_DEFAULT_REASONING_EFF
 APP_BASE_URL = env_optional_str("APP_BASE_URL") or env_optional_str("SITE_URL") or (
     "http://127.0.0.1:8000" if DEBUG else None
 )
-DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "SpecBridge <noreply@specbridge.local>")
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "SpecBridge <hello@specbridge.io>")
 INVITATION_FROM_EMAIL = env_optional_str("INVITATION_FROM_EMAIL") or DEFAULT_FROM_EMAIL
 EMAIL_SUBJECT_PREFIX = env_optional_str("EMAIL_SUBJECT_PREFIX") or "[SpecBridge] "
 SERVER_EMAIL = env_optional_str("SERVER_EMAIL") or DEFAULT_FROM_EMAIL

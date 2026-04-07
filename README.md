@@ -20,8 +20,8 @@ Production defaults to AWS SES over SMTP when `DJANGO_DEBUG=false`. Set these en
 
 ```bash
 APP_BASE_URL=https://your-domain.example
-DEFAULT_FROM_EMAIL="SpecBridge <noreply@your-domain.example>"
-INVITATION_FROM_EMAIL="SpecBridge <noreply@your-domain.example>"
+DEFAULT_FROM_EMAIL="SpecBridge <hello@specbridge.io>"
+INVITATION_FROM_EMAIL="SpecBridge <invite@specbridge.io>"
 AWS_SES_REGION=eu-central-1
 AWS_SES_SMTP_USERNAME=your-ses-smtp-username
 AWS_SES_SMTP_PASSWORD=your-ses-smtp-password
