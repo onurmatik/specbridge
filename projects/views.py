@@ -2,13 +2,17 @@ import json
 from json import JSONDecodeError
 
 from django.contrib.auth.decorators import login_required
-from django.http import JsonResponse
+from django.db import transaction
+from django.http import Http404, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
+from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 
 from projects.demo import ensure_demo_workspace
+from projects.invitations import InviteTokenError, InviteTokenExpired, get_invite_for_token
+from projects.models import ProjectMembership
 from projects.services import (
     assumptions_context,
     create_project_workspace,
@@ -24,6 +28,8 @@ from projects.services import (
     visible_projects_for_user,
     workspace_context,
 )
+from specs.models import AuditEventType
+from specs.services import log_audit_event
 
 
 def _project_create_context(request, *, values=None, errors=None):
@@ -222,3 +228,64 @@ def project_assumptions(request, slug):
 def project_members(request, slug):
     project = get_project_or_404(slug, request.user)
     return render(request, "pages/members.html", members_context(project))
+
+
+def project_invite_accept(request, token):
+    try:
+        invite = get_invite_for_token(token)
+    except InviteTokenExpired:
+        return render(request, "pages/invite_accept.html", {"invite_state": "expired"}, status=410)
+    except InviteTokenError as exc:
+        raise Http404(str(exc)) from exc
+
+    if invite.status == "revoked":
+        return render(
+            request,
+            "pages/invite_accept.html",
+            {"invite_state": "revoked", "invite": invite},
+            status=410,
+        )
+
+    if not request.user.is_authenticated:
+        return redirect(f"{reverse('login')}?next={request.get_full_path()}")
+
+    if (request.user.email or "").strip().lower() != invite.email.strip().lower():
+        return render(
+            request,
+            "pages/invite_accept.html",
+            {"invite_state": "wrong-account", "invite": invite},
+            status=403,
+        )
+
+    if invite.status == "accepted":
+        return redirect(reverse("project-workspace", args=[invite.project.slug]))
+
+    with transaction.atomic():
+        membership, created = ProjectMembership.objects.get_or_create(
+            project=invite.project,
+            user=request.user,
+            defaults={
+                "role": invite.role,
+                "title": request.user.title or "Invited collaborator",
+                "is_active": True,
+            },
+        )
+        if not created:
+            membership.role = invite.role
+            membership.is_active = True
+            if not membership.title:
+                membership.title = request.user.title or "Invited collaborator"
+            membership.save(update_fields=["role", "title", "is_active", "updated_at"])
+
+        invite.accepted_at = timezone.now()
+        invite.save(update_fields=["accepted_at", "updated_at"])
+        log_audit_event(
+            project=invite.project,
+            actor=request.user,
+            event_type=AuditEventType.MEMBERSHIP_CHANGED,
+            title=f"Accepted invite for {invite.email}",
+            description=f"Role: {invite.role}",
+            metadata={"invite_id": invite.id, "membership_id": membership.id, "action": "accept"},
+        )
+
+    return redirect(reverse("project-workspace", args=[invite.project.slug]))

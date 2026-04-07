@@ -154,7 +154,7 @@ def ensure_demo_workspace():
         ProjectInvite.objects.get_or_create(
             project=project,
             email="design@example.com",
-            defaults={"role": MembershipRole.DESIGN, "invited_by": lena},
+            defaults={"role": MembershipRole.DESIGN, "invited_by": lena, "last_sent_at": now},
         )
 
         bootstrap_spec_document(project)

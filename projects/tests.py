@@ -1,11 +1,16 @@
 import json
+from datetime import timedelta
 
 from django.contrib.auth import get_user_model
+from django.core import mail
 from django.test import Client, TestCase
+from django.test.utils import override_settings
 from django.urls import reverse
+from django.utils import timezone
 
 from projects.demo import ensure_demo_workspace
-from projects.models import MembershipRole, Project, ProjectMembership
+from projects.invitations import invitation_token
+from projects.models import MembershipRole, Project, ProjectInvite, ProjectMembership
 from projects.services import create_project_workspace
 
 User = get_user_model()
@@ -359,3 +364,181 @@ class ProjectPageTests(TestCase):
             response.json()["errors"]["project_name"][0],
             "Project name is required.",
         )
+
+    def test_members_page_shows_invite_actions_for_pending_invites(self):
+        self.client.force_login(self.project.created_by)
+
+        response = self.client.get(reverse("project-members", args=[self.project.slug]))
+
+        invite = self.project.invites.get(email="design@example.com")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            f'/api/projects/{self.project.slug}/memberships/invites/{invite.id}/resend',
+            html=False,
+        )
+        self.assertContains(
+            response,
+            f'/api/projects/{self.project.slug}/memberships/invites/{invite.id}/revoke',
+            html=False,
+        )
+        self.assertContains(response, "Last sent:")
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_authenticated_user_can_resend_pending_invite(self):
+        self.client.force_login(self.project.created_by)
+        invite = self.project.invites.get(email="design@example.com")
+        old_last_sent_at = timezone.now() - timedelta(days=1)
+        invite.last_sent_at = old_last_sent_at
+        invite.save(update_fields=["last_sent_at", "updated_at"])
+
+        response = self.client.post(
+            f"/api/projects/{self.project.slug}/memberships/invites/{invite.id}/resend",
+            data=json.dumps({}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        invite.refresh_from_db()
+        self.assertEqual(response.json()["invite"]["status"], "pending")
+        self.assertGreater(invite.last_sent_at, old_last_sent_at)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn("Reminder:", mail.outbox[0].subject)
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_authenticated_user_can_create_invite_and_email_is_sent(self):
+        self.client.force_login(self.project.created_by)
+
+        response = self.client.post(
+            f"/api/projects/{self.project.slug}/memberships/invite",
+            data=json.dumps({"email": "new-person@example.com", "role": MembershipRole.ENGINEERING}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        invite = self.project.invites.get(email="new-person@example.com")
+        self.assertIsNotNone(invite.last_sent_at)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn("invited you to", mail.outbox[0].subject)
+        self.assertIn(invite.email, mail.outbox[0].to)
+        self.assertIn(reverse("project-invite-accept", args=[invitation_token(invite)]), mail.outbox[0].body)
+
+    def test_authenticated_user_can_revoke_pending_invite(self):
+        self.client.force_login(self.project.created_by)
+        invite = self.project.invites.get(email="design@example.com")
+
+        response = self.client.post(
+            f"/api/projects/{self.project.slug}/memberships/invites/{invite.id}/revoke",
+            data=json.dumps({}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        invite.refresh_from_db()
+        self.assertIsNotNone(invite.revoked_at)
+        self.assertEqual(invite.status, "revoked")
+        self.assertEqual(response.json()["invite"]["status"], "revoked")
+
+    def test_cannot_resend_non_pending_invite(self):
+        self.client.force_login(self.project.created_by)
+        invite = ProjectInvite.objects.create(
+            project=self.project,
+            email="revoked@example.com",
+            role=MembershipRole.VIEWER,
+            invited_by=self.project.created_by,
+            last_sent_at=timezone.now() - timedelta(hours=2),
+            revoked_at=timezone.now() - timedelta(hours=1),
+        )
+
+        response = self.client.post(
+            f"/api/projects/{self.project.slug}/memberships/invites/{invite.id}/resend",
+            data=json.dumps({}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(
+            response.json()["errors"]["invite"][0],
+            "Only pending invitations can be re-sent.",
+        )
+
+    def test_anonymous_accept_invite_redirects_to_login(self):
+        invite = self.project.invites.get(email="design@example.com")
+
+        response = self.client.get(reverse("project-invite-accept", args=[invitation_token(invite)]))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("login"), response["Location"])
+        self.assertIn(reverse("project-invite-accept", args=[invitation_token(invite)]), response["Location"])
+
+    def test_authenticated_matching_user_can_accept_invite(self):
+        owner = User.objects.create_user(
+            username="owner-user",
+            email="owner@example.com",
+            password="SpecBridge!123",
+            first_name="Owner",
+            last_name="User",
+            title="PM",
+        )
+        private_project = create_project_workspace(
+            actor=owner,
+            project_name="Family Board",
+            tagline="Private collaboration workspace.",
+        )
+        invite = ProjectInvite.objects.create(
+            project=private_project,
+            email="design@example.com",
+            role=MembershipRole.DESIGN,
+            invited_by=owner,
+        )
+        user = User.objects.create_user(
+            username="design-user",
+            email="design@example.com",
+            password="SpecBridge!123",
+            first_name="Design",
+            last_name="User",
+            title="Designer",
+        )
+        self.client.force_login(user)
+
+        response = self.client.get(reverse("project-invite-accept", args=[invitation_token(invite)]))
+
+        self.assertRedirects(response, reverse("project-workspace", args=[private_project.slug]))
+        invite.refresh_from_db()
+        membership = ProjectMembership.objects.get(project=private_project, user=user)
+        self.assertEqual(membership.role, invite.role)
+        self.assertTrue(membership.is_active)
+        self.assertIsNotNone(invite.accepted_at)
+
+    def test_accept_invite_rejects_wrong_account(self):
+        owner = User.objects.create_user(
+            username="owner-two",
+            email="owner-two@example.com",
+            password="SpecBridge!123",
+            first_name="Owner",
+            last_name="Two",
+            title="PM",
+        )
+        private_project = create_project_workspace(
+            actor=owner,
+            project_name="Invite Gate",
+            tagline="Private invite acceptance checks.",
+        )
+        invite = ProjectInvite.objects.create(
+            project=private_project,
+            email="design@example.com",
+            role=MembershipRole.DESIGN,
+            invited_by=owner,
+        )
+        wrong_user = User.objects.create_user(
+            username="wrong-user",
+            email="wrong@example.com",
+            password="SpecBridge!123",
+        )
+        self.client.force_login(wrong_user)
+
+        response = self.client.get(reverse("project-invite-accept", args=[invitation_token(invite)]))
+
+        self.assertEqual(response.status_code, 403)
+        self.assertContains(response, "Sign in with the invited email address.", status_code=403)
+        self.assertFalse(ProjectMembership.objects.filter(project=private_project, user=wrong_user).exists())

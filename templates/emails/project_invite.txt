@@ -1,0 +1,9 @@
+{{ email.invited_by_name }} invited you to collaborate on {{ email.project_name }} in SpecBridge.
+
+Role: {{ email.role_label }}
+{% if email.project_tagline %}Project: {{ email.project_tagline }}
+{% endif %}
+Accept invitation:
+{{ email.accept_url }}
+
+This link lets you sign in or create an account, then join the workspace.

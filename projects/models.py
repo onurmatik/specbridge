@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 from specbridge.model_mixins import TimeStampedModel
 
@@ -76,6 +77,7 @@ class ProjectInvite(TimeStampedModel):
         blank=True,
         related_name="sent_project_invites",
     )
+    last_sent_at = models.DateTimeField(null=True, blank=True)
     accepted_at = models.DateTimeField(null=True, blank=True)
     revoked_at = models.DateTimeField(null=True, blank=True)
 
@@ -92,3 +94,6 @@ class ProjectInvite(TimeStampedModel):
 
     def __str__(self):
         return f"{self.email} -> {self.project}"
+
+    def mark_sent(self):
+        self.last_sent_at = timezone.now()

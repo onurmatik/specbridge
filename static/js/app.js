@@ -1470,6 +1470,11 @@ document.addEventListener("click", async (event) => {
       openAuthModal("login");
       return;
     }
+    const confirmMessage = button.dataset.apiConfirm || "";
+    if (confirmMessage && !window.confirm(confirmMessage)) {
+      return;
+    }
+    button.disabled = true;
     try {
       await postJson(button.dataset.apiPost, {});
       window.location.reload();
@@ -1479,6 +1484,8 @@ document.addEventListener("click", async (event) => {
         return;
       }
       window.alert("Action failed. Check the console for details.");
+    } finally {
+      button.disabled = false;
     }
     return;
   }

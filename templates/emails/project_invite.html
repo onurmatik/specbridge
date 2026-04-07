@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+  <body style="margin:0;padding:24px;background:#f8fafc;font-family:Arial,sans-serif;color:#111827;">
+    <div style="max-width:640px;margin:0 auto;background:#ffffff;border:1px solid #e5e7eb;border-radius:20px;padding:32px;">
+      <div style="font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#1d4ed8;">SpecBridge Invitation</div>
+      <h1 style="margin:16px 0 12px;font-size:30px;line-height:1.15;">{{ email.invited_by_name }} invited you to {{ email.project_name }}</h1>
+      <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#4b5563;">
+        You were invited as <strong>{{ email.role_label }}</strong>{% if email.project_tagline %} for <span>{{ email.project_tagline }}</span>{% endif %}.
+      </p>
+      <a href="{{ email.accept_url }}" style="display:inline-block;padding:12px 18px;background:#111827;color:#ffffff;text-decoration:none;border-radius:12px;font-weight:600;">Accept Invitation</a>
+      <p style="margin:20px 0 0;font-size:13px;line-height:1.6;color:#6b7280;">
+        If the button does not work, open this link:<br>
+        <a href="{{ email.accept_url }}" style="color:#1d4ed8;">{{ email.accept_url }}</a>
+      </p>
+    </div>
+  </body>
+</html>

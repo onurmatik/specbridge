@@ -264,6 +264,24 @@ def run_git_command(c, git_command: str, cwd: Optional[str] = None, use_token: b
         run_plain_git(c, git_command, cwd=cwd)
 
 
+def bootstrap_repo_in_place(c, repo_url: str, use_token: bool) -> None:
+    debug("Project dir exists without .git; bootstrapping repository in place")
+    tmp_clone_dir = c.run("mktemp -d /tmp/specbridge-bootstrap.XXXXXX", hide=True).stdout.strip()
+    try:
+        run_git_command(c, f"clone {repo_url} {tmp_clone_dir}", use_token=use_token)
+        c.run(
+            "rsync -a --delete "
+            "--exclude='.env' "
+            "--exclude='venv/' "
+            "--exclude='node_modules/' "
+            "--exclude='staticfiles/' "
+            "--exclude='db.sqlite3' "
+            f"{tmp_clone_dir}/ {PROJECT_DIR}/"
+        )
+    finally:
+        c.run(f"rm -rf {shlex.quote(tmp_clone_dir)}", warn=True)
+
+
 @task
 def deploy(c):
     """Deploy the project to the server."""
@@ -289,10 +307,17 @@ def deploy(c):
     c.run(f"mkdir -p {PROJECT_DIR}")
 
     repo_has_git = c.run(f"test -d {PROJECT_DIR}/.git", warn=True).ok
+    repo_has_files = c.run(
+        f"find {shlex.quote(PROJECT_DIR)} -mindepth 1 -maxdepth 1 | grep -q .",
+        warn=True,
+    ).ok
     debug(f"Repo exists on server: {repo_has_git}")
 
     if not repo_has_git:
-        if GITHUB_TOKEN and repo_url.startswith("https://"):
+        use_token = bool(GITHUB_TOKEN and repo_url.startswith("https://"))
+        if repo_has_files:
+            bootstrap_repo_in_place(c, repo_url, use_token=use_token)
+        elif use_token:
             debug("Cloning repository over HTTPS with token")
             run_git_command(c, f"clone {repo_url} {PROJECT_DIR}", use_token=True)
             c.run(f"git -C {PROJECT_DIR} remote set-url origin {repo_url}")

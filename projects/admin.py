@@ -25,5 +25,5 @@ class ProjectMembershipAdmin(admin.ModelAdmin):
 
 @admin.register(ProjectInvite)
 class ProjectInviteAdmin(admin.ModelAdmin):
-    list_display = ("email", "project", "role", "status", "created_at")
+    list_display = ("email", "project", "role", "status", "last_sent_at", "created_at")
     list_filter = ("role",)

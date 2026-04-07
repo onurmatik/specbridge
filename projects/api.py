@@ -1,15 +1,21 @@
+import logging
+
+from django.db import transaction
 from django.http import JsonResponse
 from django.urls import reverse
+from django.utils import timezone
 from ninja import Router, Schema
 from ninja.security import django_auth
 
 from alignment.services import compute_dashboard_metrics
+from projects.invitations import send_project_invitation_email
 from projects.models import MembershipRole, ProjectInvite, ProjectMembership
 from projects.services import create_project_workspace, get_project_or_404, resolve_actor
 from specs.models import AuditEventType
 from specs.services import log_audit_event
 
 router = Router(tags=["projects"])
+logger = logging.getLogger(__name__)
 
 
 class ProjectCreatePayload(Schema):
@@ -26,6 +32,18 @@ class MembershipUpdatePayload(Schema):
     role: str | None = None
     title: str | None = None
     is_active: bool | None = None
+
+
+def serialize_invite(invite: ProjectInvite):
+    return {
+        "id": invite.id,
+        "email": invite.email,
+        "role": invite.role,
+        "status": invite.status,
+        "last_sent_at": invite.last_sent_at.isoformat() if invite.last_sent_at else None,
+        "revoked_at": invite.revoked_at.isoformat() if invite.revoked_at else None,
+        "accepted_at": invite.accepted_at.isoformat() if invite.accepted_at else None,
+    }
 
 
 @router.post("/create", auth=django_auth)
@@ -95,21 +113,91 @@ def list_memberships(request, slug: str):
 def invite_membership(request, slug: str, payload: InvitePayload):
     project = get_project_or_404(slug, request.user)
     actor = resolve_actor(request, project)
-    invite = ProjectInvite.objects.create(
-        project=project,
-        email=payload.email,
-        role=payload.role,
-        invited_by=actor,
-    )
+    try:
+        with transaction.atomic():
+            invite = ProjectInvite.objects.create(
+                project=project,
+                email=payload.email,
+                role=payload.role,
+                invited_by=actor,
+            )
+            send_project_invitation_email(invite, request=request)
+            invite.mark_sent()
+            invite.save(update_fields=["last_sent_at", "updated_at"])
+            log_audit_event(
+                project=project,
+                actor=actor,
+                event_type=AuditEventType.MEMBERSHIP_CHANGED,
+                title=f"Invited {invite.email}",
+                description=f"Role: {invite.role}",
+                metadata={"invite_id": invite.id, "email": invite.email, "role": invite.role},
+            )
+    except Exception:
+        logger.exception("Failed to send invitation email", extra={"project_slug": project.slug, "email": payload.email})
+        return JsonResponse(
+            {"ok": False, "errors": {"email": ["Invitation email could not be delivered. Check email settings and try again."]}},
+            status=502,
+        )
+    return serialize_invite(invite)
+
+
+@router.post("/{slug}/memberships/invites/{invite_id}/resend", auth=django_auth)
+def resend_invite(request, slug: str, invite_id: int):
+    project = get_project_or_404(slug, request.user)
+    actor = resolve_actor(request, project)
+    invite = project.invites.get(pk=invite_id)
+
+    if invite.status != "pending":
+        return JsonResponse(
+            {"ok": False, "errors": {"invite": ["Only pending invitations can be re-sent."]}},
+            status=422,
+        )
+
+    try:
+        with transaction.atomic():
+            send_project_invitation_email(invite, request=request, is_resend=True)
+            invite.mark_sent()
+            invite.save(update_fields=["last_sent_at", "updated_at"])
+            log_audit_event(
+                project=project,
+                actor=actor,
+                event_type=AuditEventType.MEMBERSHIP_CHANGED,
+                title=f"Re-sent invite to {invite.email}",
+                description=f"Role: {invite.role}",
+                metadata={"invite_id": invite.id, "email": invite.email, "role": invite.role, "action": "resend"},
+            )
+    except Exception:
+        logger.exception("Failed to resend invitation email", extra={"project_slug": project.slug, "invite_id": invite.id})
+        return JsonResponse(
+            {"ok": False, "errors": {"email": ["Invitation email could not be delivered. Check email settings and try again."]}},
+            status=502,
+        )
+    return {"ok": True, "invite": serialize_invite(invite)}
+
+
+@router.post("/{slug}/memberships/invites/{invite_id}/revoke", auth=django_auth)
+def revoke_invite(request, slug: str, invite_id: int):
+    project = get_project_or_404(slug, request.user)
+    actor = resolve_actor(request, project)
+    invite = project.invites.get(pk=invite_id)
+
+    if invite.status != "pending":
+        return JsonResponse(
+            {"ok": False, "errors": {"invite": ["Only pending invitations can be revoked."]}},
+            status=422,
+        )
+
+    invite.revoked_at = timezone.now()
+    invite.save(update_fields=["revoked_at", "updated_at"])
     log_audit_event(
         project=project,
         actor=actor,
         event_type=AuditEventType.MEMBERSHIP_CHANGED,
-        title=f"Invited {invite.email}",
+        title=f"Revoked invite for {invite.email}",
         description=f"Role: {invite.role}",
-        metadata={"invite_id": invite.id, "email": invite.email, "role": invite.role},
+        metadata={"invite_id": invite.id, "email": invite.email, "role": invite.role, "action": "revoke"},
     )
-    return {"id": invite.id, "email": invite.email, "role": invite.role, "status": invite.status}
+    return {"ok": True, "invite": serialize_invite(invite)}
 
 
 @router.post("/{slug}/memberships/{membership_id}/update", auth=django_auth)

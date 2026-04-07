@@ -5,6 +5,7 @@ from projects import views
 
 urlpatterns = [
     path("", views.project_directory, name="project-directory"),
+    path("invites/<str:token>/", views.project_invite_accept, name="project-invite-accept"),
     path("projects/create/", views.project_create, name="project-create"),
     path("projects/create/submit/", views.project_create_submit, name="project-create-submit"),
     path("dashboard/", views.shortcut_redirect, {"destination": "project-dashboard"}, name="dashboard-shortcut"),

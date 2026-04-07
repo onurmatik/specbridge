@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block title %}SpecBridge · Invitation{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50 px-6 py-10">
+  <div class="mx-auto max-w-2xl">
+    <div class="workspace-panel overflow-hidden p-8">
+      {% if invite_state == "expired" %}
+        <span class="workspace-badge border-amber-100 bg-amber-50 text-amber-700">Invitation expired</span>
+        <h1 class="mt-4 font-display text-3xl font-bold tracking-tight text-gray-900">This invitation link has expired.</h1>
+        <p class="mt-3 text-sm leading-relaxed text-gray-600">Ask the project owner to send the invitation again from the members page.</p>
+      {% elif invite_state == "revoked" %}
+        <span class="workspace-badge border-red-100 bg-red-50 text-red-700">Invitation revoked</span>
+        <h1 class="mt-4 font-display text-3xl font-bold tracking-tight text-gray-900">This invitation is no longer active.</h1>
+        <p class="mt-3 text-sm leading-relaxed text-gray-600">{{ invite.project.name }} invitation for {{ invite.email }} was revoked before it was accepted.</p>
+      {% elif invite_state == "wrong-account" %}
+        <span class="workspace-badge border-amber-100 bg-amber-50 text-amber-700">Wrong account</span>
+        <h1 class="mt-4 font-display text-3xl font-bold tracking-tight text-gray-900">Sign in with the invited email address.</h1>
+        <p class="mt-3 text-sm leading-relaxed text-gray-600">
+          This invitation was sent to <span class="font-medium text-gray-900">{{ invite.email }}</span>. The current session does not match that address.
+        </p>
+        <a href="{% url 'login' %}?next={{ request.get_full_path|urlencode }}" class="primary-button mt-6 inline-flex">
+          <iconify-icon icon="lucide:log-in"></iconify-icon>
+          Switch Account
+        </a>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
