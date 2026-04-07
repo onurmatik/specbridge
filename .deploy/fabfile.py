@@ -173,7 +173,38 @@ PROJECT_DIR = f"/srv/apps/{PROJECT_NAME}"
 VENV_DIR = f"{PROJECT_DIR}/venv"
 PYTHON_BIN = f"{VENV_DIR}/bin/python"
 ENV_FILE = f"{PROJECT_DIR}/.env"
-FRONTEND_DIR = f"{PROJECT_DIR}/frontend"
+
+
+def resolve_python_install_command() -> str:
+    requirements_file = PROJECT_ROOT / "requirements.txt"
+    if requirements_file.is_file():
+        return "pip install -r requirements.txt"
+    raise RuntimeError("requirements.txt is required for deploy.")
+
+
+def resolve_frontend_build() -> tuple[Optional[str], Optional[str]]:
+    root_package_json = PROJECT_ROOT / "package.json"
+    frontend_package_json = PROJECT_ROOT / "frontend" / "package.json"
+
+    if frontend_package_json.is_file():
+        return f"{PROJECT_DIR}/frontend", "npm run build"
+
+    if root_package_json.is_file():
+        package_text = root_package_json.read_text()
+        if '"build:css"' in package_text:
+            return PROJECT_DIR, "npm run build:css"
+        if '"build"' in package_text:
+            return PROJECT_DIR, "npm run build"
+
+    return None, None
+
+
+def resolve_frontend_install_command(frontend_dir: str) -> str:
+    lockfile = frontend_dir.removeprefix(PROJECT_DIR).lstrip("/")
+    local_lockfile = PROJECT_ROOT / lockfile / "package-lock.json" if lockfile else PROJECT_ROOT / "package-lock.json"
+    if local_lockfile.is_file():
+        return "npm ci"
+    return "npm install"
 
 
 def upload_env_file(c) -> None:
@@ -242,6 +273,8 @@ def deploy(c):
     domain_name = require_env(*ENV_DOMAIN)
     project_env_values = load_project_env_values()
     frontend_build_env = resolve_frontend_build_env(domain_name, project_env_values)
+    python_install_command = resolve_python_install_command()
+    frontend_dir, frontend_build_command = resolve_frontend_build()
 
     debug(f"Using repo URL: {repo_url}")
     debug(f"Connecting to {USER}@{host} with key {key_filename}")
@@ -289,21 +322,28 @@ def deploy(c):
     with c.cd(PROJECT_DIR):
         debug(f"Installing Python requirements")
         c.run(f"{VENV_DIR}/bin/pip install --upgrade pip")
-        c.run(f"{VENV_DIR}/bin/pip install -r requirements.txt")
-        debug("Running collectstatic & migrate")
-        c.run(f"{PYTHON_BIN} manage.py collectstatic --noinput")
-        c.run(f"{PYTHON_BIN} manage.py migrate")
+        c.run(f"{VENV_DIR}/bin/{python_install_command}")
 
-    with c.cd(FRONTEND_DIR):
-        debug("Installing frontend dependencies")
-        c.run("npm ci")
-        debug("Building frontend")
-        build_env_prefix = " ".join(
-            f"{name}={shlex.quote(value)}"
-            for name, value in frontend_build_env.items()
-            if value
-        )
-        c.run(f"{build_env_prefix} npm run build")
+    if frontend_dir and frontend_build_command:
+        frontend_install_command = resolve_frontend_install_command(frontend_dir)
+        with c.cd(frontend_dir):
+            debug("Installing frontend dependencies")
+            c.run(frontend_install_command)
+            debug("Building frontend")
+            build_env_prefix = " ".join(
+                f"{name}={shlex.quote(value)}"
+                for name, value in frontend_build_env.items()
+                if value
+            )
+            command = frontend_build_command
+            if build_env_prefix:
+                command = f"{build_env_prefix} {command}"
+            c.run(command)
+
+    with c.cd(PROJECT_DIR):
+        debug("Running migrate & collectstatic")
+        c.run(f"{PYTHON_BIN} manage.py migrate")
+        c.run(f"{PYTHON_BIN} manage.py collectstatic --noinput")
 
     debug("Restarting services (best effort)")
     c.sudo(

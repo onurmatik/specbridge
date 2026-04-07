@@ -1,0 +1,5 @@
+fabric>=3,<4
+invoke>=2,<3
+python-dotenv>=1,<2
+requests>=2,<3
+PyJWT[crypto]>=2.8,<3
