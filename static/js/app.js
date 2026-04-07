@@ -904,6 +904,37 @@ function hashSpecSectionId() {
   return rawHash.startsWith("#spec-section-") ? rawHash.replace("#spec-section-", "") : "";
 }
 
+const WORKSPACE_SPLIT_RATIO_KEY = "specbridge:workspace-split-ratio";
+const MIN_WORKSPACE_STREAM_PANE_PX = 440;
+const MIN_WORKSPACE_SPEC_PANE_PX = 520;
+const MAX_WORKSPACE_STREAM_PANE_PX = 760;
+const WORKSPACE_SPLIT_STEP_PX = 32;
+
+function loadWorkspaceSplitRatio() {
+  try {
+    const rawRatio = window.localStorage.getItem(WORKSPACE_SPLIT_RATIO_KEY);
+    const parsedRatio = Number.parseFloat(rawRatio || "");
+    if (!Number.isFinite(parsedRatio) || parsedRatio <= 0 || parsedRatio >= 1) {
+      return null;
+    }
+    return parsedRatio;
+  } catch (error) {
+    console.warn("Unable to read workspace split ratio", error);
+    return null;
+  }
+}
+
+function saveWorkspaceSplitRatio(ratio) {
+  try {
+    if (!Number.isFinite(ratio) || ratio <= 0 || ratio >= 1) {
+      return;
+    }
+    window.localStorage.setItem(WORKSPACE_SPLIT_RATIO_KEY, `${ratio}`);
+  } catch (error) {
+    console.warn("Unable to save workspace split ratio", error);
+  }
+}
+
 function focusStreamInput(prompt = "", mode = "replace") {
   const streamInput = document.querySelector("[data-stream-input]");
   if (!streamInput) {
@@ -925,6 +956,159 @@ function focusStreamInput(prompt = "", mode = "replace") {
     streamInput.setSelectionRange(streamInput.value.length, streamInput.value.length);
   }
   return true;
+}
+
+function initializeWorkspaceSplitPane() {
+  const root = document.querySelector("[data-workspace-split-root]");
+  const streamPane = root?.querySelector?.("[data-workspace-stream-pane]");
+  const handle = root?.querySelector?.("[data-workspace-resize-handle]");
+  const indicator = handle?.querySelector?.("[data-workspace-resize-indicator]");
+  if (!root || !streamPane || !handle || root.dataset.workspaceSplitInitialized === "true") {
+    return;
+  }
+  root.dataset.workspaceSplitInitialized = "true";
+
+  const desktopMedia = window.matchMedia("(min-width: 1024px)");
+  let currentRatio = loadWorkspaceSplitRatio();
+  let dragging = false;
+
+  const streamPaneBounds = (rootWidth) => {
+    const maxWidth = Math.min(MAX_WORKSPACE_STREAM_PANE_PX, rootWidth - MIN_WORKSPACE_SPEC_PANE_PX);
+    if (!desktopMedia.matches || maxWidth <= MIN_WORKSPACE_STREAM_PANE_PX) {
+      return null;
+    }
+    return {
+      minWidth: MIN_WORKSPACE_STREAM_PANE_PX,
+      maxWidth,
+      defaultWidth: Math.round((MIN_WORKSPACE_STREAM_PANE_PX + maxWidth) / 2),
+    };
+  };
+
+  const clampStreamPaneWidth = (rootWidth, nextWidth) => {
+    const bounds = streamPaneBounds(rootWidth);
+    if (!bounds) {
+      return null;
+    }
+    return Math.min(Math.max(nextWidth, bounds.minWidth), bounds.maxWidth);
+  };
+
+  const resetStreamPaneWidth = () => {
+    streamPane.style.flex = "";
+    streamPane.style.maxWidth = "";
+  };
+
+  const applyStreamPaneWidth = (nextWidth, { persist = false } = {}) => {
+    if (nextWidth === null) {
+      resetStreamPaneWidth();
+      return;
+    }
+
+    const rootWidth = root.getBoundingClientRect().width;
+    const clampedWidth = clampStreamPaneWidth(rootWidth, nextWidth);
+    if (clampedWidth === null) {
+      resetStreamPaneWidth();
+      return;
+    }
+
+    streamPane.style.flex = `0 0 ${clampedWidth}px`;
+    streamPane.style.maxWidth = `${clampedWidth}px`;
+    currentRatio = clampedWidth / rootWidth;
+
+    if (persist) {
+      saveWorkspaceSplitRatio(currentRatio);
+    }
+  };
+
+  const preferredStreamPaneWidth = () => {
+    const rootWidth = root.getBoundingClientRect().width;
+    const bounds = streamPaneBounds(rootWidth);
+    if (!bounds) {
+      return null;
+    }
+    if (currentRatio) {
+      return rootWidth * currentRatio;
+    }
+    return bounds.defaultWidth;
+  };
+
+  const syncToViewport = () => {
+    applyStreamPaneWidth(preferredStreamPaneWidth());
+  };
+
+  const setDraggingState = (isDragging) => {
+    dragging = isDragging;
+    document.body.dataset.workspaceResizing = isDragging ? "true" : "false";
+    document.body.style.cursor = isDragging ? "col-resize" : "";
+    document.body.style.userSelect = isDragging ? "none" : "";
+    indicator?.classList.toggle("bg-gray-600", isDragging);
+    indicator?.classList.toggle("bg-gray-400", !isDragging);
+  };
+
+  const stopDrag = () => {
+    if (!dragging) {
+      return;
+    }
+    setDraggingState(false);
+    window.removeEventListener("pointermove", onPointerMove);
+    window.removeEventListener("pointerup", stopDrag);
+    window.removeEventListener("pointercancel", stopDrag);
+    if (currentRatio) {
+      saveWorkspaceSplitRatio(currentRatio);
+    }
+  };
+
+  function onPointerMove(event) {
+    if (!dragging) {
+      return;
+    }
+    event.preventDefault();
+    const rootRect = root.getBoundingClientRect();
+    applyStreamPaneWidth(event.clientX - rootRect.left);
+  }
+
+  handle.addEventListener("pointerdown", (event) => {
+    if (!desktopMedia.matches) {
+      return;
+    }
+    event.preventDefault();
+    setDraggingState(true);
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", stopDrag);
+    window.addEventListener("pointercancel", stopDrag);
+  });
+
+  handle.addEventListener("keydown", (event) => {
+    if (!desktopMedia.matches) {
+      return;
+    }
+
+    const currentWidth = streamPane.getBoundingClientRect().width;
+    let nextWidth = currentWidth;
+
+    if (event.key === "ArrowLeft") {
+      nextWidth -= WORKSPACE_SPLIT_STEP_PX;
+    } else if (event.key === "ArrowRight") {
+      nextWidth += WORKSPACE_SPLIT_STEP_PX;
+    } else if (event.key === "Home") {
+      nextWidth = MIN_WORKSPACE_STREAM_PANE_PX;
+    } else if (event.key === "End") {
+      nextWidth = root.getBoundingClientRect().width - MIN_WORKSPACE_SPEC_PANE_PX;
+    } else {
+      return;
+    }
+
+    event.preventDefault();
+    applyStreamPaneWidth(nextWidth, { persist: true });
+  });
+
+  if (typeof desktopMedia.addEventListener === "function") {
+    desktopMedia.addEventListener("change", syncToViewport);
+  } else if (typeof desktopMedia.addListener === "function") {
+    desktopMedia.addListener(syncToViewport);
+  }
+
+  window.addEventListener("resize", syncToViewport);
+  syncToViewport();
 }
 
 function initializeSpecNavigation() {
@@ -1753,6 +1937,7 @@ initializeSpecSectionAutosave();
 initializeSectionStatusControls();
 initializeSectionActionControls();
 initializeSectionAiControls();
+initializeWorkspaceSplitPane();
 initializeSpecNavigation();
 setAuthMode("login");
 
@@ -1770,6 +1955,9 @@ if (autoRefreshMs > 0) {
       return;
     }
     if (projectSettingsModalNode() && !projectSettingsModalNode().classList.contains("hidden")) {
+      return;
+    }
+    if (document.body.dataset.workspaceResizing === "true") {
       return;
     }
     window.location.reload();

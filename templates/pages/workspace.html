@@ -10,8 +10,12 @@
   {% include "components/global_sidebar.html" %}
   <main class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
     {% include "components/page_header.html" %}
-    <div class="flex min-h-0 flex-1 overflow-hidden bg-gray-50">
-      <section class="flex min-w-[440px] max-w-[560px] flex-[0_0_47%] flex-col border-r border-gray-200 bg-white">
+    <div class="flex min-h-0 flex-1 overflow-hidden bg-gray-50" data-workspace-split-root>
+      <section
+        id="workspace-stream-pane"
+        class="flex min-w-[440px] max-w-[560px] flex-[0_0_47%] flex-col border-r border-gray-200 bg-white lg:max-w-none"
+        data-workspace-stream-pane
+      >
         <div class="border-b border-gray-100 bg-white/80 px-6 py-4 backdrop-blur-sm">
           <div class="flex items-center justify-between gap-3">
             <div class="min-w-0">
@@ -279,11 +283,17 @@
         </div>
       </section>
 
-      <div class="hidden w-1 cursor-col-resize bg-gray-100 transition-colors hover:bg-gray-300 lg:flex lg:flex-col lg:items-center lg:justify-center">
-        <div class="h-8 w-0.5 rounded-full bg-gray-400"></div>
-      </div>
+      <button
+        type="button"
+        class="group relative hidden w-1 touch-none cursor-col-resize focus:outline-none focus:ring-2 focus:ring-gray-300 lg:flex lg:flex-col lg:items-center lg:justify-center before:absolute before:-inset-y-0 before:-left-2 before:-right-2 before:content-['']"
+        data-workspace-resize-handle
+        aria-label="Resize alignment stream and spec panels"
+        title="Drag to resize panels"
+      >
+        <div data-workspace-resize-indicator class="h-8 w-px rounded-full bg-gray-400 transition-colors group-hover:bg-gray-500"></div>
+      </button>
 
-      <section class="min-h-0 min-w-0 flex-1 overflow-hidden bg-white">
+      <section id="workspace-spec-pane" class="min-h-0 min-w-0 flex-1 overflow-hidden bg-white">
         <div class="flex h-full flex-col" data-spec-workspace data-scroll-target-section="{% if selected_section_ids %}{{ selected_section_ids.0 }}{% elif active_section %}{{ active_section.id }}{% endif %}">
           <div class="sticky top-0 z-30 relative border-b border-gray-200 bg-white">
             <div data-spec-nav-fade-left class="pointer-events-none absolute left-0 top-0 bottom-0 z-10 w-12 bg-gradient-to-r from-white via-white/90 to-transparent opacity-0 transition-opacity duration-300"></div>

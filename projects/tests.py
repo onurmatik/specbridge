@@ -96,6 +96,8 @@ class ProjectPageTests(TestCase):
         self.assertNotContains(response, "Issues &amp; Alignment", html=True)
         self.assertNotContains(response, "Active Queue")
         self.assertContains(response, 'data-stream-input', html=False)
+        self.assertContains(response, 'data-workspace-split-root', html=False)
+        self.assertContains(response, 'data-workspace-resize-handle', html=False)
         self.assertContains(response, 'data-project-settings-trigger', html=False)
         self.assertContains(response, f'/api/projects/{self.project.slug}/settings', html=False)
         self.assertNotContains(response, "Ask AI to Help Draft")
