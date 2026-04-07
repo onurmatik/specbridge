@@ -109,17 +109,38 @@ def _default_summary(project_name: str, tagline: str) -> str:
     )
 
 
+def _summary_detail(summary: str, tagline: str) -> str:
+    normalized_summary = (summary or "").strip()
+    normalized_tagline = (tagline or "").strip()
+    if not normalized_tagline or not normalized_summary.startswith(normalized_tagline):
+        return normalized_summary
+    detail = normalized_summary[len(normalized_tagline):].lstrip()
+    if detail.startswith("."):
+        detail = detail[1:].lstrip()
+    return detail
+
+
+def _compose_summary(tagline: str, detail: str) -> str:
+    normalized_tagline = (tagline or "").strip()
+    normalized_detail = (detail or "").strip()
+    if not normalized_tagline:
+        return normalized_detail
+    lead = normalized_tagline if normalized_tagline.endswith((".", "!", "?")) else f"{normalized_tagline}."
+    if not normalized_detail:
+        return lead
+    return f"{lead} {normalized_detail}"
+
+
+def _default_summary_detail(project_name: str, tagline: str) -> str:
+    return _summary_detail(_default_summary(project_name, tagline), tagline)
+
+
 def split_project_summary(project) -> tuple[str, str]:
     tagline = (project.tagline or "").strip()
     summary = (project.summary or "").strip()
     if not tagline:
         return "", summary
-    if summary.startswith(tagline):
-        detail = summary[len(tagline):].lstrip()
-        if detail.startswith("."):
-            detail = detail[1:].lstrip()
-        return tagline, detail
-    return tagline, summary
+    return tagline, _summary_detail(summary, tagline)
 
 
 @transaction.atomic
@@ -161,6 +182,31 @@ def create_project_workspace(
         summary="Seeded the first single-spec workspace scaffold from the project directory.",
         actor=actor,
     )
+    return project
+
+
+def update_project_identity(
+    *,
+    project: Project,
+    project_name: str,
+    tagline: str,
+):
+    resolved_project_name = (project_name or "").strip()
+    resolved_tagline = (tagline or "").strip() or _default_tagline(resolved_project_name)
+
+    current_tagline, current_detail = split_project_summary(project)
+    current_effective_tagline = current_tagline or _default_tagline(project.name)
+    current_default_detail = _default_summary_detail(project.name, current_effective_tagline)
+
+    next_detail = current_detail
+    if not next_detail or next_detail == current_default_detail:
+        next_detail = _default_summary_detail(resolved_project_name, resolved_tagline)
+
+    project.name = resolved_project_name
+    project.tagline = resolved_tagline
+    project.summary = _compose_summary(resolved_tagline, next_detail)
+    project.last_activity_at = timezone.now()
+    project.save(update_fields=["name", "tagline", "summary", "last_activity_at", "updated_at"])
     return project
 
 

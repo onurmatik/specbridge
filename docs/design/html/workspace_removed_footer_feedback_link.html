@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en" class="antialiased">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Align - Project Spec Workspace</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://code.iconify.design/iconify-icon/1.0.7/iconify-icon.min.js"></script>
+  <style>
+    @import url('https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@800,500,700&f[]=satoshi@400,500,700&display=swap');
+    
+    :root {
+      --font-sans: 'Satoshi', sans-serif;
+      --font-display: 'Cabinet Grotesk', sans-serif;
+    }
+    
+    body {
+      font-family: var(--font-sans);
+      background-color: #FAFAFA;
+      color: #18181B;
+      margin: 0;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    h1, h2, h3, h4, h5, h6, .font-display {
+      font-family: var(--font-display);
+    }
+
+    /* Custom scrollbar for a cleaner look */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #E4E4E7;
+      border-radius: 10px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #D4D4D8;
+    }
+
+    /* Hide scrollbar for the horizontal nav */
+    .scrollbar-hide::-webkit-scrollbar {
+      display: none;
+    }
+    .scrollbar-hide {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
+    /* Subtle pulse for agent indicators */
+    @keyframes pulse-soft {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.6; }
+    }
+    .animate-pulse-soft {
+      animation: pulse-soft 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+
+    /* Agent inline highlight */
+    .agent-highlight {
+      background: linear-gradient(to bottom, transparent 60%, #E9D5FF 0%);
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+    .agent-highlight:hover {
+      background: #F3E8FF;
+    }
+  </style>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            gray: {
+              50: '#FAFAFA',
+              100: '#F4F4F5',
+              200: '#E4E4E7',
+              300: '#D4D4D8',
+              400: '#A1A1AA',
+              500: '#71717A',
+              600: '#52525B',
+              700: '#3F3F46',
+              800: '#27272A',
+              900: '#18181B',
+            },
+            brand: {
+              agent: '#8B5CF6',
+              decision: '#10B981',
+              warning: '#F59E0B',
+              danger: '#EF4444',
+            }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body>
+  <!-- ROOT CONTAINER -->
+  <div class="flex h-screen w-full bg-gray-50 overflow-hidden">
+    
+    <!-- SLIM GLOBAL SIDEBAR -->
+    <sd-component componentId="c499c3eb-6f50-46ff-9945-e4011f25ff54" name="GlobalSidebar" props='{"activeItem":"projects","feedbackUrl":"https://featurerequest.io/onurmatik/spec-bridge/"}'></sd-component>
+
+    <!-- MAIN WORKSPACE -->
+    <main class="flex-1 flex flex-col min-w-0">
+      
+      <!-- TOP HEADER -->
+      <sd-component componentId="d1c411f2-4007-453c-ac17-8de1723af111" name="PageHeader" props='{"projectsHref":"https://p.superdesign.dev/draft/334441f1-f8fb-4716-9bd2-c5bdec4fb495","currentProjectHref":"https://p.superdesign.dev/draft/334441f1-f8fb-4716-9bd2-c5bdec4fb495","statusLabel":"Aligning","unresolvedCount":3}'></sd-component>
+
+      <!-- SPLIT VIEW CONTAINER -->
+      <div class="flex-1 flex overflow-hidden">
+        
+        <!-- LEFT: CONVERSATION & ALIGNMENT STREAM -->
+        <section class="w-[45%] border-r border-gray-200 bg-white flex flex-col relative">
+          
+          <!-- Thread Header -->
+          <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-white/80 backdrop-blur-sm z-10">
+            <h2 class="font-display font-bold text-lg text-gray-900">Alignment Stream</h2>
+            <div class="flex gap-1 p-1 bg-gray-100 rounded-lg">
+              <button class="px-3 py-1 text-xs font-medium bg-white shadow-sm rounded-md text-gray-900">All</button>
+              <button class="px-3 py-1 text-xs font-medium text-gray-500 hover:text-gray-900 flex items-center gap-1">
+                <iconify-icon icon="lucide:check-circle-2" class="text-brand-decision"></iconify-icon>
+                Decisions
+              </button>
+              <button class="px-3 py-1 text-xs font-medium text-gray-500 hover:text-gray-900 flex items-center gap-1">
+                <iconify-icon icon="lucide:alert-circle" class="text-brand-warning"></iconify-icon>
+                Open
+              </button>
+            </div>
+          </div>
+
+          <!-- Scrollable Stream -->
+          <div class="flex-1 overflow-y-auto p-6 space-y-8">
+            
+            <!-- Entry: CEO Pitch -->
+            <div class="flex gap-4">
+              <div class="flex-shrink-0">
+                 <div class="w-10 h-10 rounded-full bg-gray-100 overflow-hidden">
+                    <img src="https://api.dicebear.com/7.x/notionists/svg?seed=CEO&backgroundColor=transparent" alt="CEO" class="w-full h-full object-cover">
+                 </div>
+              </div>
+              <div class="flex-1">
+                <div class="flex items-baseline justify-between mb-1">
+                  <span class="font-medium text-gray-900">Sarah <span class="text-xs text-gray-400 font-normal ml-1">CEO</span></span>
+                  <span class="text-xs text-gray-400">10:42 AM</span>
+                </div>
+                <p class="text-gray-700 leading-relaxed text-sm">
+                  We need to kill passwords completely for the new platform. Let's move to a magic link system only. It'll reduce onboarding friction by at least 30%. I want this to be the primary way users get in.
+                </p>
+              </div>
+            </div>
+
+            <!-- Entry: AI Agent Intervention -->
+            <div class="flex gap-4 relative">
+              <div class="absolute left-[1.15rem] top-10 bottom-[-2rem] w-px bg-purple-100"></div>
+              <div class="flex-shrink-0 relative z-10">
+                 <div class="w-10 h-10 rounded-xl bg-purple-50 border border-purple-100 flex items-center justify-center">
+                    <iconify-icon icon="lucide:bot" class="text-brand-agent text-lg"></iconify-icon>
+                 </div>
+              </div>
+              <div class="flex-1 bg-purple-50/50 rounded-xl p-4 border border-purple-100">
+                <div class="flex items-center gap-2 mb-2">
+                  <iconify-icon icon="lucide:lightbulb" class="text-brand-agent"></iconify-icon>
+                  <span class="font-medium text-brand-agent text-sm">Ambiguity Detected</span>
+                </div>
+                <p class="text-gray-800 text-sm mb-3">
+                  Moving to magic links exclusively is a significant shift. Before we lock this in, we need to clarify two things:
+                </p>
+                <ul class="list-disc list-inside text-sm text-gray-700 space-y-1 mb-3">
+                  <li>What happens to the 40,000 existing users who currently have passwords?</li>
+                  <li>Do we need a fallback for enterprise users who mandate SSO?</li>
+                </ul>
+                <div class="flex gap-2 mt-2">
+                  <button class="text-xs font-medium px-3 py-1.5 bg-white border border-purple-200 rounded text-brand-agent hover:bg-purple-50 transition-colors">Address Existing Users</button>
+                  <button class="text-xs font-medium px-3 py-1.5 bg-white border border-purple-200 rounded text-brand-agent hover:bg-purple-50 transition-colors">Define SSO Strategy</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Entry: Engineer -->
+            <div class="flex gap-4">
+              <div class="flex-shrink-0">
+                 <div class="w-10 h-10 rounded-full bg-blue-50 overflow-hidden">
+                    <img src="https://api.dicebear.com/7.x/notionists/svg?seed=Marcus&backgroundColor=transparent" alt="Engineer" class="w-full h-full object-cover">
+                 </div>
+              </div>
+              <div class="flex-1">
+                <div class="flex items-baseline justify-between mb-1">
+                  <span class="font-medium text-gray-900">Marcus <span class="text-xs text-gray-400 font-normal ml-1">Lead Eng</span></span>
+                  <span class="text-xs text-gray-400">11:05 AM</span>
+                </div>
+                <p class="text-gray-700 leading-relaxed text-sm mb-2">
+                  Good catch. From a technical side, migrating existing users silently to magic links is doable, but we'll need to email them all to explain the new flow. 
+                </p>
+                <p class="text-gray-700 leading-relaxed text-sm">
+                  Regarding SSO, we definitely need to keep it. Many of our premium orgs enforce it at the DNS level.
+                </p>
+              </div>
+            </div>
+
+            <!-- Entry: DECISION RECORDED -->
+            <div class="flex gap-4 items-start">
+              <div class="flex-shrink-0 mt-1">
+                 <div class="w-6 h-6 rounded-full bg-brand-decision flex items-center justify-center ring-4 ring-green-50">
+                    <iconify-icon icon="lucide:check" class="text-white text-xs"></iconify-icon>
+                 </div>
+              </div>
+              <div class="flex-1 bg-white border border-green-200 rounded-xl p-4 shadow-sm relative overflow-hidden">
+                <div class="absolute top-0 left-0 w-1 h-full bg-brand-decision"></div>
+                <div class="flex items-baseline justify-between mb-2">
+                  <span class="text-xs font-bold uppercase tracking-wider text-brand-decision">Decision Recorded</span>
+                  <span class="text-xs text-gray-400">by Sarah • 11:10 AM</span>
+                </div>
+                <h4 class="font-display font-medium text-gray-900 mb-1">Retain SSO, Migrate Passwords</h4>
+                <p class="text-sm text-gray-600">
+                  We will implement magic links as the default for all individual users. Existing passwords will be deprecated with a 30-day grace period. Enterprise SSO remains fully supported and bypasses magic links.
+                </p>
+              </div>
+            </div>
+
+            <!-- Entry: CEO Response to Decision -->
+            <div class="flex gap-4">
+              <div class="flex-shrink-0">
+                 <div class="w-10 h-10 rounded-full bg-gray-100 overflow-hidden">
+                    <img src="https://api.dicebear.com/7.x/notionists/svg?seed=CEO&backgroundColor=transparent" alt="CEO" class="w-full h-full object-cover">
+                 </div>
+              </div>
+              <div class="flex-1">
+                <div class="flex items-baseline justify-between mb-1">
+                  <span class="font-medium text-gray-900">Sarah <span class="text-xs text-gray-400 font-normal ml-1">CEO</span></span>
+                  <span class="text-xs text-gray-400">Just now</span>
+                </div>
+                <p class="text-gray-700 leading-relaxed text-sm">
+                  Agreed. But there's still a risk. What if the email provider delays the magic link? Users will bounce. We need a fallback if the email takes longer than 10 seconds to arrive.
+                </p>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Input Area -->
+          <div class="p-4 border-t border-gray-200 bg-gray-50">
+            <div class="bg-white border border-gray-300 rounded-xl shadow-sm focus-within:border-gray-500 focus-within:ring-1 focus-within:ring-gray-500 transition-all">
+              <textarea placeholder="Add to the discussion or propose a decision..." class="w-full bg-transparent border-none focus:ring-0 resize-none p-3 text-sm text-gray-900 placeholder-gray-400" rows="3"></textarea>
+              <div class="px-3 py-2 border-t border-gray-100 flex justify-between items-center">
+                <div class="flex gap-1">
+                  <button class="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors" title="Mention someone">
+                    <iconify-icon icon="lucide:at-sign"></iconify-icon>
+                  </button>
+                  <button class="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors" title="Propose Decision">
+                    <iconify-icon icon="lucide:gavel"></iconify-icon>
+                  </button>
+                  <button class="p-1.5 text-gray-400 hover:text-brand-agent hover:bg-purple-50 rounded transition-colors" title="Ask Agent">
+                    <iconify-icon icon="lucide:sparkles"></iconify-icon>
+                  </button>
+                </div>
+                <button class="px-4 py-1.5 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800 transition-colors">
+                  Post
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- SPLIT HANDLE (Visual only for this prototype) -->
+        <div class="w-1 bg-gray-100 cursor-col-resize hover:bg-gray-300 transition-colors flex flex-col justify-center items-center z-20">
+          <div class="h-8 w-0.5 bg-gray-400 rounded-full"></div>
+        </div>
+
+        <!-- RIGHT: STRUCTURED SPEC VIEW -->
+        <section id="spec-scroll-container" class="flex-1 bg-gray-50 overflow-y-auto relative scroll-smooth">
+          
+          <!-- DYNAMIC STICKY NAV WRAPPER -->
+          <div class="sticky top-0 w-full bg-white border-b border-gray-200 z-30 relative">
+            <!-- Left fade indicator -->
+            <div id="nav-fade-left" class="absolute left-0 top-0 bottom-0 w-12 bg-gradient-to-r from-white via-white/90 to-transparent pointer-events-none z-10 opacity-0 transition-opacity duration-300"></div>
+            <!-- Right fade indicator -->
+            <div id="nav-fade-right" class="absolute right-0 top-0 bottom-0 w-16 bg-gradient-to-l from-white via-white/90 to-transparent pointer-events-none z-10 transition-opacity duration-300"></div>
+            
+            <!-- Scrollable Nav Container -->
+            <nav id="dynamic-nav" class="flex items-end gap-6 px-8 pt-4 overflow-x-auto scroll-smooth whitespace-nowrap scrollbar-hide relative">
+              <!-- JS will inject links here -->
+            </nav>
+          </div>
+
+          <div class="max-w-3xl mx-auto px-8 py-8 pb-32">
+            
+            <!-- Document Title Area -->
+            <div class="mb-12">
+              <div class="flex items-center gap-3 mb-4">
+                <span class="px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-bold uppercase tracking-wider">Drafting</span>
+                <span class="text-sm text-gray-500 flex items-center gap-1">
+                  <iconify-icon icon="lucide:clock" class="text-xs"></iconify-icon>
+                  Last updated 2 mins ago by AI Agent
+                </span>
+              </div>
+              <h1 class="font-display font-bold text-4xl text-gray-900 tracking-tight mb-4">
+                Authentication Revamp: Magic Links
+              </h1>
+              <p class="text-lg text-gray-600 leading-relaxed">
+                A strategic shift to remove passwords as the primary authentication method, aiming to reduce onboarding friction and improve security posture.
+              </p>
+            </div>
+
+            <!-- Spec Section: Problem & Goals -->
+            <div id="problem-goals" class="mb-10 group spec-section scroll-mt-24">
+              <div class="flex items-center justify-between mb-3">
+                <h2 class="font-display font-bold text-xl text-gray-900 flex items-center gap-2">
+                  1. Problem & Goals
+                </h2>
+                <!-- Status Badge -->
+                <div class="flex items-center gap-1.5 px-2 py-1 rounded-md bg-green-50 border border-green-100 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <iconify-icon icon="lucide:check-circle-2" class="text-brand-decision text-xs"></iconify-icon>
+                  <span class="text-xs font-medium text-green-700">Aligned</span>
+                </div>
+              </div>
+              <div class="prose prose-zinc max-w-none text-gray-700">
+                <p>
+                  Current user onboarding sees a 34% drop-off at the password creation step. Additionally, support tickets related to password resets account for 20% of our daily volume. 
+                </p>
+                <ul>
+                  <li><strong>Primary Goal:</strong> Increase initial signup conversion by 30%.</li>
+                  <li><strong>Secondary Goal:</strong> Reduce authentication-related support tickets by 50%.</li>
+                </ul>
+              </div>
+            </div>
+
+            <!-- Spec Section: Proposed Solution -->
+            <div id="proposed-solution" class="mb-10 relative group spec-section scroll-mt-24">
+              <div class="flex items-center justify-between mb-3">
+                <h2 class="font-display font-bold text-xl text-gray-900 flex items-center gap-2">
+                  2. Proposed Solution
+                </h2>
+                <!-- Status Badge -->
+                <div class="flex items-center gap-1.5 px-2 py-1 rounded-md bg-gray-100 border border-gray-200">
+                  <iconify-icon icon="lucide:history" class="text-gray-500 text-xs"></iconify-icon>
+                  <span class="text-xs font-medium text-gray-700">Iterating</span>
+                </div>
+              </div>
+              
+              <div class="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+                <h3 class="font-medium text-gray-900 mb-2">2.1 Core Authentication Flow</h3>
+                <p class="text-gray-700 text-sm leading-relaxed mb-4">
+                  All new users will authenticate exclusively via email-based Magic Links. 
+                </p>
+
+                <!-- INJECTED DECISION FROM CHAT -->
+                <div class="my-4 pl-4 border-l-2 border-brand-decision bg-green-50/30 py-2">
+                  <h3 class="font-medium text-gray-900 mb-1 text-sm flex items-center gap-2">
+                    2.2 Existing User Migration
+                    <span class="px-1.5 py-0.5 rounded bg-green-100 text-green-700 text-[10px] font-bold uppercase tracking-wider">Decision</span>
+                  </h3>
+                  <p class="text-gray-700 text-sm leading-relaxed">
+                    Existing passwords will be deprecated with a 30-day grace period. Enterprise SSO remains fully supported and bypasses magic links entirely.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Spec Section: Technical Implementation -->
+            <div id="technical-implementation" class="mb-10 group spec-section scroll-mt-24">
+              <div class="flex items-center justify-between mb-3">
+                <h2 class="font-display font-bold text-xl text-gray-900 flex items-center gap-2">
+                  3. Technical Implementation
+                </h2>
+                <!-- Status Badge -->
+                <div class="flex items-center gap-1.5 px-2 py-1 rounded-md bg-amber-50 border border-amber-100">
+                  <iconify-icon icon="lucide:hammer" class="text-brand-warning text-xs"></iconify-icon>
+                  <span class="text-xs font-medium text-amber-700">In Review</span>
+                </div>
+              </div>
+              <div class="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+                <p class="text-gray-700 text-sm leading-relaxed mb-4">
+                  We will utilize JSON Web Tokens (JWT) distributed via a secure, HTTP-only cookie. The magic link itself will contain a single-use, short-lived token (5 min expiration) that exchanges for the session JWT upon clicking.
+                </p>
+                <div class="p-4 bg-gray-50 rounded-lg border border-gray-100 font-mono text-xs text-gray-600 overflow-x-auto">
+                  POST /api/v1/auth/magic-link<br>
+                  Body: { "email": "user@example.com" }
+                </div>
+              </div>
+            </div>
+
+            <!-- Spec Section: UX Design -->
+            <div id="ux-design" class="mb-10 group spec-section scroll-mt-24">
+              <div class="flex items-center justify-between mb-3">
+                <h2 class="font-display font-bold text-xl text-gray-900 flex items-center gap-2">
+                  4. User Experience & Interface Design
+                </h2>
+              </div>
+              <div class="prose prose-zinc max-w-none text-gray-700">
+                <p>
+                  The login screen will be simplified to a single input field centered on the page. Upon submitting, the UI must transition to a "Check your email" state with an open-in-mail-app deep link for mobile users.
+                </p>
+              </div>
+            </div>
+
+            <!-- Spec Section: Edge Cases -->
+            <div id="edge-cases" class="mb-10 group spec-section scroll-mt-24">
+              <div class="flex items-center justify-between mb-3">
+                <h2 class="font-display font-bold text-xl text-gray-900 flex items-center gap-2">
+                  5. Edge Cases & Fallbacks
+                </h2>
+              </div>
+              <div class="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+                <p class="text-gray-700 text-sm leading-relaxed relative mb-6">
+                  If an email takes longer than expected to arrive, <span class="agent-highlight font-medium">users will be prompted to wait or request a new link</span>.
+                  
+                  <!-- FLOATING AGENT WARNING (Margin Note Style) -->
+                  <span class="absolute top-0 -right-8 translate-x-full w-64 bg-white border border-brand-warning/30 shadow-lg rounded-xl p-3 z-10 before:content-[''] before:absolute before:top-4 before:-left-2 before:w-4 before:h-4 before:bg-white before:border-l before:border-b before:border-brand-warning/30 before:rotate-45">
+                    <span class="flex items-start gap-2">
+                      <iconify-icon icon="lucide:alert-triangle" class="text-brand-warning mt-0.5"></iconify-icon>
+                      <span class="flex flex-col">
+                        <span class="text-xs font-bold text-gray-900 mb-1">Unresolved Risk</span>
+                        <span class="text-xs text-gray-600">
+                          Sarah raised a concern about bounce rates if delivery takes >10s. "Wait or request new link" is not a sufficient fallback mechanism yet.
+                        </span>
+                        <button class="mt-2 text-left text-xs font-medium text-brand-agent hover:underline">Address in Chat →</button>
+                      </span>
+                    </span>
+                  </span>
+                </p>
+                <ul class="list-disc list-inside text-sm text-gray-700 space-y-2">
+                  <li><strong>Expired Links:</strong> If a user clicks a link older than 5 minutes, prompt them to resend immediately from the error page.</li>
+                  <li><strong>Cross-device authentication:</strong> If opened on a different device than requested, warn the user but allow login.</li>
+                </ul>
+              </div>
+            </div>
+
+            <!-- Spec Section: Risk Assessment -->
+            <div id="risk-assessment" class="mb-10 group spec-section scroll-mt-24">
+              <div class="flex items-center justify-between mb-3">
+                <h2 class="font-display font-bold text-xl text-gray-900 flex items-center gap-2">
+                  6. Risk Assessment & Mitigation
+                </h2>
+              </div>
+              <div class="prose prose-zinc max-w-none text-gray-700">
+                <p>Moving away from passwords shifts the security perimeter entirely to the user's email provider. To mitigate account takeover (ATO) risks, we will implement rate-limiting on requests and require re-authentication for destructive actions (e.g., deleting account or changing billing information).</p>
+              </div>
+            </div>
+
+            <!-- Spec Section: Success Metrics -->
+            <div id="success-metrics" class="mb-10 group spec-section scroll-mt-24">
+              <div class="flex items-center justify-between mb-3">
+                <h2 class="font-display font-bold text-xl text-gray-900 flex items-center gap-2">
+                  7. Success Metrics & Timeline
+                </h2>
+              </div>
+              <div class="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+                <ul class="list-none space-y-3">
+                  <li class="flex items-start gap-2">
+                    <iconify-icon icon="lucide:target" class="text-gray-400 mt-1"></iconify-icon>
+                    <span class="text-sm text-gray-700"><strong>Metric 1:</strong> 30% increase in Day 1 activation rate.</span>
+                  </li>
+                  <li class="flex items-start gap-2">
+                    <iconify-icon icon="lucide:target" class="text-gray-400 mt-1"></iconify-icon>
+                    <span class="text-sm text-gray-700"><strong>Metric 2:</strong> 99% of magic links delivered in under 5 seconds.</span>
+                  </li>
+                  <li class="flex items-start gap-2">
+                    <iconify-icon icon="lucide:calendar" class="text-gray-400 mt-1"></iconify-icon>
+                    <span class="text-sm text-gray-700"><strong>Timeline:</strong> Target Q3 launch (Beta by mid-August).</span>
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            <!-- Spec Section: Open Questions (Auto-generated) -->
+            <div id="open-questions" class="mb-10 group spec-section scroll-mt-24">
+              <div class="flex items-center justify-between mb-3">
+                <h2 class="font-display font-bold text-xl text-gray-900 flex items-center gap-2">
+                  8. Open Questions Tracker
+                </h2>
+                <span class="text-xs text-gray-400">Auto-synced with stream</span>
+              </div>
+              
+              <div class="space-y-3">
+                <!-- Open item -->
+                <div class="flex items-start gap-3 p-4 bg-white border border-amber-200 rounded-xl shadow-sm">
+                  <iconify-icon icon="lucide:help-circle" class="text-brand-warning mt-0.5"></iconify-icon>
+                  <div>
+                    <h4 class="text-sm font-medium text-gray-900">Fallback for delayed emails?</h4>
+                    <p class="text-xs text-gray-500 mt-1">Raised by Sarah • Needs technical input from Marcus</p>
+                  </div>
+                  <button class="ml-auto px-3 py-1 bg-amber-50 text-amber-700 text-xs font-medium rounded hover:bg-amber-100 transition-colors">
+                    Resolve
+                  </button>
+                </div>
+                
+                <!-- Resolved item -->
+                <div class="flex items-start gap-3 p-4 bg-gray-50 border border-gray-200 rounded-xl opacity-60">
+                  <iconify-icon icon="lucide:check-circle" class="text-gray-400 mt-0.5"></iconify-icon>
+                  <div>
+                    <h4 class="text-sm font-medium text-gray-600 line-through">What about enterprise SSO?</h4>
+                    <p class="text-xs text-gray-500 mt-1">Resolved • SSO will bypass magic links.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+        </section>
+      </div>
+    </main>
+  </div>
+  
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const container = document.getElementById('spec-scroll-container');
+      const sections = Array.from(document.querySelectorAll('.spec-section'));
+      const navContainer = document.getElementById('dynamic-nav');
+      
+      // Generate Dynamic Nav Links
+      sections.forEach(section => {
+        const h2 = section.querySelector('h2');
+        if (!h2) return;
+        
+        let rawTitle = h2.textContent.trim();
+        // Strip leading numbers for cleaner nav tabs (e.g. "1. Problem & Goals" -> "Problem & Goals")
+        let title = rawTitle.replace(/^\d+\.\s*/, '');
+        
+        const a = document.createElement('a');
+        a.href = '#' + section.id;
+        // Base classes
+        a.className = 'spec-nav-link pb-3 text-sm font-medium transition-all border-b-2 border-transparent text-gray-500 hover:text-gray-900 cursor-pointer';
+        a.textContent = title;
+        
+        // Custom scroll handler to account for sticky offset within the container
+        a.addEventListener('click', (e) => {
+          e.preventDefault();
+          const target = document.getElementById(section.id);
+          if (target) {
+            container.scrollTo({
+              top: target.offsetTop - 100, // Offset so the title doesn't hide behind the sticky nav
+              behavior: 'smooth'
+            });
+            // Optional: update URL silently
+            history.replaceState(null, null, '#' + section.id);
+          }
+        });
+        
+        navContainer.appendChild(a);
+      });
+
+      const navLinks = document.querySelectorAll('.spec-nav-link');
+
+      // Scroll Spy Logic to update active state
+      function updateActiveSection() {
+        let currentId = sections[0] ? sections[0].id : null;
+        
+        sections.forEach(section => {
+          // Check if section top has passed the sticky threshold
+          if (container.scrollTop >= (section.offsetTop - 140)) {
+            currentId = section.id;
+          }
+        });
+
+        navLinks.forEach(link => {
+          link.classList.remove('text-brand-decision', 'border-brand-decision');
+          link.classList.add('text-gray-500', 'border-transparent');
+          
+          if (link.getAttribute('href') === '#' + currentId) {
+            link.classList.remove('text-gray-500', 'border-transparent');
+            link.classList.add('text-brand-decision', 'border-brand-decision');
+            
+            // Keep the active link visible in the horizontal scrolling nav
+            link.scrollIntoView({
+              behavior: 'smooth',
+              block: 'nearest',
+              inline: 'center'
+            });
+          }
+        });
+      }
+
+      // Fading edges logic for the horizontal nav container
+      const fadeLeft = document.getElementById('nav-fade-left');
+      const fadeRight = document.getElementById('nav-fade-right');
+      
+      function updateFades() {
+        // Left fade
+        if (navContainer.scrollLeft > 0) {
+          fadeLeft.classList.remove('opacity-0');
+          fadeLeft.classList.add('opacity-100');
+        } else {
+          fadeLeft.classList.add('opacity-0');
+          fadeLeft.classList.remove('opacity-100');
+        }
+        
+        // Right fade
+        // Add 2px tolerance for fractional scroll widths on some displays
+        if (Math.ceil(navContainer.scrollLeft + navContainer.clientWidth) < navContainer.scrollWidth - 2) {
+          fadeRight.classList.remove('opacity-0');
+          fadeRight.classList.add('opacity-100');
+        } else {
+          fadeRight.classList.add('opacity-0');
+          fadeRight.classList.remove('opacity-100');
+        }
+      }
+
+      // Attach Events
+      if (container && sections.length > 0) {
+        container.addEventListener('scroll', updateActiveSection);
+        updateActiveSection(); // Run once initially
+      }
+
+      navContainer.addEventListener('scroll', updateFades);
+      window.addEventListener('resize', updateFades);
+      // Timeout ensures layout has rendered so widths are correct
+      setTimeout(updateFades, 100);
+
+    });
+  </script>
+</body>
+</html>

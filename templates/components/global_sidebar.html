@@ -15,8 +15,21 @@
     {% endfor %}
   </nav>
   {% if sidebar_user.is_authenticated %}
-    <div class="mt-4 flex h-12 w-12 items-center justify-center overflow-hidden rounded-full border border-gray-200 bg-gray-100">
-      <img src="{{ sidebar_user.avatar_url }}" alt="{{ sidebar_user.display_name }}" class="h-full w-full object-cover">
+    <div class="mt-4 flex flex-col items-center gap-3">
+      {% if sidebar_project %}
+        <button
+          type="button"
+          data-project-settings-trigger
+          title="Edit {{ sidebar_project.name }} settings"
+          aria-label="Edit {{ sidebar_project.name }} settings"
+          class="flex h-9 w-9 items-center justify-center rounded-2xl border border-transparent bg-transparent text-gray-400 transition-all hover:border-gray-200 hover:bg-white hover:text-gray-900"
+        >
+          <iconify-icon icon="lucide:settings-2" class="text-sm"></iconify-icon>
+        </button>
+      {% endif %}
+      <div class="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full border border-gray-200 bg-gray-100">
+        <img src="{{ sidebar_user.avatar_url }}" alt="{{ sidebar_user.display_name }}" class="h-full w-full object-cover">
+      </div>
     </div>
   {% else %}
     <a
@@ -30,4 +43,7 @@
     </a>
   {% endif %}
 </aside>
+{% if sidebar_user.is_authenticated and sidebar_project %}
+  {% include "components/project_settings_modal.html" %}
+{% endif %}
 {% endwith %}

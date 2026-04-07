@@ -51,6 +51,10 @@ function projectModalNode() {
   return document.querySelector("[data-project-modal]");
 }
 
+function projectSettingsModalNode() {
+  return document.querySelector("[data-project-settings-modal]");
+}
+
 function projectCreateInlineSurface() {
   return document.querySelector("[data-project-create-inline] [data-project-create-surface]");
 }
@@ -74,6 +78,26 @@ function projectCreateErrorsNode(surface) {
 
 function projectCreateSubmitNode(surface) {
   return surface?.querySelector?.("[data-project-submit]") || null;
+}
+
+function projectSettingsSurface(node = null) {
+  return (
+    node?.closest?.("[data-project-settings-surface]") ||
+    projectSettingsModalNode()?.querySelector("[data-project-settings-surface]") ||
+    document.querySelector("[data-project-settings-surface]")
+  );
+}
+
+function projectSettingsFormNode(root = document) {
+  return root?.querySelector?.("[data-project-settings-form]") || null;
+}
+
+function projectSettingsErrorsNode(surface) {
+  return surface?.querySelector?.("[data-project-settings-errors]") || null;
+}
+
+function projectSettingsSubmitNode(surface) {
+  return surface?.querySelector?.("[data-project-settings-submit]") || null;
 }
 
 function closeDocumentSuggestionMenus(exceptShell = null) {
@@ -1048,6 +1072,20 @@ function hydrateProjectCreateForm(form, payload = {}) {
   });
 }
 
+function hydrateProjectSettingsForm(form, payload = {}) {
+  hydrateProjectCreateForm(form, payload);
+}
+
+function projectSettingsDefaults(form) {
+  if (!form) {
+    return {};
+  }
+  return {
+    project_name: form.elements.namedItem("project_name")?.defaultValue || "",
+    tagline: form.elements.namedItem("tagline")?.defaultValue || ""
+  };
+}
+
 function setAuthMode(mode = "login") {
   document.querySelectorAll("[data-auth-tab-button]").forEach((button) => {
     const isActive = button.dataset.authTabButton === mode;
@@ -1107,6 +1145,7 @@ function openAuthModal(mode = "login") {
     return;
   }
   closeProjectModal();
+  closeProjectSettingsModal();
   setAuthMode(mode);
   modal.classList.remove("hidden");
   document.body.classList.add("overflow-hidden");
@@ -1137,6 +1176,18 @@ function clearProjectCreateErrorsForSurface(surface) {
   });
 }
 
+function clearProjectSettingsErrorsForSurface(surface) {
+  const summary = projectSettingsErrorsNode(surface);
+  if (summary) {
+    summary.textContent = "";
+    summary.classList.add("hidden");
+  }
+  surface?.querySelectorAll("[data-project-settings-field-error]").forEach((fieldError) => {
+    fieldError.textContent = "";
+    fieldError.classList.add("hidden");
+  });
+}
+
 function showProjectCreateErrors(surface, errors = {}) {
   clearProjectCreateErrorsForSurface(surface);
   const summaryMessages = [];
@@ -1161,6 +1212,30 @@ function showProjectCreateErrors(surface, errors = {}) {
   }
 }
 
+function showProjectSettingsErrors(surface, errors = {}) {
+  clearProjectSettingsErrorsForSurface(surface);
+  const summaryMessages = [];
+
+  Object.entries(errors).forEach(([field, messages]) => {
+    const normalized = Array.isArray(messages) ? messages : [messages];
+    const fieldError = surface?.querySelector?.(`[data-project-settings-field-error='${field}']`);
+    if (fieldError && normalized.length) {
+      fieldError.textContent = normalized.join(" ");
+      fieldError.classList.remove("hidden");
+      return;
+    }
+    summaryMessages.push(...normalized);
+  });
+
+  if (summaryMessages.length) {
+    const summary = projectSettingsErrorsNode(surface);
+    if (summary) {
+      summary.textContent = summaryMessages.join(" ");
+      summary.classList.remove("hidden");
+    }
+  }
+}
+
 function setProjectCreateSubmitting(surface, isSubmitting) {
   const submitButton = projectCreateSubmitNode(surface);
   if (!submitButton) {
@@ -1174,6 +1249,19 @@ function setProjectCreateSubmitting(surface, isSubmitting) {
     : '<iconify-icon icon="lucide:folder-plus"></iconify-icon>Create Project';
 }
 
+function setProjectSettingsSubmitting(surface, isSubmitting) {
+  const submitButton = projectSettingsSubmitNode(surface);
+  if (!submitButton) {
+    return;
+  }
+  submitButton.disabled = isSubmitting;
+  submitButton.classList.toggle("opacity-70", isSubmitting);
+  submitButton.classList.toggle("cursor-wait", isSubmitting);
+  submitButton.innerHTML = isSubmitting
+    ? '<iconify-icon icon="lucide:loader-circle" class="animate-spin"></iconify-icon>Saving...'
+    : '<iconify-icon icon="lucide:save"></iconify-icon>Save Changes';
+}
+
 function openProjectModal() {
   const modal = projectModalNode();
   if (!modal) {
@@ -1182,6 +1270,7 @@ function openProjectModal() {
   const surface = modal.querySelector("[data-project-create-surface]");
   const form = projectCreateFormNode(surface);
   closeAuthModal();
+  closeProjectSettingsModal();
   clearProjectCreateErrorsForSurface(surface);
   hydrateProjectCreateForm(form, loadProjectCreateDraft());
   modal.classList.remove("hidden");
@@ -1192,6 +1281,33 @@ function openProjectModal() {
 
 function closeProjectModal() {
   const modal = projectModalNode();
+  if (!modal) {
+    return;
+  }
+  modal.classList.add("hidden");
+  document.body.classList.remove("overflow-hidden");
+}
+
+function openProjectSettingsModal(payload = null) {
+  const modal = projectSettingsModalNode();
+  if (!modal) {
+    return;
+  }
+  const surface = modal.querySelector("[data-project-settings-surface]");
+  const form = projectSettingsFormNode(surface);
+  closeAuthModal();
+  closeProjectModal();
+  clearProjectSettingsErrorsForSurface(surface);
+  hydrateProjectSettingsForm(form, payload || projectSettingsDefaults(form));
+  modal.classList.remove("hidden");
+  document.body.classList.add("overflow-hidden");
+  const activeInput = form?.querySelector("input[name='project_name']");
+  activeInput?.focus();
+  activeInput?.select();
+}
+
+function closeProjectSettingsModal() {
+  const modal = projectSettingsModalNode();
   if (!modal) {
     return;
   }
@@ -1293,6 +1409,33 @@ document.addEventListener("submit", async (event) => {
     return;
   }
 
+  const projectSettingsForm = event.target.closest("[data-project-settings-form]");
+  if (projectSettingsForm) {
+    event.preventDefault();
+    const surface = projectSettingsSurface(projectSettingsForm);
+    clearProjectSettingsErrorsForSurface(surface);
+    setProjectSettingsSubmitting(surface, true);
+    const payload = serializeForm(projectSettingsForm);
+    try {
+      await postJson(projectSettingsForm.action, { ...payload, __form: projectSettingsForm });
+      closeProjectSettingsModal();
+      window.location.reload();
+    } catch (error) {
+      console.error(error);
+      if (error.message.startsWith("Authentication required")) {
+        return;
+      }
+      openProjectSettingsModal(payload);
+      showProjectSettingsErrors(
+        surface,
+        error.payload?.errors || { __all__: ["Project settings could not be saved. Please try again."] }
+      );
+    } finally {
+      setProjectSettingsSubmitting(surface, false);
+    }
+    return;
+  }
+
   const form = event.target.closest("[data-api-form]");
   if (!form) {
     return;
@@ -1322,6 +1465,13 @@ document.addEventListener("click", async (event) => {
   if (projectTrigger) {
     event.preventDefault();
     openProjectModal();
+    return;
+  }
+
+  const projectSettingsTrigger = event.target.closest("[data-project-settings-trigger]");
+  if (projectSettingsTrigger) {
+    event.preventDefault();
+    openProjectSettingsModal();
     return;
   }
 
@@ -1360,6 +1510,13 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  const projectSettingsClose = event.target.closest("[data-project-settings-modal-close]");
+  if (projectSettingsClose) {
+    event.preventDefault();
+    closeProjectSettingsModal();
+    return;
+  }
+
   const modalBackdrop = event.target.closest("[data-auth-modal]");
   if (modalBackdrop && event.target === modalBackdrop) {
     closeAuthModal();
@@ -1369,6 +1526,12 @@ document.addEventListener("click", async (event) => {
   const projectBackdrop = event.target.closest("[data-project-modal]");
   if (projectBackdrop && event.target === projectBackdrop) {
     closeProjectModal();
+    return;
+  }
+
+  const projectSettingsBackdrop = event.target.closest("[data-project-settings-modal]");
+  if (projectSettingsBackdrop && event.target === projectSettingsBackdrop) {
+    closeProjectSettingsModal();
     return;
   }
 
@@ -1561,12 +1724,7 @@ document.addEventListener("keydown", (event) => {
   closeSectionAiMenus();
   closeAuthModal();
   closeProjectModal();
-});
-
-document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") {
-    closeAuthModal();
-  }
+  closeProjectSettingsModal();
 });
 
 document.addEventListener("input", (event) => {
@@ -1584,10 +1742,9 @@ document.addEventListener("input", (event) => {
   }
 
   const projectCreateForm = event.target.closest("[data-project-create-form]");
-  if (!projectCreateForm) {
-    return;
+  if (projectCreateForm) {
+    saveProjectCreateDraft(serializeForm(projectCreateForm));
   }
-  saveProjectCreateDraft(serializeForm(projectCreateForm));
 });
 
 initializeDocumentCreateControls();
@@ -1610,6 +1767,9 @@ if (autoRefreshMs > 0) {
       return;
     }
     if (projectModalNode() && !projectModalNode().classList.contains("hidden")) {
+      return;
+    }
+    if (projectSettingsModalNode() && !projectSettingsModalNode().classList.contains("hidden")) {
       return;
     }
     window.location.reload();

@@ -10,7 +10,7 @@ from ninja.security import django_auth
 from alignment.services import compute_dashboard_metrics
 from projects.invitations import send_project_invitation_email
 from projects.models import MembershipRole, ProjectInvite, ProjectMembership
-from projects.services import create_project_workspace, get_project_or_404, resolve_actor
+from projects.services import create_project_workspace, get_project_or_404, resolve_actor, update_project_identity
 from specs.models import AuditEventType
 from specs.services import log_audit_event
 
@@ -26,6 +26,11 @@ class ProjectCreatePayload(Schema):
 class InvitePayload(Schema):
     email: str
     role: str = MembershipRole.VIEWER
+
+
+class ProjectSettingsPayload(Schema):
+    project_name: str
+    tagline: str | None = None
 
 
 class MembershipUpdatePayload(Schema):
@@ -106,6 +111,37 @@ def list_memberships(request, slug: str):
             }
             for membership in project.memberships.select_related("user")
         ]
+    }
+
+
+@router.post("/{slug}/settings", auth=django_auth)
+def update_project_settings(request, slug: str, payload: ProjectSettingsPayload):
+    project = get_project_or_404(slug, request.user)
+    project_name = payload.project_name.strip()
+    tagline = (payload.tagline or "").strip()
+    errors = {}
+
+    if not project_name:
+        errors["project_name"] = ["Project name is required."]
+
+    if errors:
+        return JsonResponse({"ok": False, "errors": errors}, status=422)
+
+    updated_project = update_project_identity(
+        project=project,
+        project_name=project_name,
+        tagline=tagline,
+    )
+    return {
+        "ok": True,
+        "project": {
+            "id": updated_project.id,
+            "slug": updated_project.slug,
+            "name": updated_project.name,
+            "tagline": updated_project.tagline,
+            "summary": updated_project.summary,
+            "status_label": updated_project.status_label,
+        },
     }
 
 

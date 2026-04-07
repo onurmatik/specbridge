@@ -1,0 +1,15 @@
+<div data-project-settings-modal class="fixed inset-0 z-50 hidden bg-gray-900/60 px-4 py-8 backdrop-blur-sm">
+  <div class="flex min-h-full items-center justify-center">
+    <div class="workspace-panel relative max-h-[calc(100vh-4rem)] w-full max-w-4xl overflow-y-auto shadow-paper">
+      <button
+        type="button"
+        data-project-settings-modal-close
+        class="absolute right-5 top-5 z-10 rounded-full p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-900"
+        aria-label="Close project settings dialog"
+      >
+        <iconify-icon icon="lucide:x" class="text-xl"></iconify-icon>
+      </button>
+      {% include "components/project_settings_form_surface.html" %}
+    </div>
+  </div>
+</div>

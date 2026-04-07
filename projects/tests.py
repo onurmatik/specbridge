@@ -96,6 +96,8 @@ class ProjectPageTests(TestCase):
         self.assertNotContains(response, "Issues &amp; Alignment", html=True)
         self.assertNotContains(response, "Active Queue")
         self.assertContains(response, 'data-stream-input', html=False)
+        self.assertContains(response, 'data-project-settings-trigger', html=False)
+        self.assertContains(response, f'/api/projects/{self.project.slug}/settings', html=False)
         self.assertNotContains(response, "Ask AI to Help Draft")
         self.assertNotContains(response, "Consistency Inbox")
 
@@ -354,6 +356,67 @@ class ProjectPageTests(TestCase):
                 {
                     "project_name": "   ",
                     "tagline": "Operational control plane for launch readiness and cross-functional alignment.",
+                }
+            ),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(
+            response.json()["errors"]["project_name"][0],
+            "Project name is required.",
+        )
+
+    def test_authenticated_user_can_update_project_settings(self):
+        actor = User.objects.create_user(
+            username="settings-owner",
+            email="settings-owner@example.com",
+            password="SpecBridge!123",
+            first_name="Settings",
+            last_name="Owner",
+            title="PM",
+        )
+        project = create_project_workspace(
+            actor=actor,
+            project_name="Launch Board",
+            tagline="Original workspace line",
+        )
+        self.client.force_login(actor)
+
+        response = self.client.post(
+            f"/api/projects/{project.slug}/settings",
+            data=json.dumps(
+                {
+                    "project_name": "Launch Control Center",
+                    "tagline": "Shared source of truth for release readiness",
+                }
+            ),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        project.refresh_from_db()
+        self.assertEqual(project.name, "Launch Control Center")
+        self.assertEqual(project.tagline, "Shared source of truth for release readiness")
+        self.assertEqual(
+            project.summary,
+            "Shared source of truth for release readiness. "
+            "This workspace keeps spec sections, decisions, assumptions, and delivery intent "
+            "for Launch Control Center aligned from the first draft onward.",
+        )
+        self.assertEqual(response.json()["project"]["name"], "Launch Control Center")
+        self.assertEqual(response.json()["project"]["tagline"], "Shared source of truth for release readiness")
+        self.assertEqual(response.json()["project"]["summary"], project.summary)
+
+    def test_authenticated_user_cannot_update_project_settings_without_name(self):
+        self.client.force_login(self.project.created_by)
+
+        response = self.client.post(
+            f"/api/projects/{self.project.slug}/settings",
+            data=json.dumps(
+                {
+                    "project_name": "   ",
+                    "tagline": "Operational control plane for launch readiness.",
                 }
             ),
             content_type="application/json",
