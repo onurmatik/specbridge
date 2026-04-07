@@ -184,16 +184,15 @@ def project_create_submit(request):
 
 def project_workspace(request, slug):
     project = get_project_or_404(slug, request.user)
-    return render(
-        request,
-        "pages/workspace.html",
-        workspace_context(
-            project,
-            active_concern_id=request.GET.get("concern"),
-            active_section_id=request.GET.get("section"),
-            stream_filter=request.GET.get("stream"),
-        ),
+    context = workspace_context(
+        project,
+        active_concern_id=request.GET.get("concern"),
+        active_section_id=request.GET.get("section"),
+        stream_filter=request.GET.get("stream"),
     )
+    if request.GET.get("_fragment") == "workspace-live":
+        return render(request, "pages/workspace_live_fragment.html", context)
+    return render(request, "pages/workspace.html", context)
 
 
 def project_dashboard(request, slug):

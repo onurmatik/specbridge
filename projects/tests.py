@@ -81,7 +81,18 @@ class ProjectPageTests(TestCase):
         response = self.client.get(reverse("project-workspace", args=[self.project.slug]))
 
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-workspace-live-refresh-root', html=False)
+        self.assertContains(response, 'data-workspace-header-region', html=False)
+        self.assertContains(response, 'data-workspace-stream-live-region', html=False)
+        self.assertContains(response, 'data-workspace-stream-scroll', html=False)
+        self.assertContains(response, 'data-workspace-stream-composer', html=False)
         self.assertContains(response, 'data-api-method="PATCH"', html=False)
+        self.assertContains(response, 'data-api-loading-label="Scanning..."', html=False)
+        self.assertContains(response, 'data-api-loading-label="Posting..."', html=False)
+        self.assertContains(response, 'data-api-loading-label="Running..."', html=False)
+        self.assertContains(response, 'data-api-loading-label="Resolving..."', html=False)
+        self.assertContains(response, 'data-api-submit-button', html=False)
+        self.assertContains(response, 'data-api-button-icon', html=False)
         self.assertContains(response, 'data-spec-section-form', html=False)
         self.assertContains(response, 'data-spec-section-input', html=False)
         self.assertContains(response, 'data-spec-nav-link', html=False)
@@ -128,6 +139,52 @@ class ProjectPageTests(TestCase):
             response,
             "We need each core planning area in one shared spec now. I still want magic links to be the primary direction, but contradictions across sections must be visible.",
         )
+
+    def test_workspace_live_fragment_renders_only_live_regions(self):
+        self.client.force_login(self.project.created_by)
+
+        response = self.client.get(
+            f"{reverse('project-workspace', args=[self.project.slug])}?_fragment=workspace-live"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-workspace-header-region', html=False)
+        self.assertContains(response, 'data-workspace-stream-live-region', html=False)
+        self.assertContains(response, 'data-workspace-stream-scroll', html=False)
+        self.assertNotContains(response, 'data-workspace-live-refresh-root', html=False)
+        self.assertNotContains(response, 'data-workspace-split-root', html=False)
+        self.assertNotContains(response, 'data-spec-section-form', html=False)
+        self.assertNotContains(response, 'data-stream-input', html=False)
+
+    def test_workspace_live_fragment_honors_stream_filter_query(self):
+        self.client.force_login(self.project.created_by)
+
+        response = self.client.get(
+            f"{reverse('project-workspace', args=[self.project.slug])}?_fragment=workspace-live&stream=decisions"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Retain SSO, Migrate Passwords")
+        self.assertContains(response, "Decision Recorded")
+        self.assertNotContains(
+            response,
+            "We need each core planning area in one shared spec now. I still want magic links to be the primary direction, but contradictions across sections must be visible.",
+        )
+
+    def test_workspace_live_fragment_honors_concern_query_without_rendering_composer(self):
+        self.client.force_login(self.project.created_by)
+        concern = self.project.concerns.get(title="Fallback mismatch across requirements, UI/UX, and infra")
+
+        response = self.client.get(
+            f"{reverse('project-workspace', args=[self.project.slug])}?_fragment=workspace-live&concern={concern.id}"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Focused Concern")
+        self.assertContains(response, concern.title)
+        self.assertContains(response, "Address in Chat")
+        self.assertNotContains(response, 'name="concern_id"', html=False)
+        self.assertNotContains(response, 'data-stream-input', html=False)
 
     def test_workspace_concern_query_focuses_thread_and_composer(self):
         self.client.force_login(self.project.created_by)

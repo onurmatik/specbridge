@@ -689,7 +689,7 @@ function initializeSectionAiControls() {
       shell.dataset.sectionAiBusy = isBusy ? "true" : "false";
       toggle.disabled = isBusy;
       promptInput.disabled = isBusy;
-      runButton.disabled = isBusy;
+      setAsyncButtonSubmitting(runButton, isBusy);
       menu.querySelectorAll("[data-section-ai-preset]").forEach((button) => {
         button.disabled = isBusy;
       });
@@ -1446,6 +1446,41 @@ function setProjectSettingsSubmitting(surface, isSubmitting) {
     : '<iconify-icon icon="lucide:save"></iconify-icon>Save Changes';
 }
 
+function asyncButtonIconNode(button) {
+  return button?.querySelector?.("[data-api-button-icon]") || null;
+}
+
+function asyncButtonLabelNode(button) {
+  return button?.querySelector?.("[data-api-button-label]") || null;
+}
+
+function setAsyncButtonSubmitting(button, isSubmitting) {
+  if (!button) {
+    return;
+  }
+
+  const labelNode = asyncButtonLabelNode(button);
+  const iconNode = asyncButtonIconNode(button);
+  const loadingLabel = button.dataset.apiLoadingLabel || "";
+
+  if (labelNode && !button.dataset.apiIdleLabel) {
+    button.dataset.apiIdleLabel = labelNode.textContent.trim();
+  }
+
+  button.disabled = isSubmitting;
+  button.setAttribute("aria-busy", isSubmitting ? "true" : "false");
+  button.classList.toggle("opacity-70", isSubmitting);
+  button.classList.toggle("cursor-wait", isSubmitting);
+
+  if (iconNode) {
+    iconNode.classList.toggle("animate-spin", isSubmitting);
+  }
+
+  if (labelNode && loadingLabel) {
+    labelNode.textContent = isSubmitting ? loadingLabel : button.dataset.apiIdleLabel || labelNode.textContent;
+  }
+}
+
 function openProjectModal() {
   const modal = projectModalNode();
   if (!modal) {
@@ -1497,6 +1532,125 @@ function closeProjectSettingsModal() {
   }
   modal.classList.add("hidden");
   document.body.classList.remove("overflow-hidden");
+}
+
+function workspaceLiveRefreshRoot() {
+  return document.querySelector("[data-workspace-live-refresh-root]");
+}
+
+function workspaceHeaderRegionNode(root = document) {
+  return root?.querySelector?.("[data-workspace-header-region]") || null;
+}
+
+function workspaceStreamLiveRegionNode(root = document) {
+  return root?.querySelector?.("[data-workspace-stream-live-region]") || null;
+}
+
+function workspaceStreamScrollNode(root = document) {
+  return root?.querySelector?.("[data-workspace-stream-scroll]") || null;
+}
+
+function workspaceLiveRefreshEnabled() {
+  return Boolean(workspaceLiveRefreshRoot() && workspaceHeaderRegionNode() && workspaceStreamLiveRegionNode());
+}
+
+function workspaceLiveRefreshUrl() {
+  const url = new URL(currentPath(), window.location.origin);
+  url.searchParams.set("_fragment", "workspace-live");
+  return url.toString();
+}
+
+function hasBlockingAutosaveState() {
+  const controllers = [...documentEditorAutosaveControllers, ...specSectionAutosaveControllers];
+  return controllers.some((controller) => controller?.dirty || controller?.inFlight);
+}
+
+function shouldPauseBackgroundRefresh() {
+  if (document.hidden) {
+    return true;
+  }
+  const tagName = document.activeElement?.tagName?.toLowerCase();
+  if (tagName === "textarea" || tagName === "input" || tagName === "select") {
+    return true;
+  }
+  if (authModalNode() && !authModalNode().classList.contains("hidden")) {
+    return true;
+  }
+  if (projectModalNode() && !projectModalNode().classList.contains("hidden")) {
+    return true;
+  }
+  if (projectSettingsModalNode() && !projectSettingsModalNode().classList.contains("hidden")) {
+    return true;
+  }
+  if (document.body.dataset.workspaceResizing === "true") {
+    return true;
+  }
+  return false;
+}
+
+let workspaceLiveRefreshInFlight = null;
+
+async function refreshWorkspaceLiveRegions({ force = false } = {}) {
+  if (!workspaceLiveRefreshEnabled()) {
+    return false;
+  }
+  if (!force && (shouldPauseBackgroundRefresh() || hasBlockingAutosaveState())) {
+    return false;
+  }
+  if (workspaceLiveRefreshInFlight) {
+    return workspaceLiveRefreshInFlight;
+  }
+
+  const currentHeader = workspaceHeaderRegionNode();
+  const currentStream = workspaceStreamLiveRegionNode();
+  if (!currentHeader || !currentStream) {
+    return false;
+  }
+
+  const previousScrollTop = workspaceStreamScrollNode()?.scrollTop || 0;
+  workspaceLiveRefreshInFlight = fetch(workspaceLiveRefreshUrl(), {
+    method: "GET",
+    headers: {
+      "X-Requested-With": "XMLHttpRequest",
+      "Accept": "text/html"
+    },
+    credentials: "same-origin",
+    cache: "no-store"
+  })
+    .then(async (response) => {
+      if (!response.ok) {
+        throw new Error(`Workspace live refresh failed: ${response.status}`);
+      }
+      return response.text();
+    })
+    .then((html) => {
+      const parsedDocument = new DOMParser().parseFromString(html, "text/html");
+      const nextHeader = workspaceHeaderRegionNode(parsedDocument);
+      const nextStream = workspaceStreamLiveRegionNode(parsedDocument);
+      if (!nextHeader || !nextStream) {
+        throw new Error("Workspace live refresh response missing regions.");
+      }
+      currentHeader.replaceWith(nextHeader);
+      currentStream.replaceWith(nextStream);
+      const nextScrollNode = workspaceStreamScrollNode();
+      if (nextScrollNode) {
+        nextScrollNode.scrollTop = previousScrollTop;
+      }
+      return true;
+    })
+    .catch((error) => {
+      console.error(error);
+      return false;
+    })
+    .finally(() => {
+      workspaceLiveRefreshInFlight = null;
+    });
+
+  return workspaceLiveRefreshInFlight;
+}
+
+function streamComposerNode(form) {
+  return form?.matches?.("[data-workspace-stream-composer]") ? form : form?.closest?.("[data-workspace-stream-composer]");
 }
 
 async function postJson(url, payload = {}, method = "POST") {
@@ -1632,8 +1786,19 @@ document.addEventListener("submit", async (event) => {
   syncExportSelection(form);
   const payload = serializeForm(form);
   const method = form.dataset.apiMethod || "POST";
+  const submitButton = form.querySelector("[data-api-submit-button]") || form.querySelector("button[type='submit']");
   try {
+    setAsyncButtonSubmitting(submitButton, true);
     await postJson(form.dataset.apiForm, { ...payload, __form: form }, method);
+    if (workspaceLiveRefreshEnabled() && streamComposerNode(form)) {
+      form.reset();
+      form.querySelector("[data-stream-input]")?.focus();
+      const refreshed = await refreshWorkspaceLiveRegions({ force: true });
+      if (!refreshed) {
+        window.location.reload();
+      }
+      return;
+    }
     window.location.reload();
   } catch (error) {
     console.error(error);
@@ -1641,6 +1806,8 @@ document.addEventListener("submit", async (event) => {
       return;
     }
     window.alert("Action failed. Check the console for details.");
+  } finally {
+    setAsyncButtonSubmitting(submitButton, false);
   }
 });
 
@@ -1821,10 +1988,17 @@ document.addEventListener("click", async (event) => {
     if (confirmMessage && !window.confirm(confirmMessage)) {
       return;
     }
-    button.disabled = true;
+    setAsyncButtonSubmitting(button, true);
     try {
       await postJson(button.dataset.apiPost, {});
-      window.location.reload();
+      if (workspaceLiveRefreshEnabled() && button.closest("[data-workspace-stream-live-region]")) {
+        const refreshed = await refreshWorkspaceLiveRegions({ force: true });
+        if (!refreshed) {
+          window.location.reload();
+        }
+      } else {
+        window.location.reload();
+      }
     } catch (error) {
       console.error(error);
       if (error.message.startsWith("Authentication required")) {
@@ -1832,7 +2006,7 @@ document.addEventListener("click", async (event) => {
       }
       window.alert("Action failed. Check the console for details.");
     } finally {
-      button.disabled = false;
+      setAsyncButtonSubmitting(button, false);
     }
     return;
   }
@@ -1944,20 +2118,13 @@ setAuthMode("login");
 const autoRefreshMs = Number(document.body.dataset.autoRefresh || 0);
 if (autoRefreshMs > 0) {
   window.setInterval(() => {
-    const tagName = document.activeElement?.tagName?.toLowerCase();
-    if (tagName === "textarea" || tagName === "input" || tagName === "select") {
+    if (workspaceLiveRefreshEnabled()) {
+      refreshWorkspaceLiveRegions().catch((error) => {
+        console.error(error);
+      });
       return;
     }
-    if (authModalNode() && !authModalNode().classList.contains("hidden")) {
-      return;
-    }
-    if (projectModalNode() && !projectModalNode().classList.contains("hidden")) {
-      return;
-    }
-    if (projectSettingsModalNode() && !projectSettingsModalNode().classList.contains("hidden")) {
-      return;
-    }
-    if (document.body.dataset.workspaceResizing === "true") {
+    if (shouldPauseBackgroundRefresh()) {
       return;
     }
     window.location.reload();

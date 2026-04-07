@@ -1,0 +1,234 @@
+{% load specs_formatting %}
+<div class="flex min-h-0 flex-1 flex-col" data-workspace-stream-live-region>
+  <div class="border-b border-gray-100 bg-white/80 px-6 py-4 backdrop-blur-sm">
+    <div class="flex items-center justify-between gap-3">
+      <div class="min-w-0">
+        <h2 class="font-display text-lg font-bold text-gray-900">Alignment Stream</h2>
+        <p class="mt-1 truncate text-sm text-gray-500">
+          {% if workspace_tagline %}{{ workspace_tagline }}{% else %}{{ workspace_summary_detail }}{% endif %}
+        </p>
+      </div>
+      {% if request.user.is_authenticated %}
+        <button class="secondary-button !px-3 !py-1.5 !text-xs" data-api-post="/api/projects/{{ project.slug }}/concern-runs" data-api-loading-label="Scanning...">
+          <iconify-icon icon="lucide:refresh-cw" data-api-button-icon></iconify-icon>
+          <span data-api-button-label>Scan</span>
+        </button>
+      {% endif %}
+    </div>
+    <div class="mt-3 flex gap-1 rounded-lg bg-gray-100 p-1 text-xs font-medium">
+      {% for option in stream_filter_options %}
+        <a
+          href="{% url 'project-workspace' project.slug %}?stream={{ option.value }}{% if selected_concern %}&concern={{ selected_concern.id }}{% endif %}{% if active_section %}&section={{ active_section.id }}{% endif %}"
+          class="{% if active_stream_filter == option.value %}rounded-md bg-white px-3 py-1 text-gray-900 shadow-sm{% else %}px-3 py-1 text-gray-500 transition hover:text-gray-900{% endif %}"
+        >
+          <span class="inline-flex items-center gap-1.5">
+            {% if option.icon %}
+              <iconify-icon icon="{{ option.icon }}" class="{% if option.icon_class %}{{ option.icon_class }}{% endif %}"></iconify-icon>
+            {% endif %}
+            {{ option.label }}
+          </span>
+        </a>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="min-h-0 flex-1 overflow-y-auto p-6" data-workspace-stream-scroll>
+    {% if selected_concern %}
+      <div class="mb-6 rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="workspace-badge border-blue-100 bg-white text-blue-700">Focused Concern</span>
+              <span class="workspace-badge {% if selected_concern.severity == 'critical' or selected_concern.severity == 'high' %}border-red-100 bg-red-50 text-red-700{% elif selected_concern.severity == 'medium' %}border-amber-100 bg-amber-50 text-amber-700{% else %}border-blue-100 bg-blue-50 text-blue-700{% endif %}">
+                {{ selected_concern.get_severity_display }}
+              </span>
+              <span class="workspace-badge border-gray-200 bg-white text-gray-600">{{ selected_concern.get_status_display }}</span>
+            </div>
+            <div class="mt-3 text-sm font-semibold text-gray-900">{{ selected_concern.title }}</div>
+            <p class="mt-2 text-sm leading-relaxed text-gray-600">{{ selected_concern.summary }}</p>
+            {% if selected_concern.node_refs %}
+              <div class="mt-3 flex flex-wrap gap-2">
+                {% for ref in selected_concern.node_refs %}
+                  <a href="#spec-section-{{ ref.section_id }}" class="workspace-badge border-blue-100 bg-white text-blue-700">{{ ref.label }}</a>
+                {% endfor %}
+              </div>
+            {% endif %}
+            {% if request.user.is_authenticated %}
+              <div class="mt-3 flex flex-wrap gap-2">
+                <button type="button" class="secondary-button !px-3 !py-1.5 !text-xs" data-stream-prompt="{{ selected_concern_chat_prompt }}">
+                  Address in Chat
+                </button>
+                <button class="primary-button !px-3 !py-1.5 !text-xs" data-api-post="/api/projects/{{ project.slug }}/concerns/{{ selected_concern.id }}/resolve-with-ai" data-api-loading-label="Resolving...">
+                  <iconify-icon icon="lucide:sparkles" data-api-button-icon></iconify-icon>
+                  <span data-api-button-label>Resolve with AI</span>
+                </button>
+                <button class="secondary-button !px-3 !py-1.5 !text-xs" data-api-post="/api/projects/{{ project.slug }}/concerns/{{ selected_concern.id }}/re-evaluate" data-api-loading-label="Re-evaluating...">
+                  <iconify-icon icon="lucide:refresh-cw" data-api-button-icon></iconify-icon>
+                  <span data-api-button-label>Re-evaluate</span>
+                </button>
+              </div>
+            {% endif %}
+          </div>
+          <a href="{% url 'project-workspace' project.slug %}?stream={{ active_stream_filter }}{% if active_section %}&section={{ active_section.id }}{% endif %}" class="icon-button rounded-full" aria-label="Clear concern focus">
+            <iconify-icon icon="lucide:x"></iconify-icon>
+          </a>
+        </div>
+      </div>
+    {% endif %}
+
+    <div class="space-y-8">
+      {% for item in workspace_stream_items %}
+        {% if item.kind == "message" %}
+          <div class="flex gap-4 {% if item.is_focus_thread %}rounded-xl border border-blue-100 bg-blue-50/30 p-4{% endif %}">
+            <div class="flex-shrink-0">
+              {% if item.avatar_url %}
+                <div class="h-10 w-10 overflow-hidden rounded-full bg-gray-100">
+                  <img src="{{ item.avatar_url }}" alt="{{ item.post.actor_name }}" class="h-full w-full object-cover">
+                </div>
+              {% else %}
+                <div class="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 text-sm font-semibold text-gray-600">
+                  {{ item.post.actor_name|first|upper }}
+                </div>
+              {% endif %}
+            </div>
+            <div class="min-w-0 flex-1">
+              <div class="mb-1 flex items-baseline justify-between gap-3">
+                <div class="min-w-0">
+                  <span class="font-medium text-gray-900">{{ item.post.actor_name }}</span>
+                  <span class="ml-1 text-xs text-gray-400">{{ item.post.actor_title|default:"Contributor" }}</span>
+                </div>
+                <span class="text-xs text-gray-400">{{ item.created_at|date:"g:i A" }}</span>
+              </div>
+              {% if item.concern %}
+                <div class="mb-2 text-[11px] font-medium uppercase tracking-wider text-blue-600">Concern thread</div>
+              {% endif %}
+              <p class="text-sm leading-relaxed text-gray-700">{{ item.post.body }}</p>
+              {% if request.user.is_authenticated and not item.post.concern_id %}
+                <button class="mt-3 secondary-button !px-3 !py-1.5 !text-xs" data-api-post="/api/projects/{{ project.slug }}/stream/{{ item.post.id }}/promote-to-concern">Raise concern</button>
+              {% endif %}
+            </div>
+          </div>
+        {% elif item.kind == "agent_notice" %}
+          <div class="relative flex gap-4">
+            <div class="absolute left-[1.15rem] top-10 bottom-[-1.5rem] w-px bg-purple-100"></div>
+            <div class="relative z-10 flex-shrink-0">
+              <div class="flex h-10 w-10 items-center justify-center rounded-xl border border-purple-100 bg-purple-50">
+                <iconify-icon icon="lucide:bot" class="text-lg text-brand-agent"></iconify-icon>
+              </div>
+            </div>
+            <div class="flex-1 rounded-xl border border-purple-100 bg-purple-50/50 p-4">
+              <div class="mb-2 flex items-center gap-2">
+                <iconify-icon icon="lucide:lightbulb" class="text-brand-agent"></iconify-icon>
+                <span class="text-sm font-medium text-brand-agent">{% if item.concern %}Concern Guidance{% else %}Agent Signal{% endif %}</span>
+                <span class="ml-auto text-xs text-gray-400">{{ item.created_at|date:"g:i A" }}</span>
+              </div>
+              <p class="text-sm leading-relaxed text-gray-800">{{ item.post.body }}</p>
+              {% if item.concern and request.user.is_authenticated %}
+                <div class="mt-3 flex flex-wrap gap-2">
+                  <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-purple-200 bg-white px-3 py-1.5 text-xs font-medium text-brand-agent transition hover:bg-purple-50" data-stream-prompt="{{ selected_concern_chat_prompt }}">
+                    Address in Chat
+                  </button>
+                  <button class="inline-flex items-center gap-2 rounded-lg border border-purple-200 bg-white px-3 py-1.5 text-xs font-medium text-brand-agent transition hover:bg-purple-50" data-api-post="/api/projects/{{ project.slug }}/concerns/{{ item.concern.id }}/resolve-with-ai" data-api-loading-label="Resolving...">
+                    <iconify-icon icon="lucide:sparkles" data-api-button-icon></iconify-icon>
+                    <span data-api-button-label>Resolve with AI</span>
+                  </button>
+                </div>
+              {% endif %}
+            </div>
+          </div>
+        {% elif item.kind == "decision" %}
+          <div class="flex items-start gap-4">
+            <div class="mt-1 flex-shrink-0">
+              <div class="flex h-6 w-6 items-center justify-center rounded-full bg-brand-decision ring-4 ring-green-50">
+                <iconify-icon icon="lucide:check" class="text-xs text-white"></iconify-icon>
+              </div>
+            </div>
+            <div class="relative flex-1 overflow-hidden rounded-xl border border-green-200 bg-white p-4 shadow-sm">
+              <div class="absolute left-0 top-0 h-full w-1 bg-brand-decision"></div>
+              <div class="mb-2 flex items-baseline justify-between gap-3 pl-1">
+                <span class="text-[10px] font-bold uppercase tracking-wider text-brand-decision">Decision Recorded</span>
+                <span class="text-xs text-gray-400">by {{ item.actor_name }} • {{ item.created_at|date:"g:i A" }}</span>
+              </div>
+              <div class="pl-1">
+                <h3 class="font-display text-base font-medium text-gray-900">{{ item.decision.title }}</h3>
+                <p class="mt-1 text-sm leading-relaxed text-gray-600">{{ item.decision.summary }}</p>
+              </div>
+            </div>
+          </div>
+        {% elif item.kind == "concern" %}
+          <div class="rounded-xl border {% if item.concern.severity == 'critical' or item.concern.severity == 'high' %}border-red-200 bg-red-50/30{% elif item.concern.severity == 'medium' %}border-amber-200 bg-amber-50/40{% else %}border-blue-200 bg-blue-50/30{% endif %} p-4 shadow-sm">
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <div class="mb-2 flex flex-wrap items-center gap-2">
+                  <span class="workspace-badge {% if item.concern.severity == 'critical' or item.concern.severity == 'high' %}border-red-100 bg-white text-red-700{% elif item.concern.severity == 'medium' %}border-amber-100 bg-white text-amber-700{% else %}border-blue-100 bg-white text-blue-700{% endif %}">
+                    {{ item.concern.get_severity_display }}
+                  </span>
+                  <span class="workspace-badge border-gray-200 bg-white text-gray-600">{{ item.concern.get_status_display }}</span>
+                  <span class="workspace-badge border-gray-200 bg-white text-gray-600">{{ item.concern.get_concern_type_display }}</span>
+                </div>
+                <div class="text-sm font-semibold text-gray-900">{{ item.concern.title }}</div>
+                <p class="mt-2 text-sm leading-relaxed text-gray-600">{{ item.concern.summary }}</p>
+                {% if item.concern.recommendation %}
+                  <p class="mt-2 text-xs leading-relaxed text-gray-500">{{ item.concern.recommendation }}</p>
+                {% endif %}
+                {% if item.concern.node_refs %}
+                  <div class="mt-3 flex flex-wrap gap-2">
+                    {% for ref in item.concern.node_refs %}
+                      <a href="#spec-section-{{ ref.section_id }}" class="workspace-badge border-white/70 bg-white text-gray-600">{{ ref.label }}</a>
+                    {% endfor %}
+                  </div>
+                {% endif %}
+              </div>
+              <span class="text-xs text-gray-400">{{ item.created_at|timesince }} ago</span>
+            </div>
+            <div class="mt-3 flex flex-wrap gap-2">
+              <a href="{% url 'project-workspace' project.slug %}?concern={{ item.concern.id }}&stream={{ active_stream_filter }}" class="secondary-button !px-3 !py-1.5 !text-xs">Open Thread</a>
+              {% if request.user.is_authenticated %}
+                <button class="primary-button !px-3 !py-1.5 !text-xs" data-api-post="/api/projects/{{ project.slug }}/concerns/{{ item.concern.id }}/resolve-with-ai" data-api-loading-label="Resolving...">
+                  <iconify-icon icon="lucide:sparkles" data-api-button-icon></iconify-icon>
+                  <span data-api-button-label>Resolve with AI</span>
+                </button>
+              {% endif %}
+            </div>
+          </div>
+        {% elif item.kind == "proposal" %}
+          <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+            <div class="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <div class="text-[10px] font-bold uppercase tracking-wider text-brand-agent">AI Patch Review</div>
+                <div class="mt-1 text-sm font-semibold text-gray-900">{{ item.proposal.summary|default:"AI proposal" }}</div>
+              </div>
+              <span class="rounded-full bg-gray-100 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-gray-500">{{ item.proposal.get_status_display }}</span>
+            </div>
+            <div class="space-y-3">
+              {% for proposal_item in item.changes %}
+                <div class="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                  <div class="mb-2 flex items-center justify-between gap-3">
+                    <div>
+                      <div class="text-sm font-semibold text-gray-900">{{ proposal_item.change.section_title }}</div>
+                      <div class="text-[11px] uppercase tracking-wider text-gray-400">{{ proposal_item.change.get_status_display }}</div>
+                    </div>
+                    {% if request.user.is_authenticated and proposal_item.change.status == 'pending' %}
+                      <div class="flex gap-2">
+                        <button class="secondary-button !px-3 !py-1.5 !text-xs" data-api-post="/api/projects/{{ project.slug }}/concern-proposals/{{ item.proposal.id }}/changes/{{ proposal_item.change.id }}/reject">Reject</button>
+                        <button class="primary-button !px-3 !py-1.5 !text-xs" data-api-post="/api/projects/{{ project.slug }}/concern-proposals/{{ item.proposal.id }}/changes/{{ proposal_item.change.id }}/accept">Accept</button>
+                      </div>
+                    {% endif %}
+                  </div>
+                  {% if proposal_item.change.summary %}
+                    <p class="mb-3 text-sm leading-relaxed text-gray-600">{{ proposal_item.change.summary }}</p>
+                  {% endif %}
+                  <pre class="diff-view">{{ proposal_item.diff|render_unified_diff }}</pre>
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+        {% endif %}
+      {% empty %}
+        <div class="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-5 text-sm text-gray-500">
+          No items in this stream state yet.
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
