@@ -64,6 +64,16 @@ def _form_errors(form) -> dict[str, list[str]]:
     return {field: [str(error) for error in errors] for field, errors in form.errors.items()}
 
 
+def _auth_page_header_context(page_title: str) -> dict[str, str | bool | None]:
+    return {
+        "project": None,
+        "header_variant": "default",
+        "page_title": page_title,
+        "page_breadcrumb_label": page_title,
+        "header_hide_auth_actions": True,
+    }
+
+
 @require_http_methods(["GET", "POST"])
 def login_view(request: HttpRequest) -> HttpResponse:
     if request.user.is_authenticated:
@@ -88,6 +98,7 @@ def login_view(request: HttpRequest) -> HttpResponse:
         request,
         "accounts/login.html",
         {
+            **_auth_page_header_context("Log In"),
             "form": form,
             "redirect_field_name": REDIRECT_FIELD_NAME,
             "next_url": request.POST.get(REDIRECT_FIELD_NAME) or request.GET.get(REDIRECT_FIELD_NAME, ""),
@@ -123,6 +134,7 @@ def signup_view(request: HttpRequest) -> HttpResponse:
         request,
         "accounts/signup.html",
         {
+            **_auth_page_header_context("Sign Up"),
             "form": form,
             "redirect_field_name": REDIRECT_FIELD_NAME,
             "next_url": request.POST.get(REDIRECT_FIELD_NAME) or request.GET.get(REDIRECT_FIELD_NAME, ""),

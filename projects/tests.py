@@ -21,6 +21,7 @@ class ProjectPageTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Agent-Driven Spec System")
         self.assertContains(response, self.project.name)
+        self.assertContains(response, "Public demo workspace")
         self.assertContains(response, "data-project-modal-trigger", html=False)
         self.assertContains(response, "dist/app.css?v=", html=False)
         self.assertContains(response, "js/app.js?v=", html=False)
@@ -212,7 +213,11 @@ class ProjectPageTests(TestCase):
 
         self.assertContains(response, member_project.name)
         self.assertNotContains(response, self.project.name)
+        self.assertContains(response, "Select Project")
+        self.assertContains(response, "Create Project")
+        self.assertContains(response, "active workspace")
         self.assertNotContains(response, "Open Demo Project")
+        self.assertNotContains(response, "Export Spec")
 
     def test_authenticated_non_member_cannot_open_demo_workspace(self):
         outsider = User.objects.create_user(

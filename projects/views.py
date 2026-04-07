@@ -96,19 +96,11 @@ def project_directory(request):
         {
             "projects": projects,
             "current_project": current_project,
-            "project": None,
+            "project": current_project,
             "active_item": "projects",
             "navigation_items": navigation_items,
-            "header_variant": "default",
-            "page_title": "Projects",
-            "header_hide_project_identity": True,
-            "unresolved_count": (
-                current_project.concerns.exclude(status__in=["resolved", "dismissed"]).count()
-            )
-            if current_project
-            else 0,
-            "active_members_count": current_project.memberships.filter(is_active=True).count() if current_project else 0,
-            "status_label": current_project.status_label if current_project else "No Active Project",
+            "header_variant": "project-directory-toolbar",
+            "page_breadcrumb_label": "All",
         },
     )
 
