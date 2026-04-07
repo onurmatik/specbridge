@@ -20,6 +20,7 @@ from projects.services import (
     history_context,
     members_context,
     navigation_for_project,
+    project_directory_issue_summary,
     visible_projects_for_user,
     workspace_context,
 )
@@ -81,7 +82,13 @@ def _project_create_response_payload(project):
 def project_directory(request):
     if not request.user.is_authenticated:
         ensure_demo_workspace()
-    projects = list(visible_projects_for_user(request.user).order_by("-last_activity_at", "-updated_at", "name"))
+    projects = list(
+        visible_projects_for_user(request.user)
+        .prefetch_related("concerns", "consistency_issues")
+        .order_by("-last_activity_at", "-updated_at", "name")
+    )
+    for listed_project in projects:
+        listed_project.directory_issue_summary = project_directory_issue_summary(listed_project)
     current_project = projects[0] if projects else None
     if request.user.is_authenticated and current_project is None:
         return redirect(reverse("project-create"))

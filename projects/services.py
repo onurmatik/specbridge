@@ -16,6 +16,7 @@ from alignment.services import (
 )
 from projects.demo import DEMO_PROJECT_SLUG, DEMO_USERNAMES, ensure_demo_workspace
 from projects.models import MembershipRole, Organization, Project, ProjectMembership
+from specs.models import ConcernStatus, ConsistencyIssueStatus
 from specs.services import (
     bootstrap_spec_document,
     capture_project_revision,
@@ -226,6 +227,58 @@ def page_context(project, active_item):
         "status_label": project.status_label,
         "dashboard_metrics": metrics,
         "latest_concern_run": project.concern_runs.first(),
+    }
+
+
+def project_directory_issue_summary(project):
+    severity_rank = {"critical": 3, "high": 2, "medium": 1, "low": 0}
+    active_concerns = [
+        concern
+        for concern in project.concerns.all()
+        if concern.status in {ConcernStatus.OPEN, ConcernStatus.STALE}
+    ]
+    active_consistency_issues = [
+        issue
+        for issue in project.consistency_issues.all()
+        if issue.status == ConsistencyIssueStatus.OPEN
+    ]
+
+    latest_issue_candidates = [
+        {
+            "title": concern.title,
+            "summary": concern.summary,
+            "type_label": concern.get_concern_type_display(),
+            "status_label": concern.get_status_display(),
+            "severity": concern.severity,
+            "severity_label": concern.get_severity_display(),
+            "sort_at": concern.last_seen_at or concern.detected_at or concern.updated_at,
+            "severity_rank": severity_rank.get(concern.severity, 0),
+        }
+        for concern in active_concerns
+    ]
+    latest_issue_candidates.extend(
+        {
+            "title": issue.title,
+            "summary": issue.summary,
+            "type_label": "Consistency",
+            "status_label": issue.get_status_display(),
+            "severity": issue.severity,
+            "severity_label": issue.get_severity_display(),
+            "sort_at": issue.last_seen_at or issue.detected_at or issue.updated_at,
+            "severity_rank": severity_rank.get(issue.severity, 0),
+        }
+        for issue in active_consistency_issues
+    )
+    latest_issue_candidates.sort(
+        key=lambda item: (item["sort_at"], item["severity_rank"]),
+        reverse=True,
+    )
+    latest_issue = latest_issue_candidates[0] if latest_issue_candidates else None
+
+    return {
+        "active_count": len(active_concerns) + len(active_consistency_issues),
+        "critical_count": sum(1 for item in latest_issue_candidates if item["severity"] == "critical"),
+        "latest_issue": latest_issue,
     }
 
 

@@ -22,6 +22,9 @@ class ProjectPageTests(TestCase):
         self.assertContains(response, "Agent-Driven Spec System")
         self.assertContains(response, self.project.name)
         self.assertContains(response, "Public demo workspace")
+        self.assertContains(response, "Issue status")
+        self.assertContains(response, "Fallback mismatch across requirements, UI/UX, and infra")
+        self.assertNotContains(response, "Primary route")
         self.assertContains(response, "data-project-modal-trigger", html=False)
         self.assertContains(response, "dist/app.css?v=", html=False)
         self.assertContains(response, "js/app.js?v=", html=False)
@@ -218,6 +221,10 @@ class ProjectPageTests(TestCase):
         self.assertContains(response, "active workspace")
         self.assertNotContains(response, "Open Demo Project")
         self.assertNotContains(response, "Export Spec")
+        self.assertNotContains(response, "Sign-in no longer falls back to the demo workspace")
+        self.assertNotContains(response, "Agent-Driven Spec System")
+        self.assertContains(response, "No active issues")
+        self.assertNotContains(response, "Primary route")
 
     def test_authenticated_non_member_cannot_open_demo_workspace(self):
         outsider = User.objects.create_user(
