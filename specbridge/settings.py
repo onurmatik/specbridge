@@ -155,10 +155,19 @@ APP_BASE_URL = env_optional_str("APP_BASE_URL") or env_optional_str("SITE_URL") 
     "http://127.0.0.1:8000" if DEBUG else None
 )
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "SpecBridge <hello@specbridge.io>")
-INVITATION_FROM_EMAIL = env_optional_str("INVITATION_FROM_EMAIL") or DEFAULT_FROM_EMAIL
+INVITATION_FROM_EMAIL = env_optional_str("INVITATION_FROM_EMAIL") or "SpecBridge <invite@specbridge.io>"
 EMAIL_SUBJECT_PREFIX = env_optional_str("EMAIL_SUBJECT_PREFIX") or "[SpecBridge] "
 SERVER_EMAIL = env_optional_str("SERVER_EMAIL") or DEFAULT_FROM_EMAIL
 PROJECT_INVITE_MAX_AGE_SECONDS = env_int("PROJECT_INVITE_MAX_AGE_SECONDS", 60 * 60 * 24 * 30)
+AWS_SES_REGION_NAME = (
+    env_optional_str("AWS_SES_REGION_NAME")
+    or env_optional_str("AWS_SES_REGION")
+    or env_optional_str("AWS_DEFAULT_REGION")
+)
+AWS_SES_REGION_ENDPOINT = env_optional_str("AWS_SES_REGION_ENDPOINT") or (
+    f"email.{AWS_SES_REGION_NAME}.amazonaws.com" if AWS_SES_REGION_NAME else None
+)
+USE_SES_V2 = env_bool("USE_SES_V2", False)
 
 configured_email_backend = env_optional_str("EMAIL_BACKEND")
 email_delivery_mode = (env_optional_str("EMAIL_DELIVERY_MODE") or ("console" if DEBUG else "ses")).lower()
@@ -166,14 +175,6 @@ email_delivery_mode = (env_optional_str("EMAIL_DELIVERY_MODE") or ("console" if 
 if configured_email_backend:
     EMAIL_BACKEND = configured_email_backend
 elif email_delivery_mode == "ses":
-    aws_ses_region = env_optional_str("AWS_SES_REGION") or "eu-central-1"
-    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-    EMAIL_HOST = env_optional_str("AWS_SES_SMTP_HOST") or f"email-smtp.{aws_ses_region}.amazonaws.com"
-    EMAIL_PORT = env_optional_int("AWS_SES_SMTP_PORT") or 587
-    EMAIL_HOST_USER = env_optional_str("AWS_SES_SMTP_USERNAME") or ""
-    EMAIL_HOST_PASSWORD = env_optional_str("AWS_SES_SMTP_PASSWORD") or ""
-    EMAIL_USE_TLS = env_bool("AWS_SES_SMTP_USE_TLS", True)
-    EMAIL_USE_SSL = env_bool("AWS_SES_SMTP_USE_SSL", False)
-    EMAIL_TIMEOUT = env_optional_int("EMAIL_TIMEOUT") or 30
+    EMAIL_BACKEND = "django_ses.SESBackend"
 else:
     EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
