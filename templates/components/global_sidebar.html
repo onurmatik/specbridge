@@ -16,6 +16,16 @@
   </nav>
   {% if sidebar_user.is_authenticated %}
     <div class="mt-4 flex flex-col items-center gap-3">
+      <a
+        href="https://featurerequest.io/onurmatik/spec-bridge/"
+        target="_blank"
+        rel="noopener noreferrer"
+        title="Share product feedback"
+        aria-label="Share product feedback"
+        class="flex h-9 w-9 items-center justify-center rounded-2xl border border-transparent bg-transparent text-gray-400 transition-all hover:border-gray-200 hover:bg-white hover:text-amber-500"
+      >
+        <iconify-icon icon="lucide:lightbulb" class="text-sm"></iconify-icon>
+      </a>
       {% if sidebar_project %}
         <button
           type="button"
