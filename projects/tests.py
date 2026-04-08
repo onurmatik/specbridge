@@ -1,13 +1,17 @@
 import json
+import tempfile
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.core import mail
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase
 from django.test.utils import override_settings
 from django.urls import reverse
 from django.utils import timezone
 
+from alignment.models import StreamPost
+from alignment.stream_attachments import attach_files_to_post
 from projects.demo import ensure_demo_workspace
 from projects.invitations import invitation_token
 from projects.models import MembershipRole, Project, ProjectInvite, ProjectMembership
@@ -18,8 +22,27 @@ User = get_user_model()
 
 class ProjectPageTests(TestCase):
     def setUp(self):
+        self.media_dir = tempfile.TemporaryDirectory()
+        self.media_override = override_settings(MEDIA_ROOT=self.media_dir.name)
+        self.media_override.enable()
+        self.addCleanup(self.media_override.disable)
+        self.addCleanup(self.media_dir.cleanup)
         self.project = ensure_demo_workspace()
         self.client = Client()
+
+    def _create_attachment_post(self, *, body: str = "", filename: str = "reference.txt", content: str = "Ref text"):
+        post = StreamPost.objects.create(
+            project=self.project,
+            author=self.project.created_by,
+            actor_name=self.project.created_by.display_name,
+            actor_title=self.project.created_by.title,
+            body=body,
+        )
+        attach_files_to_post(
+            post,
+            [SimpleUploadedFile(filename, content.encode("utf-8"), content_type="text/plain")],
+        )
+        return post
 
     def test_project_directory_renders(self):
         response = self.client.get(reverse("project-directory"))
@@ -101,12 +124,17 @@ class ProjectPageTests(TestCase):
         self.assertContains(response, "All")
         self.assertContains(response, "Decisions")
         self.assertContains(response, "Open")
+        self.assertContains(response, "Files")
         self.assertContains(response, self.project.name)
         self.assertContains(response, self.project.tagline)
-        self.assertContains(response, "Add to the discussion or propose a decision...")
+        self.assertContains(response, "upload a reference document")
         self.assertNotContains(response, "Issues &amp; Alignment", html=True)
         self.assertNotContains(response, "Active Queue")
         self.assertContains(response, 'data-stream-input', html=False)
+        self.assertContains(response, 'data-stream-file-input', html=False)
+        self.assertContains(response, 'data-stream-files-trigger', html=False)
+        self.assertContains(response, 'data-stream-file-list', html=False)
+        self.assertContains(response, 'data-stream-file-helper-prompts', html=False)
         self.assertContains(response, 'data-workspace-split-root', html=False)
         self.assertContains(response, 'data-workspace-resize-handle', html=False)
         self.assertContains(response, 'data-project-settings-trigger', html=False)
@@ -135,6 +163,39 @@ class ProjectPageTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Retain SSO, Migrate Passwords")
         self.assertContains(response, "Decision Recorded")
+        self.assertNotContains(
+            response,
+            "We need each core planning area in one shared spec now. I still want magic links to be the primary direction, but contradictions across sections must be visible.",
+        )
+
+    def test_workspace_all_filter_shows_message_attachments(self):
+        self.client.force_login(self.project.created_by)
+        self._create_attachment_post(
+            body="Populate the spec with this.",
+            filename="partner-api.txt",
+            content="Partner API documentation",
+        )
+
+        response = self.client.get(reverse("project-workspace", args=[self.project.slug]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Populate the spec with this.")
+        self.assertContains(response, "partner-api.txt")
+        self.assertContains(response, "Download")
+
+    def test_workspace_files_filter_only_shows_uploaded_files(self):
+        self.client.force_login(self.project.created_by)
+        self._create_attachment_post(
+            filename="existing-spec.txt",
+            content="Imported product spec",
+        )
+
+        response = self.client.get(f"{reverse('project-workspace', args=[self.project.slug])}?stream=files")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "existing-spec.txt")
+        self.assertContains(response, "Download")
+        self.assertNotContains(response, "Retain SSO, Migrate Passwords")
         self.assertNotContains(
             response,
             "We need each core planning area in one shared spec now. I still want magic links to be the primary direction, but contradictions across sections must be visible.",
@@ -170,6 +231,19 @@ class ProjectPageTests(TestCase):
             response,
             "We need each core planning area in one shared spec now. I still want magic links to be the primary direction, but contradictions across sections must be visible.",
         )
+
+    def test_workspace_live_fragment_honors_files_filter_query(self):
+        self.client.force_login(self.project.created_by)
+        self._create_attachment_post(filename="api-notes.txt", content="API notes")
+
+        response = self.client.get(
+            f"{reverse('project-workspace', args=[self.project.slug])}?_fragment=workspace-live&stream=files"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "api-notes.txt")
+        self.assertContains(response, "Download")
+        self.assertNotContains(response, "Retain SSO, Migrate Passwords")
 
     def test_workspace_live_fragment_honors_concern_query_without_rendering_composer(self):
         self.client.force_login(self.project.created_by)

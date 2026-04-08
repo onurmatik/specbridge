@@ -18,6 +18,7 @@ from specs.spec_document import (
     find_section,
     find_section_by_identifier,
     insert_section_after,
+    markdown_to_blocks,
     move_section,
     normalized_spec_content,
     section_catalog,
@@ -264,6 +265,96 @@ def update_spec_section(
 
     mark_linked_concerns_stale(project=project, section_ids=[summary_section["id"]], actor=actor)
     return project_revision
+
+
+def apply_batch_spec_operations(
+    *,
+    project,
+    operations: list[dict[str, Any]],
+    actor=None,
+    title: str,
+    summary: str = "",
+    source_post=None,
+):
+    spec_document = ensure_spec_document(project)
+    next_content = deepcopy(normalized_spec_content(spec_document.content_json))
+    applied_operations: list[dict[str, Any]] = []
+    touched_section_ids: list[str] = []
+
+    for operation in operations:
+        operation_type = (operation.get("type") or "").strip()
+        if operation_type == "update_section":
+            section_id = operation.get("section_id", "")
+            next_content, updated_section, changed = update_section_content(
+                next_content,
+                section_id,
+                content_blocks=markdown_to_blocks(operation.get("body", "")),
+            )
+            if not updated_section or not changed:
+                continue
+            updated_summary = section_summary(updated_section)
+            applied_operations.append(
+                {
+                    "type": operation_type,
+                    "section_id": updated_summary["id"],
+                    "section_title": updated_summary["title"],
+                }
+            )
+            touched_section_ids.append(updated_summary["id"])
+            continue
+
+        if operation_type == "insert_section_after":
+            after_section_id = operation.get("after_section_id", "")
+            next_content, inserted_section = insert_section_after(
+                next_content,
+                project=project,
+                after_section_id=after_section_id,
+                title=operation.get("title") or "New Section",
+                body=operation.get("body", ""),
+            )
+            if not inserted_section:
+                continue
+            inserted_summary = section_summary(inserted_section)
+            applied_operations.append(
+                {
+                    "type": operation_type,
+                    "section_id": inserted_summary["id"],
+                    "section_title": inserted_summary["title"],
+                    "after_section_id": after_section_id,
+                }
+            )
+            touched_section_ids.append(inserted_summary["id"])
+
+    if not applied_operations:
+        return {"project_revision": None, "applied_operations": []}
+
+    spec_document.content_json = next_content
+    spec_document.schema_version = SPEC_SCHEMA_VERSION
+    spec_document.save(update_fields=["content_json", "schema_version", "updated_at"])
+    project_revision = capture_project_revision(
+        project=project,
+        title=title,
+        summary=summary or title,
+        actor=actor,
+        source_post=source_post,
+    )
+    log_audit_event(
+        project=project,
+        actor=actor,
+        event_type=AuditEventType.DOCUMENT_UPDATED,
+        title=title,
+        description=summary or title,
+        source_post=source_post,
+        project_revision=project_revision,
+        metadata={
+            "operation_count": len(applied_operations),
+            "section_ids": touched_section_ids,
+        },
+    )
+    from specs.concerns import mark_linked_concerns_stale
+
+    mark_linked_concerns_stale(project=project, section_ids=touched_section_ids, actor=actor)
+    return {"project_revision": project_revision, "applied_operations": applied_operations}
 
 
 def add_spec_section_after(

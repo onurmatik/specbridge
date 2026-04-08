@@ -4,7 +4,7 @@ from collections import Counter
 
 from django.utils import timezone
 
-from alignment.models import DecisionStatus, IssueStatus, StreamPostKind
+from alignment.models import DecisionStatus, IssueStatus, StreamAttachment, StreamPostKind
 from specs.models import (
     AuditEventType,
     ConcernProposalStatus,
@@ -41,7 +41,7 @@ def build_workspace_entries(project):
     return sorted(entries, key=lambda item: item["created_at"])
 
 
-VALID_WORKSPACE_STREAM_FILTERS = {"all", "decisions", "open"}
+VALID_WORKSPACE_STREAM_FILTERS = {"all", "decisions", "open", "files"}
 
 
 def normalize_workspace_stream_filter(value: str | None) -> str:
@@ -60,16 +60,28 @@ def workspace_concern_chat_prompt(concern) -> str:
     return prompt
 
 
+def _prefetched_related_list(instance, relation_name: str) -> list:
+    cache = getattr(instance, "_prefetched_objects_cache", {})
+    if relation_name in cache:
+        return list(cache[relation_name])
+    return list(getattr(instance, relation_name).all())
+
+
 def _build_workspace_post_item(post, *, concern=None):
     author = getattr(post, "author", None)
     avatar_url = author.avatar_url if author else ""
     is_agent = post.kind == StreamPostKind.AGENT
+    attachments = _prefetched_related_list(post, "attachments")
+    has_body = bool((post.body or "").strip())
     return {
         "kind": "agent_notice" if is_agent else "message",
         "created_at": post.created_at,
         "post": post,
         "concern": concern,
         "avatar_url": avatar_url,
+        "attachments": attachments,
+        "has_body": has_body,
+        "is_file_only": bool(attachments and not has_body),
         "is_focus_thread": bool(concern),
         "is_open_related": bool(concern and concern.status in {ConcernStatus.OPEN, ConcernStatus.STALE}),
     }
@@ -116,6 +128,21 @@ def _build_workspace_proposal_item(bundle, *, concern):
     }
 
 
+def _build_workspace_attachment_item(attachment):
+    post = attachment.post
+    author = getattr(post, "author", None)
+    concern = getattr(post, "concern", None)
+    return {
+        "kind": "file",
+        "created_at": attachment.created_at,
+        "attachment": attachment,
+        "post": post,
+        "concern": concern,
+        "avatar_url": author.avatar_url if author else "",
+        "is_open_related": bool(concern and concern.status in {ConcernStatus.OPEN, ConcernStatus.STALE}),
+    }
+
+
 def build_workspace_stream_items(
     *,
     project,
@@ -126,8 +153,20 @@ def build_workspace_stream_items(
     stream_filter="all",
 ):
     normalized_filter = normalize_workspace_stream_filter(stream_filter)
+    if normalized_filter == "files":
+        attachments = list(
+            StreamAttachment.objects.select_related("post__author", "post__concern")
+            .filter(project=project)
+            .order_by("created_at")
+        )
+        return [_build_workspace_attachment_item(attachment) for attachment in attachments]
+
     items = []
-    top_level_posts = list(project.stream_posts.select_related("author").filter(concern__isnull=True))
+    top_level_posts = list(
+        project.stream_posts.select_related("author")
+        .prefetch_related("attachments")
+        .filter(concern__isnull=True)
+    )
     approved_decisions = list(
         project.decisions.select_related("proposed_by", "source_post").exclude(status=DecisionStatus.PENDING)
     )

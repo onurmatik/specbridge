@@ -79,35 +79,110 @@
     <div class="space-y-8">
       {% for item in workspace_stream_items %}
         {% if item.kind == "message" %}
-          <div class="flex gap-4 {% if item.is_focus_thread %}rounded-xl border border-blue-100 bg-blue-50/30 p-4{% endif %}">
-            <div class="flex-shrink-0">
-              {% if item.avatar_url %}
-                <div class="h-10 w-10 overflow-hidden rounded-full bg-gray-100">
-                  <img src="{{ item.avatar_url }}" alt="{{ item.post.actor_name }}" class="h-full w-full object-cover">
-                </div>
-              {% else %}
-                <div class="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 text-sm font-semibold text-gray-600">
-                  {{ item.post.actor_name|first|upper }}
-                </div>
-              {% endif %}
-            </div>
-            <div class="min-w-0 flex-1">
-              <div class="mb-1 flex items-baseline justify-between gap-3">
-                <div class="min-w-0">
-                  <span class="font-medium text-gray-900">{{ item.post.actor_name }}</span>
-                  <span class="ml-1 text-xs text-gray-400">{{ item.post.actor_title|default:"Contributor" }}</span>
+          {% if item.is_file_only %}
+            <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm {% if item.is_focus_thread %}border-blue-100 bg-blue-50/30{% endif %}">
+              <div class="flex items-start justify-between gap-3">
+                <div class="flex min-w-0 gap-4">
+                  <div class="flex-shrink-0">
+                    {% if item.avatar_url %}
+                      <div class="h-10 w-10 overflow-hidden rounded-full bg-gray-100">
+                        <img src="{{ item.avatar_url }}" alt="{{ item.post.actor_name }}" class="h-full w-full object-cover">
+                      </div>
+                    {% else %}
+                      <div class="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 text-sm font-semibold text-gray-600">
+                        {{ item.post.actor_name|first|upper }}
+                      </div>
+                    {% endif %}
+                  </div>
+                  <div class="min-w-0">
+                    <div class="flex flex-wrap items-center gap-2">
+                      <span class="workspace-badge border-blue-100 bg-blue-50 text-blue-700">Files uploaded</span>
+                      {% if item.concern %}
+                        <span class="workspace-badge border-gray-200 bg-white text-gray-600">Concern thread</span>
+                      {% endif %}
+                    </div>
+                    <div class="mt-3 text-sm font-medium text-gray-900">{{ item.post.actor_name }}</div>
+                    <div class="text-xs text-gray-400">{{ item.post.actor_title|default:"Contributor" }}</div>
+                  </div>
                 </div>
                 <span class="text-xs text-gray-400">{{ item.created_at|date:"g:i A" }}</span>
               </div>
-              {% if item.concern %}
-                <div class="mb-2 text-[11px] font-medium uppercase tracking-wider text-blue-600">Concern thread</div>
-              {% endif %}
-              <p class="text-sm leading-relaxed text-gray-700">{{ item.post.body }}</p>
+              <div class="mt-4 space-y-3">
+                {% for attachment in item.attachments %}
+                  <div class="rounded-xl border border-gray-200 bg-gray-50 p-3">
+                    <div class="flex items-start justify-between gap-3">
+                      <div class="min-w-0">
+                        <div class="flex flex-wrap items-center gap-2">
+                          <span class="text-sm font-semibold text-gray-900">{{ attachment.original_name }}</span>
+                          <span class="workspace-badge border-gray-200 bg-white text-gray-600">{{ attachment.extension|default:"file"|upper|cut:"." }}</span>
+                          <span class="workspace-badge border-gray-200 bg-white text-gray-600">{{ attachment.size_bytes|filesizeformat }}</span>
+                          {% if attachment.extraction_status == "failed" %}
+                            <span class="workspace-badge border-red-100 bg-red-50 text-red-700">AI unavailable</span>
+                          {% endif %}
+                        </div>
+                        {% if attachment.extraction_error %}
+                          <p class="mt-2 text-xs leading-relaxed text-red-600">{{ attachment.extraction_error }}</p>
+                        {% endif %}
+                      </div>
+                      <a href="{{ attachment.download_url }}" class="secondary-button !px-3 !py-1.5 !text-xs">Download</a>
+                    </div>
+                  </div>
+                {% endfor %}
+              </div>
               {% if request.user.is_authenticated and not item.post.concern_id %}
-                <button class="mt-3 secondary-button !px-3 !py-1.5 !text-xs" data-api-post="/api/projects/{{ project.slug }}/stream/{{ item.post.id }}/promote-to-concern">Raise concern</button>
+                <button class="mt-4 secondary-button !px-3 !py-1.5 !text-xs" data-api-post="/api/projects/{{ project.slug }}/stream/{{ item.post.id }}/promote-to-concern">Raise concern</button>
               {% endif %}
             </div>
-          </div>
+          {% else %}
+            <div class="flex gap-4 {% if item.is_focus_thread %}rounded-xl border border-blue-100 bg-blue-50/30 p-4{% endif %}">
+              <div class="flex-shrink-0">
+                {% if item.avatar_url %}
+                  <div class="h-10 w-10 overflow-hidden rounded-full bg-gray-100">
+                    <img src="{{ item.avatar_url }}" alt="{{ item.post.actor_name }}" class="h-full w-full object-cover">
+                  </div>
+                {% else %}
+                  <div class="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 text-sm font-semibold text-gray-600">
+                    {{ item.post.actor_name|first|upper }}
+                  </div>
+                {% endif %}
+              </div>
+              <div class="min-w-0 flex-1">
+                <div class="mb-1 flex items-baseline justify-between gap-3">
+                  <div class="min-w-0">
+                    <span class="font-medium text-gray-900">{{ item.post.actor_name }}</span>
+                    <span class="ml-1 text-xs text-gray-400">{{ item.post.actor_title|default:"Contributor" }}</span>
+                  </div>
+                  <span class="text-xs text-gray-400">{{ item.created_at|date:"g:i A" }}</span>
+                </div>
+                {% if item.concern %}
+                  <div class="mb-2 text-[11px] font-medium uppercase tracking-wider text-blue-600">Concern thread</div>
+                {% endif %}
+                <p class="text-sm leading-relaxed text-gray-700">{{ item.post.body }}</p>
+                {% if item.attachments %}
+                  <div class="mt-3 space-y-2">
+                    {% for attachment in item.attachments %}
+                      <div class="flex items-center justify-between gap-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2">
+                        <div class="min-w-0">
+                          <div class="flex flex-wrap items-center gap-2">
+                            <span class="truncate text-sm font-medium text-gray-900">{{ attachment.original_name }}</span>
+                            <span class="workspace-badge border-gray-200 bg-white text-gray-600">{{ attachment.extension|default:"file"|upper|cut:"." }}</span>
+                            <span class="workspace-badge border-gray-200 bg-white text-gray-600">{{ attachment.size_bytes|filesizeformat }}</span>
+                          </div>
+                          {% if attachment.extraction_error %}
+                            <div class="mt-1 text-xs text-red-600">{{ attachment.extraction_error }}</div>
+                          {% endif %}
+                        </div>
+                        <a href="{{ attachment.download_url }}" class="secondary-button !px-3 !py-1.5 !text-xs">Download</a>
+                      </div>
+                    {% endfor %}
+                  </div>
+                {% endif %}
+                {% if request.user.is_authenticated and not item.post.concern_id %}
+                  <button class="mt-3 secondary-button !px-3 !py-1.5 !text-xs" data-api-post="/api/projects/{{ project.slug }}/stream/{{ item.post.id }}/promote-to-concern">Raise concern</button>
+                {% endif %}
+              </div>
+            </div>
+          {% endif %}
         {% elif item.kind == "agent_notice" %}
           <div class="relative flex gap-4">
             <div class="absolute left-[1.15rem] top-10 bottom-[-1.5rem] w-px bg-purple-100"></div>
@@ -153,6 +228,35 @@
                 <h3 class="font-display text-base font-medium text-gray-900">{{ item.decision.title }}</h3>
                 <p class="mt-1 text-sm leading-relaxed text-gray-600">{{ item.decision.summary }}</p>
               </div>
+            </div>
+          </div>
+        {% elif item.kind == "file" %}
+          <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="workspace-badge border-blue-100 bg-blue-50 text-blue-700">File</span>
+                  <span class="workspace-badge border-gray-200 bg-white text-gray-600">{{ item.attachment.extension|default:"file"|upper|cut:"." }}</span>
+                  <span class="workspace-badge border-gray-200 bg-white text-gray-600">{{ item.attachment.size_bytes|filesizeformat }}</span>
+                  {% if item.concern %}
+                    <span class="workspace-badge border-gray-200 bg-white text-gray-600">Concern thread</span>
+                  {% endif %}
+                  {% if item.attachment.extraction_status == "failed" %}
+                    <span class="workspace-badge border-red-100 bg-red-50 text-red-700">AI unavailable</span>
+                  {% endif %}
+                </div>
+                <div class="mt-3 text-sm font-semibold text-gray-900">{{ item.attachment.original_name }}</div>
+                <div class="mt-1 text-xs text-gray-400">
+                  Uploaded by {{ item.post.actor_name }}{% if item.post.actor_title %} · {{ item.post.actor_title }}{% endif %} · {{ item.created_at|timesince }} ago
+                </div>
+                {% if item.post.body %}
+                  <p class="mt-3 text-sm leading-relaxed text-gray-600">{{ item.post.body }}</p>
+                {% endif %}
+                {% if item.attachment.extraction_error %}
+                  <p class="mt-3 text-sm leading-relaxed text-red-600">{{ item.attachment.extraction_error }}</p>
+                {% endif %}
+              </div>
+              <a href="{{ item.attachment.download_url }}" class="secondary-button !px-3 !py-1.5 !text-xs">Download</a>
             </div>
           </div>
         {% elif item.kind == "concern" %}

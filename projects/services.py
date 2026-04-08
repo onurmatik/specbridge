@@ -361,7 +361,11 @@ def workspace_context(
         }
         for section in sections
     ]
-    selected_concern_posts = list(selected_concern.posts.select_related("author").all()) if selected_concern else []
+    selected_concern_posts = (
+        list(selected_concern.posts.select_related("author").prefetch_related("attachments").all())
+        if selected_concern
+        else []
+    )
     selected_concern_proposals = []
     if selected_concern:
         for proposal in selected_concern.proposals.prefetch_related("changes").all():
@@ -434,6 +438,12 @@ def workspace_context(
                     "label": "Open",
                     "icon": "lucide:alert-circle",
                     "icon_class": "text-brand-warning",
+                },
+                {
+                    "value": "files",
+                    "label": "Files",
+                    "icon": "lucide:paperclip",
+                    "icon_class": "text-blue-600",
                 },
             ],
             "selected_concern_chat_prompt": workspace_concern_chat_prompt(selected_concern) if selected_concern else "",

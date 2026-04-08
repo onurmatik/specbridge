@@ -958,6 +958,91 @@ function focusStreamInput(prompt = "", mode = "replace") {
   return true;
 }
 
+function formatFileSize(bytes) {
+  const value = Number(bytes || 0);
+  if (!Number.isFinite(value) || value <= 0) {
+    return "0 B";
+  }
+  if (value < 1024) {
+    return `${value} B`;
+  }
+  if (value < 1024 * 1024) {
+    return `${(value / 1024).toFixed(1).replace(/\\.0$/, "")} KB`;
+  }
+  return `${(value / (1024 * 1024)).toFixed(1).replace(/\\.0$/, "")} MB`;
+}
+
+function streamComposerFileInput(form) {
+  return form?.querySelector?.("[data-stream-file-input]") || null;
+}
+
+function streamComposerFileList(form) {
+  return form?.querySelector?.("[data-stream-file-list]") || null;
+}
+
+function streamComposerHelperPrompts(form) {
+  return form?.querySelector?.("[data-stream-file-helper-prompts]") || null;
+}
+
+function streamComposerSelectedFiles(form) {
+  return Array.from(streamComposerFileInput(form)?.files || []);
+}
+
+function streamComposerFileKey(file) {
+  return [file?.name || "", file?.size || 0, file?.lastModified || 0].join(":");
+}
+
+function setStreamComposerFiles(form, files) {
+  const input = streamComposerFileInput(form);
+  if (!input) {
+    return;
+  }
+  const dataTransfer = new DataTransfer();
+  files.forEach((file) => {
+    dataTransfer.items.add(file);
+  });
+  input.files = dataTransfer.files;
+}
+
+function syncStreamComposerFiles(form) {
+  const fileList = streamComposerFileList(form);
+  const helperPrompts = streamComposerHelperPrompts(form);
+  if (!fileList || !helperPrompts) {
+    return;
+  }
+
+  const files = streamComposerSelectedFiles(form);
+  fileList.innerHTML = "";
+
+  if (!files.length) {
+    fileList.classList.add("hidden");
+    helperPrompts.classList.add("hidden");
+    return;
+  }
+
+  fileList.classList.remove("hidden");
+  helperPrompts.classList.remove("hidden");
+
+  files.forEach((file, index) => {
+    const chip = document.createElement("div");
+    chip.className = "inline-flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs text-gray-700";
+
+    const name = document.createElement("span");
+    name.className = "max-w-[220px] truncate font-medium";
+    name.textContent = `${file.name} (${formatFileSize(file.size)})`;
+    chip.appendChild(name);
+
+    const removeButton = document.createElement("button");
+    removeButton.type = "button";
+    removeButton.className = "text-gray-400 transition hover:text-gray-700";
+    removeButton.dataset.streamFileRemove = `${index}`;
+    removeButton.setAttribute("aria-label", `Remove ${file.name}`);
+    removeButton.innerHTML = '<iconify-icon icon="lucide:x" class="text-sm"></iconify-icon>';
+    chip.appendChild(removeButton);
+    fileList.appendChild(chip);
+  });
+}
+
 function initializeWorkspaceSplitPane() {
   const root = document.querySelector("[data-workspace-split-root]");
   const streamPane = root?.querySelector?.("[data-workspace-stream-pane]");
@@ -1686,6 +1771,34 @@ async function postJson(url, payload = {}, method = "POST") {
   return responsePayload;
 }
 
+async function postMultipart(url, formData, form, method = "POST") {
+  const response = await fetch(url, {
+    method,
+    headers: {
+      "X-Requested-With": "XMLHttpRequest",
+      "X-CSRFToken": csrfToken(form),
+    },
+    credentials: "same-origin",
+    body: formData,
+  });
+  const isJson = response.headers.get("content-type")?.includes("application/json");
+  const responsePayload = isJson ? await response.json().catch(() => null) : null;
+  if (response.status === 401 || response.status === 403) {
+    openAuthModal("login");
+    const error = new Error(`Authentication required: ${response.status}`);
+    error.status = response.status;
+    error.payload = responsePayload;
+    throw error;
+  }
+  if (!response.ok) {
+    const error = new Error(`Request failed: ${response.status}`);
+    error.status = response.status;
+    error.payload = responsePayload;
+    throw error;
+  }
+  return responsePayload;
+}
+
 document.addEventListener("submit", async (event) => {
   if (event.defaultPrevented) {
     return;
@@ -1787,11 +1900,17 @@ document.addEventListener("submit", async (event) => {
   const payload = serializeForm(form);
   const method = form.dataset.apiMethod || "POST";
   const submitButton = form.querySelector("[data-api-submit-button]") || form.querySelector("button[type='submit']");
+  const isStreamComposer = Boolean(streamComposerNode(form));
   try {
     setAsyncButtonSubmitting(submitButton, true);
-    await postJson(form.dataset.apiForm, { ...payload, __form: form }, method);
-    if (workspaceLiveRefreshEnabled() && streamComposerNode(form)) {
+    if (isStreamComposer) {
+      await postMultipart(form.dataset.apiForm, new FormData(form), form, method);
+    } else {
+      await postJson(form.dataset.apiForm, { ...payload, __form: form }, method);
+    }
+    if (workspaceLiveRefreshEnabled() && isStreamComposer) {
       form.reset();
+      syncStreamComposerFiles(form);
       form.querySelector("[data-stream-input]")?.focus();
       const refreshed = await refreshWorkspaceLiveRegions({ force: true });
       if (!refreshed) {
@@ -1865,6 +1984,34 @@ document.addEventListener("click", async (event) => {
   if (projectSettingsClose) {
     event.preventDefault();
     closeProjectSettingsModal();
+    return;
+  }
+
+  const streamFilesTrigger = event.target.closest("[data-stream-files-trigger]");
+  if (streamFilesTrigger) {
+    event.preventDefault();
+    const form = streamFilesTrigger.closest("[data-workspace-stream-composer]");
+    const input = streamComposerFileInput(form);
+    if (!input) {
+      return;
+    }
+    input.__previousFiles = streamComposerSelectedFiles(form);
+    input.click();
+    return;
+  }
+
+  const streamFileRemoveButton = event.target.closest("[data-stream-file-remove]");
+  if (streamFileRemoveButton) {
+    event.preventDefault();
+    const form = streamFileRemoveButton.closest("[data-workspace-stream-composer]");
+    const fileIndex = Number.parseInt(streamFileRemoveButton.dataset.streamFileRemove || "", 10);
+    if (!form || Number.isNaN(fileIndex)) {
+      return;
+    }
+    const files = streamComposerSelectedFiles(form);
+    files.splice(fileIndex, 1);
+    setStreamComposerFiles(form, files);
+    syncStreamComposerFiles(form);
     return;
   }
 
@@ -2085,6 +2232,32 @@ document.addEventListener("keydown", (event) => {
   closeProjectSettingsModal();
 });
 
+document.addEventListener("change", (event) => {
+  const fileInput = event.target.closest("[data-stream-file-input]");
+  if (!fileInput) {
+    return;
+  }
+  const form = fileInput.closest("[data-workspace-stream-composer]");
+  if (!form) {
+    return;
+  }
+
+  const previousFiles = Array.isArray(fileInput.__previousFiles) ? fileInput.__previousFiles : [];
+  const mergedFiles = [...previousFiles];
+  const existingKeys = new Set(previousFiles.map(streamComposerFileKey));
+  Array.from(fileInput.files || []).forEach((file) => {
+    const fileKey = streamComposerFileKey(file);
+    if (existingKeys.has(fileKey)) {
+      return;
+    }
+    existingKeys.add(fileKey);
+    mergedFiles.push(file);
+  });
+  delete fileInput.__previousFiles;
+  setStreamComposerFiles(form, mergedFiles);
+  syncStreamComposerFiles(form);
+});
+
 document.addEventListener("input", (event) => {
   const documentCreateForm = event.target.closest("[data-document-create-form]");
   if (documentCreateForm && event.target.name === "title") {
@@ -2113,6 +2286,9 @@ initializeSectionActionControls();
 initializeSectionAiControls();
 initializeWorkspaceSplitPane();
 initializeSpecNavigation();
+document.querySelectorAll("[data-workspace-stream-composer]").forEach((form) => {
+  syncStreamComposerFiles(form);
+});
 setAuthMode("login");
 
 const autoRefreshMs = Number(document.body.dataset.autoRefresh || 0);

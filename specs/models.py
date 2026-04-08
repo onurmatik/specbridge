@@ -131,6 +131,8 @@ class AIUsageOperation(models.TextChoices):
     CONCERN_REEVALUATION = "concern_reevaluation", "Concern Re-Evaluation"
     CONCERN_PROPOSAL = "concern_proposal", "Concern Proposal"
     CONSISTENCY_SCAN = "consistency_scan", "Consistency Scan"
+    ATTACHMENT_SUMMARY = "attachment_summary", "Attachment Summary"
+    STREAM_SPEC_APPLY = "stream_spec_apply", "Stream Spec Apply"
 
 
 class ProjectSpecDocument(TimeStampedModel):

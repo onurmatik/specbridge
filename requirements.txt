@@ -55,6 +55,8 @@ jmespath==1.1.0
     # via
     #   boto3
     #   botocore
+lxml==6.0.2
+    # via python-docx
 packaging==26.0
     # via gunicorn
 paramiko==4.0.0
@@ -69,8 +71,12 @@ pyjwt==2.12.1
     # via specbridge
 pynacl==1.6.2
     # via paramiko
+pypdf==6.9.2
+    # via specbridge
 python-dateutil==2.9.0.post0
     # via botocore
+python-docx==1.2.0
+    # via specbridge
 python-dotenv==1.2.2
     # via specbridge
 requests==2.33.1
@@ -86,6 +92,7 @@ typing-extensions==4.15.0
     #   dj-database-url
     #   pydantic
     #   pydantic-core
+    #   python-docx
     #   typing-inspection
 typing-inspection==0.4.2
     # via pydantic

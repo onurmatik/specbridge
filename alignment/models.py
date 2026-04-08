@@ -1,5 +1,9 @@
+import os
+import uuid
+
 from django.conf import settings
 from django.db import models
+from django.utils.text import slugify
 
 from specbridge.model_mixins import TimeStampedModel
 
@@ -8,6 +12,12 @@ class StreamPostKind(models.TextChoices):
     COMMENT = "comment", "Comment"
     DECISION = "decision", "Decision"
     AGENT = "agent", "Agent"
+
+
+class StreamAttachmentExtractionStatus(models.TextChoices):
+    PENDING = "pending", "Pending"
+    COMPLETED = "completed", "Completed"
+    FAILED = "failed", "Failed"
 
 
 class IssueSeverity(models.TextChoices):
@@ -56,6 +66,45 @@ class StreamPost(TimeStampedModel):
 
     def __str__(self):
         return f"{self.project.slug}: {self.actor_name}"
+
+
+def stream_attachment_upload_to(instance, filename: str) -> str:
+    _, extension = os.path.splitext(filename or "")
+    project_slug = slugify(getattr(instance.project, "slug", "")) or "project"
+    post_id = getattr(instance.post, "pk", None) or "stream-post"
+    return f"stream-attachments/{project_slug}/{post_id}/{uuid.uuid4().hex}{extension.lower()}"
+
+
+class StreamAttachment(TimeStampedModel):
+    project = models.ForeignKey("projects.Project", on_delete=models.CASCADE, related_name="stream_attachments")
+    post = models.ForeignKey(StreamPost, on_delete=models.CASCADE, related_name="attachments")
+    stored_file = models.FileField(upload_to=stream_attachment_upload_to, max_length=500)
+    original_name = models.CharField(max_length=255)
+    content_type = models.CharField(max_length=120, blank=True)
+    size_bytes = models.PositiveBigIntegerField(default=0)
+    extension = models.CharField(max_length=24, blank=True)
+    extracted_text = models.TextField(blank=True)
+    extracted_char_count = models.PositiveIntegerField(default=0)
+    extraction_status = models.CharField(
+        max_length=16,
+        choices=StreamAttachmentExtractionStatus.choices,
+        default=StreamAttachmentExtractionStatus.PENDING,
+    )
+    extraction_error = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["created_at"]
+        indexes = [
+            models.Index(fields=["project", "created_at"]),
+            models.Index(fields=["post", "created_at"]),
+        ]
+
+    @property
+    def download_url(self) -> str:
+        return f"/api/projects/{self.project.slug}/files/{self.id}/download"
+
+    def __str__(self):
+        return self.original_name or os.path.basename(self.stored_file.name)
 
 
 class OpenQuestion(TimeStampedModel):

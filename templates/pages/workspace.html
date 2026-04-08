@@ -20,23 +20,68 @@
 
         <div class="border-t border-gray-200 bg-gray-50 p-4">
           {% if request.user.is_authenticated %}
-            <form class="field-shell stream-composer-shell" data-api-form="/api/projects/{{ project.slug }}/stream" data-workspace-stream-composer>
+            <form
+              class="field-shell stream-composer-shell"
+              data-api-form="/api/projects/{{ project.slug }}/stream"
+              data-workspace-stream-composer
+              enctype="multipart/form-data"
+            >
               {% csrf_token %}
               {% if selected_concern %}
                 <input type="hidden" name="concern_id" value="{{ selected_concern.id }}">
               {% endif %}
+              <input
+                type="file"
+                name="files"
+                multiple
+                accept=".txt,.md,.markdown,.pdf,.docx"
+                class="hidden"
+                data-stream-file-input
+              >
               <div class="p-4">
+                <div class="hidden flex-wrap gap-2" data-stream-file-list></div>
+                <div class="hidden mt-3 flex-wrap gap-2" data-stream-file-helper-prompts>
+                  <button
+                    type="button"
+                    class="workspace-badge border-blue-100 bg-blue-50 text-blue-700 transition hover:border-blue-200 hover:bg-blue-50/70"
+                    data-stream-prompt="Populate the spec with this."
+                    data-stream-prompt-mode="append"
+                  >
+                    Populate the spec with this
+                  </button>
+                  <button
+                    type="button"
+                    class="workspace-badge border-gray-200 bg-white text-gray-600 transition hover:border-gray-300 hover:text-gray-900"
+                    data-stream-prompt="Update the current spec to align with this document."
+                    data-stream-prompt-mode="append"
+                  >
+                    Update the current spec to align with this doc
+                  </button>
+                  <button
+                    type="button"
+                    class="workspace-badge border-gray-200 bg-white text-gray-600 transition hover:border-gray-300 hover:text-gray-900"
+                    data-stream-prompt="Add an integration section that complies with this document."
+                    data-stream-prompt-mode="append"
+                  >
+                    Add an integration section that complies with this doc
+                  </button>
+                </div>
                 <textarea
                   name="body"
                   rows="3"
-                  required
                   data-stream-input
-                  class="w-full resize-none border-none bg-transparent p-0 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-0"
-                  placeholder="{% if selected_concern %}Capture a decision, challenge, or follow-up for this concern.{% else %}Add to the discussion or propose a decision...{% endif %}"
+                  class="mt-3 w-full resize-none border-none bg-transparent p-0 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-0"
+                  placeholder="{% if selected_concern %}Capture a decision, challenge, follow-up, or file-backed spec update for this concern.{% else %}Add to the discussion, propose a decision, or upload a reference document...{% endif %}"
                 ></textarea>
+                <p class="mt-3 text-xs leading-relaxed text-gray-500">
+                  Upload up to 5 files. Supported: TXT, MD, PDF, DOCX. Max 20 MB each.
+                </p>
               </div>
               <div class="flex items-center justify-between gap-3 border-t border-gray-100 px-3 py-2">
                 <div class="flex gap-1">
+                  <button type="button" class="icon-button" title="Upload files" data-stream-files-trigger>
+                    <iconify-icon icon="lucide:paperclip"></iconify-icon>
+                  </button>
                   <button type="button" class="icon-button" title="Mention someone" data-stream-prompt="@" data-stream-prompt-mode="append">
                     <iconify-icon icon="lucide:at-sign"></iconify-icon>
                   </button>
