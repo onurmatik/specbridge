@@ -94,12 +94,17 @@
                       </div>
                     {% endif %}
                   </div>
-                  <div class="min-w-0">
-                    <div class="flex flex-wrap items-center gap-2">
-                      <span class="workspace-badge border-blue-100 bg-blue-50 text-blue-700">Files uploaded</span>
-                      {% if item.concern %}
-                        <span class="workspace-badge border-gray-200 bg-white text-gray-600">Concern thread</span>
-                      {% endif %}
+                    <div class="min-w-0">
+                      <div class="flex flex-wrap items-center gap-2">
+                        <span class="workspace-badge border-blue-100 bg-blue-50 text-blue-700">Files uploaded</span>
+                        {% if item.post.processing_status == "pending" %}
+                          <span class="workspace-badge border-amber-100 bg-amber-50 text-amber-700">Processing</span>
+                        {% elif item.post.processing_status == "failed" %}
+                          <span class="workspace-badge border-red-100 bg-red-50 text-red-700">Processing failed</span>
+                        {% endif %}
+                        {% if item.concern %}
+                          <span class="workspace-badge border-gray-200 bg-white text-gray-600">Concern thread</span>
+                        {% endif %}
                     </div>
                     <div class="mt-3 text-sm font-medium text-gray-900">{{ item.post.actor_name }}</div>
                     <div class="text-xs text-gray-400">{{ item.post.actor_title|default:"Contributor" }}</div>
@@ -116,7 +121,9 @@
                           <span class="text-sm font-semibold text-gray-900">{{ attachment.original_name }}</span>
                           <span class="workspace-badge border-gray-200 bg-white text-gray-600">{{ attachment.extension|default:"file"|upper|cut:"." }}</span>
                           <span class="workspace-badge border-gray-200 bg-white text-gray-600">{{ attachment.size_bytes|filesizeformat }}</span>
-                          {% if attachment.extraction_status == "failed" %}
+                          {% if item.post.processing_status == "pending" %}
+                            <span class="workspace-badge border-amber-100 bg-amber-50 text-amber-700">Processing</span>
+                          {% elif attachment.extraction_status == "failed" %}
                             <span class="workspace-badge border-red-100 bg-red-50 text-red-700">AI unavailable</span>
                           {% endif %}
                         </div>
@@ -167,6 +174,11 @@
                             <span class="truncate text-sm font-medium text-gray-900">{{ attachment.original_name }}</span>
                             <span class="workspace-badge border-gray-200 bg-white text-gray-600">{{ attachment.extension|default:"file"|upper|cut:"." }}</span>
                             <span class="workspace-badge border-gray-200 bg-white text-gray-600">{{ attachment.size_bytes|filesizeformat }}</span>
+                            {% if item.post.processing_status == "pending" %}
+                              <span class="workspace-badge border-amber-100 bg-amber-50 text-amber-700">Processing</span>
+                            {% elif item.post.processing_status == "failed" %}
+                              <span class="workspace-badge border-red-100 bg-red-50 text-red-700">Processing failed</span>
+                            {% endif %}
                           </div>
                           {% if attachment.extraction_error %}
                             <div class="mt-1 text-xs text-red-600">{{ attachment.extraction_error }}</div>
@@ -238,6 +250,11 @@
                   <span class="workspace-badge border-blue-100 bg-blue-50 text-blue-700">File</span>
                   <span class="workspace-badge border-gray-200 bg-white text-gray-600">{{ item.attachment.extension|default:"file"|upper|cut:"." }}</span>
                   <span class="workspace-badge border-gray-200 bg-white text-gray-600">{{ item.attachment.size_bytes|filesizeformat }}</span>
+                  {% if item.post.processing_status == "pending" %}
+                    <span class="workspace-badge border-amber-100 bg-amber-50 text-amber-700">Processing</span>
+                  {% elif item.post.processing_status == "failed" %}
+                    <span class="workspace-badge border-red-100 bg-red-50 text-red-700">Processing failed</span>
+                  {% endif %}
                   {% if item.concern %}
                     <span class="workspace-badge border-gray-200 bg-white text-gray-600">Concern thread</span>
                   {% endif %}

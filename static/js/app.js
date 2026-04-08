@@ -1932,12 +1932,16 @@ document.addEventListener("submit", async (event) => {
   const method = form.dataset.apiMethod || "POST";
   const submitButton = form.querySelector("[data-api-submit-button]") || form.querySelector("button[type='submit']");
   const isStreamComposer = Boolean(streamComposerNode(form));
+  const isFileBackedStreamSubmit = isStreamComposer && streamComposerSelectedFiles(form).length > 0;
   try {
-    setAsyncButtonSubmitting(submitButton, true);
+    if (!isFileBackedStreamSubmit) {
+      setAsyncButtonSubmitting(submitButton, true);
+    }
+    let responsePayload;
     if (isStreamComposer) {
-      await postMultipart(form.dataset.apiForm, new FormData(form), form, method);
+      responsePayload = await postMultipart(form.dataset.apiForm, new FormData(form), form, method);
     } else {
-      await postJson(form.dataset.apiForm, { ...payload, __form: form }, method);
+      responsePayload = await postJson(form.dataset.apiForm, { ...payload, __form: form }, method);
     }
     if (workspaceLiveRefreshEnabled() && isStreamComposer) {
       form.reset();
@@ -1946,6 +1950,18 @@ document.addEventListener("submit", async (event) => {
       const refreshed = await refreshWorkspaceLiveRegions({ force: true });
       if (!refreshed) {
         window.location.reload();
+      }
+      if (responsePayload?.processing_pending && responsePayload?.processing_url) {
+        postJson(responsePayload.processing_url, {})
+          .catch((error) => {
+            console.error(error);
+          })
+          .finally(async () => {
+            const nextRefresh = await refreshWorkspaceLiveRegions({ force: true });
+            if (!nextRefresh) {
+              window.location.reload();
+            }
+          });
       }
       return;
     }
@@ -1957,7 +1973,9 @@ document.addEventListener("submit", async (event) => {
     }
     window.alert("Action failed. Check the console for details.");
   } finally {
-    setAsyncButtonSubmitting(submitButton, false);
+    if (!isFileBackedStreamSubmit) {
+      setAsyncButtonSubmitting(submitButton, false);
+    }
   }
 });
 

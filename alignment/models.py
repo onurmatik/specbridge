@@ -20,6 +20,13 @@ class StreamAttachmentExtractionStatus(models.TextChoices):
     FAILED = "failed", "Failed"
 
 
+class StreamPostProcessingStatus(models.TextChoices):
+    IDLE = "idle", "Idle"
+    PENDING = "pending", "Pending"
+    COMPLETED = "completed", "Completed"
+    FAILED = "failed", "Failed"
+
+
 class IssueSeverity(models.TextChoices):
     LOW = "low", "Low"
     MEDIUM = "medium", "Medium"
@@ -60,6 +67,12 @@ class StreamPost(TimeStampedModel):
         related_name="posts",
     )
     body = models.TextField()
+    processing_status = models.CharField(
+        max_length=16,
+        choices=StreamPostProcessingStatus.choices,
+        default=StreamPostProcessingStatus.IDLE,
+    )
+    processing_error = models.TextField(blank=True)
 
     class Meta:
         ordering = ["created_at"]

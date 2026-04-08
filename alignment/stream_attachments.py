@@ -9,7 +9,13 @@ from django.utils import timezone
 from docx import Document
 from pypdf import PdfReader
 
-from alignment.models import StreamAttachment, StreamAttachmentExtractionStatus, StreamPost, StreamPostKind
+from alignment.models import (
+    StreamAttachment,
+    StreamAttachmentExtractionStatus,
+    StreamPost,
+    StreamPostKind,
+    StreamPostProcessingStatus,
+)
 from specs.models import AIUsageOperation
 from specs.openai import OpenAIUsageContext, request_openai_json_schema
 from specs.services import apply_batch_spec_operations, section_summaries
@@ -97,8 +103,8 @@ class StreamSpecApplyError(Exception):
 class StreamSpecApplyResult:
     summary: str
     applied_operations: list[dict]
-    project_revision: object
-    agent_post: StreamPost
+    project_revision: object | None
+    agent_post: StreamPost | None
 
 
 def touch_project_activity(project) -> None:
@@ -228,6 +234,61 @@ def attach_files_to_post(post: StreamPost, uploaded_files) -> list[StreamAttachm
         )
         attachments.append(attachment)
     return attachments
+
+
+@transaction.atomic
+def create_pending_attachments_for_post(post: StreamPost, uploaded_files) -> list[StreamAttachment]:
+    attachments: list[StreamAttachment] = []
+    for uploaded_file in uploaded_files or []:
+        extension = normalize_attachment_extension(getattr(uploaded_file, "name", ""))
+        attachments.append(
+            StreamAttachment.objects.create(
+                project=post.project,
+                post=post,
+                stored_file=uploaded_file,
+                original_name=getattr(uploaded_file, "name", "upload"),
+                content_type=getattr(uploaded_file, "content_type", "") or "",
+                size_bytes=max(int(getattr(uploaded_file, "size", 0) or 0), 0),
+                extension=extension,
+                extraction_status=StreamAttachmentExtractionStatus.PENDING,
+            )
+        )
+    return attachments
+
+
+def set_post_processing_state(post: StreamPost, status: str, *, error: str = "") -> StreamPost:
+    post.processing_status = status
+    post.processing_error = error
+    post.save(update_fields=["processing_status", "processing_error", "updated_at"])
+    return post
+
+
+def extract_pending_attachments(post: StreamPost) -> list[StreamAttachment]:
+    attachments = list(post.attachments.all())
+    for attachment in attachments:
+        if attachment.extraction_status != StreamAttachmentExtractionStatus.PENDING:
+            continue
+        try:
+            extracted_text = extract_text_from_attachment(attachment)
+            attachment.extracted_text = extracted_text
+            attachment.extracted_char_count = len(extracted_text)
+            attachment.extraction_status = StreamAttachmentExtractionStatus.COMPLETED
+            attachment.extraction_error = ""
+        except StreamAttachmentExtractionError as exc:
+            attachment.extracted_text = ""
+            attachment.extracted_char_count = 0
+            attachment.extraction_status = StreamAttachmentExtractionStatus.FAILED
+            attachment.extraction_error = str(exc)
+        attachment.save(
+            update_fields=[
+                "extracted_text",
+                "extracted_char_count",
+                "extraction_status",
+                "extraction_error",
+                "updated_at",
+            ]
+        )
+    return list(post.attachments.all())
 
 
 def _request_openai(
@@ -442,6 +503,60 @@ def process_uploaded_documents_for_post(post: StreamPost, *, prompt: str, actor=
         project_revision=apply_result["project_revision"],
         agent_post=agent_post,
     )
+
+
+def process_stream_post_upload(post: StreamPost, *, actor=None) -> StreamSpecApplyResult:
+    if post.processing_status == StreamPostProcessingStatus.COMPLETED:
+        return StreamSpecApplyResult(
+            summary="",
+            applied_operations=[],
+            project_revision=None,
+            agent_post=None,
+        )
+    set_post_processing_state(post, StreamPostProcessingStatus.PENDING)
+    attachments = extract_pending_attachments(post)
+    failed_attachments = [
+        attachment.original_name
+        for attachment in attachments
+        if attachment.extraction_status != StreamAttachmentExtractionStatus.COMPLETED
+    ]
+    if failed_attachments:
+        message = "Couldn't extract usable text from: " + ", ".join(failed_attachments) + "."
+        set_post_processing_state(post, StreamPostProcessingStatus.FAILED, error=message)
+        agent_post = create_failed_upload_notice(post, message=message) if (post.body or "").strip() else None
+        touch_project_activity(post.project)
+        return StreamSpecApplyResult(
+            summary="",
+            applied_operations=[],
+            project_revision=None,
+            agent_post=agent_post,
+        )
+
+    if not (post.body or "").strip():
+        set_post_processing_state(post, StreamPostProcessingStatus.COMPLETED)
+        touch_project_activity(post.project)
+        return StreamSpecApplyResult(
+            summary="",
+            applied_operations=[],
+            project_revision=None,
+            agent_post=None,
+        )
+
+    try:
+        result = process_uploaded_documents_for_post(post, prompt=post.body, actor=actor)
+    except StreamSpecApplyError as exc:
+        set_post_processing_state(post, StreamPostProcessingStatus.FAILED, error=str(exc))
+        agent_post = create_failed_upload_notice(post, message=str(exc))
+        touch_project_activity(post.project)
+        return StreamSpecApplyResult(
+            summary="",
+            applied_operations=[],
+            project_revision=None,
+            agent_post=agent_post,
+        )
+
+    set_post_processing_state(post, StreamPostProcessingStatus.COMPLETED)
+    return result
 
 
 def create_failed_upload_notice(post: StreamPost, *, message: str) -> StreamPost:

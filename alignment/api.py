@@ -8,11 +8,10 @@ from ninja.security import django_auth
 from alignment.models import Decision, OpenQuestion, StreamPost
 from alignment.stream_attachments import (
     StreamAttachmentValidationError,
-    StreamSpecApplyError,
-    attach_files_to_post,
-    create_failed_upload_notice,
-    process_uploaded_documents_for_post,
+    create_pending_attachments_for_post,
+    process_stream_post_upload,
     serialize_stream_attachment,
+    set_post_processing_state,
     touch_project_activity,
     validate_stream_uploads,
 )
@@ -44,6 +43,8 @@ def _serialize_stream_post(post: StreamPost) -> dict:
         "kind": post.kind,
         "concern_id": post.concern_id,
         "body": post.body,
+        "processing_status": post.processing_status,
+        "processing_error": post.processing_error,
         "created_at": post.created_at.isoformat(),
         "attachments": [serialize_stream_attachment(attachment) for attachment in attachments],
     }
@@ -95,25 +96,16 @@ def create_stream_post(request, slug: str):
         body=body,
     )
     touch_project_activity(project)
-    attachments = attach_files_to_post(post, uploaded_files)
-
-    spec_apply_ok = None
-    spec_apply_message = ""
-    if attachments and body:
-        try:
-            process_uploaded_documents_for_post(post, prompt=body, actor=actor)
-            spec_apply_ok = True
-        except StreamSpecApplyError as exc:
-            create_failed_upload_notice(post, message=str(exc))
-            spec_apply_ok = False
-            spec_apply_message = str(exc)
+    attachments = create_pending_attachments_for_post(post, uploaded_files)
+    if attachments:
+        set_post_processing_state(post, "pending")
 
     post = project.stream_posts.prefetch_related("attachments").get(pk=post.pk)
     response_payload = _serialize_stream_post(post)
     response_payload.update(
         {
-            "spec_apply_ok": spec_apply_ok,
-            "spec_apply_message": spec_apply_message,
+            "processing_pending": bool(attachments),
+            "processing_url": f"/api/projects/{project.slug}/stream/{post.id}/process-files" if attachments else "",
         }
     )
     return response_payload
@@ -126,6 +118,25 @@ def promote_stream_post_to_concern(request, slug: str, post_id: int):
     post = project.stream_posts.get(pk=post_id)
     concern = create_human_concern_from_post(post, actor=actor)
     return {"ok": True, "concern_id": concern.id}
+
+
+@router.post("/{slug}/stream/{post_id}/process-files", auth=django_auth)
+def process_stream_post_files(request, slug: str, post_id: int):
+    project = get_project_or_404(slug, request.user)
+    actor = resolve_actor(request, project)
+    post = project.stream_posts.prefetch_related("attachments").filter(pk=post_id).first()
+    if not post:
+        return JsonResponse({"ok": False, "errors": {"post": ["Post not found."]}}, status=404)
+    if not post.attachments.exists():
+        return {"ok": True, "status": post.processing_status}
+    result = process_stream_post_upload(post, actor=actor)
+    post.refresh_from_db()
+    return {
+        "ok": True,
+        "status": post.processing_status,
+        "processing_error": post.processing_error,
+        "agent_post_id": result.agent_post.id if result.agent_post else None,
+    }
 
 
 @router.get("/{slug}/files/{attachment_id}/download")

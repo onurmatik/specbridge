@@ -1,4 +1,5 @@
 import json
+import re
 import tempfile
 from datetime import timedelta
 
@@ -10,10 +11,10 @@ from django.test.utils import override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from alignment.models import StreamPost
+from alignment.models import StreamPost, StreamPostProcessingStatus
 from alignment.stream_attachments import attach_files_to_post
 from projects.demo import ensure_demo_workspace
-from projects.invitations import invitation_token
+from projects.invitations import get_invite_for_token, invitation_token
 from projects.models import MembershipRole, Project, ProjectInvite, ProjectMembership
 from projects.services import create_project_workspace
 
@@ -201,6 +202,19 @@ class ProjectPageTests(TestCase):
             response,
             "We need each core planning area in one shared spec now. I still want magic links to be the primary direction, but contradictions across sections must be visible.",
         )
+
+    def test_workspace_files_filter_shows_processing_badge_for_pending_uploads(self):
+        self.client.force_login(self.project.created_by)
+        post = self._create_attachment_post(filename="integration-guide.txt", content="Partner integration guide")
+        post.processing_status = StreamPostProcessingStatus.PENDING
+        post.save(update_fields=["processing_status", "updated_at"])
+
+        response = self.client.get(f"{reverse('project-workspace', args=[self.project.slug])}?stream=files")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "integration-guide.txt")
+        self.assertContains(response, "Processing")
+        self.assertNotContains(response, "Processing failed")
 
     def test_workspace_live_fragment_renders_only_live_regions(self):
         self.client.force_login(self.project.created_by)
@@ -618,7 +632,9 @@ class ProjectPageTests(TestCase):
         self.assertEqual(len(mail.outbox), 1)
         self.assertIn("invited you to", mail.outbox[0].subject)
         self.assertIn(invite.email, mail.outbox[0].to)
-        self.assertIn(reverse("project-invite-accept", args=[invitation_token(invite)]), mail.outbox[0].body)
+        invite_match = re.search(r"http://testserver(/invites/(?P<token>[^/]+)/)", mail.outbox[0].body)
+        self.assertIsNotNone(invite_match)
+        self.assertEqual(get_invite_for_token(invite_match.group("token")), invite)
 
     def test_authenticated_user_can_revoke_pending_invite(self):
         self.client.force_login(self.project.created_by)

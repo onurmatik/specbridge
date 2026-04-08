@@ -16,10 +16,12 @@ from alignment.models import (
     StreamAttachmentExtractionStatus,
     StreamPost,
     StreamPostKind,
+    StreamPostProcessingStatus,
 )
 from alignment.stream_attachments import (
-    StreamSpecApplyError,
+    StreamSpecApplyResult,
     attach_files_to_post,
+    process_stream_post_upload,
     process_uploaded_documents_for_post,
 )
 from projects.demo import ensure_demo_workspace
@@ -170,8 +172,7 @@ class AlignmentApiTests(AlignmentMediaTestCase):
         self.assertEqual(attachment.original_name, "existing-spec.txt")
         self.assertEqual(response.json()["attachments"][0]["original_name"], "existing-spec.txt")
 
-    @patch("alignment.api.process_uploaded_documents_for_post")
-    def test_create_stream_post_with_body_and_files_runs_spec_apply(self, mock_process_uploaded_documents):
+    def test_create_stream_post_with_body_and_files_returns_processing_handle(self):
         response = self.client.post(
             f"/api/projects/{self.project.slug}/stream",
             data={
@@ -183,28 +184,58 @@ class AlignmentApiTests(AlignmentMediaTestCase):
         self.assertEqual(response.status_code, 200)
         post = StreamPost.objects.get(pk=response.json()["id"])
         self.assertEqual(post.attachments.count(), 1)
-        mock_process_uploaded_documents.assert_called_once()
-        self.assertTrue(response.json()["spec_apply_ok"])
+        self.assertEqual(post.processing_status, StreamPostProcessingStatus.PENDING)
+        self.assertTrue(response.json()["processing_pending"])
+        self.assertIn(f"/api/projects/{self.project.slug}/stream/{post.id}/process-files", response.json()["processing_url"])
 
-    @patch("alignment.api.process_uploaded_documents_for_post")
-    def test_create_stream_post_with_apply_failure_keeps_post_and_creates_agent_notice(
-        self,
-        mock_process_uploaded_documents,
-    ):
-        mock_process_uploaded_documents.side_effect = StreamSpecApplyError("AI failed")
-
+    @patch("alignment.api.process_stream_post_upload")
+    def test_process_stream_post_files_endpoint_runs_background_processing(self, mock_process_stream_post_upload):
         response = self.client.post(
             f"/api/projects/{self.project.slug}/stream",
             data={
                 "body": "Populate the spec with this.",
-                "files": self.make_text_file(name="broken.txt", content="Broken doc"),
+                "files": self.make_text_file(name="integration.txt", content="Integration requirements"),
             },
         )
-
-        self.assertEqual(response.status_code, 200)
         post = StreamPost.objects.get(pk=response.json()["id"])
+        post.processing_status = StreamPostProcessingStatus.COMPLETED
+        post.save(update_fields=["processing_status", "updated_at"])
+        mock_process_stream_post_upload.return_value = StreamSpecApplyResult(
+            summary="",
+            applied_operations=[],
+            project_revision=None,
+            agent_post=None,
+        )
+
+        process_response = self.client.post(
+            f"/api/projects/{self.project.slug}/stream/{post.id}/process-files",
+            data=json.dumps({}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(process_response.status_code, 200)
+        mock_process_stream_post_upload.assert_called_once()
+
+    def test_process_stream_post_files_failure_keeps_post_and_creates_agent_notice(self):
+        response = self.client.post(
+            f"/api/projects/{self.project.slug}/stream",
+            data={
+                "body": "Populate the spec with this.",
+                "files": self.make_blank_pdf_file(name="broken.pdf"),
+            },
+        )
+        post = StreamPost.objects.get(pk=response.json()["id"])
+
+        process_response = self.client.post(
+            f"/api/projects/{self.project.slug}/stream/{post.id}/process-files",
+            data=json.dumps({}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(process_response.status_code, 200)
+        post.refresh_from_db()
         self.assertEqual(post.attachments.count(), 1)
-        self.assertFalse(response.json()["spec_apply_ok"])
+        self.assertEqual(post.processing_status, StreamPostProcessingStatus.FAILED)
         self.assertTrue(
             StreamPost.objects.filter(project=self.project, kind=StreamPostKind.AGENT, concern=post.concern).exists()
         )
