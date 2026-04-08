@@ -5,12 +5,12 @@ import hashlib
 import json
 from copy import deepcopy
 from dataclasses import dataclass
-from urllib import error, request
 
 from django.conf import settings
 from django.utils import timezone
 
 from specs.models import (
+    AIUsageOperation,
     AuditEventType,
     ConcernProposal,
     ConcernProposalChange,
@@ -24,6 +24,7 @@ from specs.models import (
     ConcernType,
     ProjectConcern,
 )
+from specs.openai import OpenAIUsageContext, request_openai_json_schema
 from specs.services import (
     build_primary_ref_for_identifier,
     build_project_snapshot,
@@ -36,12 +37,9 @@ from specs.spec_document import (
     collect_refs_from_text,
     find_section,
     markdown_to_blocks,
-    normalized_spec_content,
     section_catalog,
     section_summary,
 )
-
-OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
 AI_CONCERN_SCOPES = (
     ConcernType.CONSISTENCY,
     ConcernType.IMPLEMENTABILITY,
@@ -174,27 +172,6 @@ class ConcernProposalResult:
     changes: list[dict]
 
 
-def _extract_output_text(response_payload: dict) -> str:
-    output_text = response_payload.get("output_text")
-    if output_text:
-        return output_text
-
-    fragments: list[str] = []
-    for output_item in response_payload.get("output", []):
-        for content_item in output_item.get("content", []):
-            text = content_item.get("text")
-            if text:
-                fragments.append(text)
-    return "\n".join(fragment for fragment in fragments if fragment)
-
-
-def _truncate_prompt(prompt: str) -> str:
-    max_chars = getattr(settings, "OPENAI_DEFAULT_MAX_INSTRUCTION_CHARS", None)
-    if max_chars is None or max_chars <= 0 or len(prompt) <= max_chars:
-        return prompt
-    return prompt[:max_chars].rstrip() + "\n\n[TRUNCATED]"
-
-
 def _normalize_fingerprint(raw_value: str, fallback_seed: str) -> str:
     candidate = (raw_value or "").strip().lower()
     digest_seed = candidate or fallback_seed
@@ -212,73 +189,28 @@ def _normalize_concern_type(value: str) -> str:
     return value if value in allowed else ConcernType.HUMAN_FLAG
 
 
-def _request_openai(*, schema_name: str, schema: dict, prompt: str, max_output_tokens: int | None = None) -> tuple[str, dict]:
-    api_key = getattr(settings, "OPENAI_API_KEY", "")
-    if not api_key:
-        raise ConcernError("OPENAI_API_KEY is not configured.")
-
-    model = getattr(settings, "OPENAI_DEFAULT_MODEL", "gpt-5-mini")
-    timeout_seconds = getattr(settings, "OPENAI_DEFAULT_TIMEOUT_SECONDS", None)
-    if timeout_seconds is not None:
-        timeout_seconds = max(timeout_seconds, 1)
-    configured_max_output_tokens = (
-        max_output_tokens
-        if max_output_tokens is not None
-        else getattr(settings, "OPENAI_DEFAULT_MAX_OUTPUT_TOKENS", None)
+def _request_openai(
+    *,
+    schema_name: str,
+    schema: dict,
+    prompt: str,
+    max_output_tokens: int | None = None,
+    usage_context: OpenAIUsageContext | None = None,
+) -> tuple[str, dict]:
+    response = request_openai_json_schema(
+        schema_name=schema_name,
+        schema=schema,
+        prompt=prompt,
+        error_cls=ConcernError,
+        empty_output_message="OpenAI returned an empty concern response.",
+        incomplete_output_message="OpenAI response was incomplete (reason: {reason}).",
+        max_output_tokens=max_output_tokens,
+        usage_context=usage_context,
     )
-    if configured_max_output_tokens is not None:
-        configured_max_output_tokens = max(configured_max_output_tokens, 1)
-    reasoning_effort = getattr(settings, "OPENAI_DEFAULT_REASONING_EFFORT", None)
-    payload = {
-        "model": model,
-        "input": _truncate_prompt(prompt),
-        "text": {
-            "format": {
-                "type": "json_schema",
-                "name": schema_name,
-                "strict": True,
-                "schema": schema,
-            }
-        },
-    }
-    if configured_max_output_tokens is not None:
-        payload["max_output_tokens"] = configured_max_output_tokens
-    if reasoning_effort:
-        payload["reasoning"] = {"effort": reasoning_effort}
-    response = request.Request(
-        OPENAI_RESPONSES_URL,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
-
     try:
-        if timeout_seconds is None:
-            http_response_context = request.urlopen(response)
-        else:
-            http_response_context = request.urlopen(response, timeout=timeout_seconds)
-        with http_response_context as http_response:
-            body = http_response.read().decode("utf-8")
-    except error.HTTPError as exc:
-        details = exc.read().decode("utf-8", errors="replace")
-        raise ConcernError(f"OpenAI request failed with HTTP {exc.code}: {details}") from exc
-    except error.URLError as exc:
-        raise ConcernError(f"OpenAI request failed: {exc.reason}") from exc
-
-    response_payload = json.loads(body)
-    if response_payload.get("status") == "incomplete":
-        reason = (response_payload.get("incomplete_details") or {}).get("reason", "unknown")
-        raise ConcernError(f"OpenAI response was incomplete (reason: {reason}).")
-    output_text = _extract_output_text(response_payload).strip()
-    if not output_text:
-        raise ConcernError("OpenAI returned an empty concern response.")
-    try:
-        return model, json.loads(output_text)
+        return response.model, json.loads(response.output_text)
     except json.JSONDecodeError as exc:
-        raise ConcernError(f"OpenAI returned malformed JSON: {output_text}") from exc
+        raise ConcernError(f"OpenAI returned malformed JSON: {response.output_text}") from exc
 
 
 def _project_concern_prompt(snapshot: dict, scopes: tuple[str, ...]) -> str:
@@ -438,11 +370,28 @@ def render_proposal_change_diff(change: ConcernProposalChange) -> str:
     return "\n".join(diff_lines) or "No textual diff available."
 
 
-def analyze_project_concerns(snapshot: dict, scopes: tuple[str, ...] = AI_CONCERN_SCOPES) -> ConcernAnalysisResult:
+def analyze_project_concerns(
+    snapshot: dict,
+    *,
+    project=None,
+    actor=None,
+    run: ConcernRun | None = None,
+    scopes: tuple[str, ...] = AI_CONCERN_SCOPES,
+    trigger: str = "manual",
+) -> ConcernAnalysisResult:
     model, parsed_output = _request_openai(
         schema_name="project_concern_analysis",
         schema=CONCERN_ANALYSIS_SCHEMA,
         prompt=_project_concern_prompt(snapshot, scopes),
+        usage_context=OpenAIUsageContext(
+            project=project,
+            actor=actor,
+            operation=AIUsageOperation.CONCERN_SCAN,
+            concern_run=run,
+            context_metadata={"scopes": list(scopes), "trigger": trigger},
+        )
+        if project is not None
+        else None,
     )
     concerns = parsed_output.get("concerns")
     if not isinstance(concerns, list):
@@ -450,11 +399,25 @@ def analyze_project_concerns(snapshot: dict, scopes: tuple[str, ...] = AI_CONCER
     return ConcernAnalysisResult(provider="openai", model=model, concerns=concerns)
 
 
-def reevaluate_concern_with_ai(snapshot: dict, concern: ProjectConcern) -> ConcernReevaluationResult:
+def reevaluate_concern_with_ai(
+    snapshot: dict,
+    concern: ProjectConcern,
+    *,
+    actor=None,
+    run: ConcernRun | None = None,
+) -> ConcernReevaluationResult:
     model, parsed_output = _request_openai(
         schema_name="concern_reevaluation",
         schema=CONCERN_REEVALUATION_SCHEMA,
         prompt=_targeted_reevaluation_prompt(snapshot, concern),
+        usage_context=OpenAIUsageContext(
+            project=concern.project,
+            actor=actor,
+            concern=concern,
+            concern_run=run,
+            operation=AIUsageOperation.CONCERN_REEVALUATION,
+            context_metadata={"concern_id": concern.id, "fingerprint": concern.fingerprint},
+        ),
     )
     return ConcernReevaluationResult(
         provider="openai",
@@ -468,7 +431,13 @@ def reevaluate_concern_with_ai(snapshot: dict, concern: ProjectConcern) -> Conce
     )
 
 
-def build_concern_proposal_with_ai(snapshot: dict, concern: ProjectConcern, sections: list[dict]) -> ConcernProposalResult:
+def build_concern_proposal_with_ai(
+    snapshot: dict,
+    concern: ProjectConcern,
+    sections: list[dict],
+    *,
+    actor=None,
+) -> ConcernProposalResult:
     max_output_tokens = getattr(
         settings,
         "OPENAI_CONCERN_PROPOSAL_MAX_OUTPUT_TOKENS",
@@ -479,6 +448,17 @@ def build_concern_proposal_with_ai(snapshot: dict, concern: ProjectConcern, sect
         schema=CONCERN_PROPOSAL_SCHEMA,
         prompt=_proposal_prompt(snapshot, concern, sections),
         max_output_tokens=max_output_tokens,
+        usage_context=OpenAIUsageContext(
+            project=concern.project,
+            actor=actor,
+            concern=concern,
+            operation=AIUsageOperation.CONCERN_PROPOSAL,
+            context_metadata={
+                "concern_id": concern.id,
+                "fingerprint": concern.fingerprint,
+                "section_ids": [section.get("id", "") for section in sections],
+            },
+        ),
     )
     return ConcernProposalResult(
         provider="openai",
@@ -594,7 +574,14 @@ def run_project_concerns(project, actor=None, scopes: tuple[str, ...] = AI_CONCE
     snapshot = build_project_snapshot(project)
     run = ConcernRun.objects.create(project=project, provider="openai", model="", scopes=list(scopes), trigger=trigger)
     try:
-        result = analyze_project_concerns(snapshot, scopes=scopes)
+        result = analyze_project_concerns(
+            snapshot,
+            project=project,
+            actor=actor,
+            run=run,
+            scopes=scopes,
+            trigger=trigger,
+        )
     except ConcernError as exc:
         run.status = ConcernRunStatus.FAILED
         run.error_message = str(exc)
@@ -689,7 +676,7 @@ def re_evaluate_concern(concern: ProjectConcern, *, actor=None):
         target_concern_fingerprint=concern.fingerprint,
     )
     try:
-        result = reevaluate_concern_with_ai(snapshot, concern)
+        result = reevaluate_concern_with_ai(snapshot, concern, actor=actor, run=run)
     except ConcernError as exc:
         run.status = ConcernRunStatus.FAILED
         run.error_message = str(exc)
@@ -776,7 +763,7 @@ def resolve_concern_with_ai(concern: ProjectConcern, *, actor=None):
         raise ConcernError("This concern is not linked to any sections yet.")
 
     snapshot = build_project_snapshot(concern.project)
-    result = build_concern_proposal_with_ai(snapshot, concern, sections)
+    result = build_concern_proposal_with_ai(snapshot, concern, sections, actor=actor)
     proposal = ConcernProposal.objects.create(
         project=concern.project,
         concern=concern,

@@ -2,14 +2,11 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from urllib import error, request
 
-from django.conf import settings
-
+from specs.models import AIUsageOperation
+from specs.openai import OpenAIUsageContext, request_openai_json_schema
 from specs.services import ensure_spec_document
 from specs.spec_document import find_section, section_summary
-
-OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
 
 SECTION_REVISION_ACTIONS = {
     "revise": {
@@ -73,87 +70,25 @@ class SectionRevisionResult:
     revised_body: str
 
 
-def _extract_output_text(response_payload: dict) -> str:
-    output_text = response_payload.get("output_text")
-    if output_text:
-        return output_text
-
-    fragments: list[str] = []
-    for output_item in response_payload.get("output", []):
-        for content_item in output_item.get("content", []):
-            text = content_item.get("text")
-            if text:
-                fragments.append(text)
-    return "\n".join(fragment for fragment in fragments if fragment)
-
-
-def _truncate_prompt(prompt: str) -> str:
-    max_chars = getattr(settings, "OPENAI_DEFAULT_MAX_INSTRUCTION_CHARS", None)
-    if max_chars is None or max_chars <= 0 or len(prompt) <= max_chars:
-        return prompt
-    return prompt[:max_chars].rstrip() + "\n\n[TRUNCATED]"
-
-
-def _request_openai(*, schema_name: str, schema: dict, prompt: str) -> tuple[str, dict]:
-    api_key = getattr(settings, "OPENAI_API_KEY", "")
-    if not api_key:
-        raise SectionRevisionError("OPENAI_API_KEY is not configured.")
-
-    model = getattr(settings, "OPENAI_DEFAULT_MODEL", "gpt-5-mini")
-    timeout_seconds = getattr(settings, "OPENAI_DEFAULT_TIMEOUT_SECONDS", None)
-    if timeout_seconds is not None:
-        timeout_seconds = max(timeout_seconds, 1)
-    max_output_tokens = getattr(settings, "OPENAI_DEFAULT_MAX_OUTPUT_TOKENS", None)
-    if max_output_tokens is not None:
-        max_output_tokens = max(max_output_tokens, 1)
-    reasoning_effort = getattr(settings, "OPENAI_DEFAULT_REASONING_EFFORT", None)
-    payload = {
-        "model": model,
-        "input": _truncate_prompt(prompt),
-        "text": {
-            "format": {
-                "type": "json_schema",
-                "name": schema_name,
-                "strict": True,
-                "schema": schema,
-            }
-        },
-    }
-    if max_output_tokens is not None:
-        payload["max_output_tokens"] = max_output_tokens
-    if reasoning_effort:
-        payload["reasoning"] = {"effort": reasoning_effort}
-    response = request.Request(
-        OPENAI_RESPONSES_URL,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
+def _request_openai(
+    *,
+    schema_name: str,
+    schema: dict,
+    prompt: str,
+    usage_context: OpenAIUsageContext | None = None,
+) -> tuple[str, dict]:
+    response = request_openai_json_schema(
+        schema_name=schema_name,
+        schema=schema,
+        prompt=prompt,
+        error_cls=SectionRevisionError,
+        empty_output_message="OpenAI returned an empty section revision.",
+        usage_context=usage_context,
     )
-
     try:
-        if timeout_seconds is None:
-            http_response_context = request.urlopen(response)
-        else:
-            http_response_context = request.urlopen(response, timeout=timeout_seconds)
-        with http_response_context as http_response:
-            body = http_response.read().decode("utf-8")
-    except error.HTTPError as exc:
-        details = exc.read().decode("utf-8", errors="replace")
-        raise SectionRevisionError(f"OpenAI request failed with HTTP {exc.code}: {details}") from exc
-    except error.URLError as exc:
-        raise SectionRevisionError(f"OpenAI request failed: {exc.reason}") from exc
-
-    response_payload = json.loads(body)
-    output_text = _extract_output_text(response_payload).strip()
-    if not output_text:
-        raise SectionRevisionError("OpenAI returned an empty section revision.")
-    try:
-        return model, json.loads(output_text)
+        return response.model, json.loads(response.output_text)
     except json.JSONDecodeError as exc:
-        raise SectionRevisionError(f"OpenAI returned malformed JSON: {output_text}") from exc
+        raise SectionRevisionError(f"OpenAI returned malformed JSON: {response.output_text}") from exc
 
 
 def _section_revision_prompt(*, prompt: str, title: str, kind: str, status: str, body: str) -> str:
@@ -181,6 +116,7 @@ def revise_section_with_ai(
     *,
     project,
     section_id: str,
+    actor=None,
     prompt: str | None = None,
     action: str | None = None,
     title: str | None = None,
@@ -217,6 +153,17 @@ def revise_section_with_ai(
             kind=section_data["kind"],
             status=section_data["status"],
             body=effective_body,
+        ),
+        usage_context=OpenAIUsageContext(
+            project=project,
+            actor=actor,
+            operation=AIUsageOperation.SECTION_REVISION,
+            context_metadata={
+                "section_id": section_data["id"],
+                "section_key": section_data["key"],
+                "section_title": effective_title,
+                "action": action or "",
+            },
         ),
     )
     revised_body = (parsed_output.get("revised_body") or "").strip()

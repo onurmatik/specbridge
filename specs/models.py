@@ -125,6 +125,14 @@ class ConsistencyIssueStatus(models.TextChoices):
     DISMISSED = "dismissed", "Dismissed"
 
 
+class AIUsageOperation(models.TextChoices):
+    SECTION_REVISION = "section_revision", "Section Revision"
+    CONCERN_SCAN = "concern_scan", "Concern Scan"
+    CONCERN_REEVALUATION = "concern_reevaluation", "Concern Re-Evaluation"
+    CONCERN_PROPOSAL = "concern_proposal", "Concern Proposal"
+    CONSISTENCY_SCAN = "consistency_scan", "Consistency Scan"
+
+
 class ProjectSpecDocument(TimeStampedModel):
     project = models.OneToOneField("projects.Project", on_delete=models.CASCADE, related_name="spec_document")
     title = models.CharField(max_length=255, default="Product Spec")
@@ -458,6 +466,70 @@ class ConsistencyIssue(TimeStampedModel):
 
     def __str__(self):
         return self.title
+
+
+class AIUsageRecord(TimeStampedModel):
+    project = models.ForeignKey("projects.Project", on_delete=models.CASCADE, related_name="ai_usage_records")
+    organization = models.ForeignKey(
+        "projects.Organization",
+        on_delete=models.CASCADE,
+        related_name="ai_usage_records",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="ai_usage_records",
+    )
+    concern = models.ForeignKey(
+        ProjectConcern,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="ai_usage_records",
+    )
+    concern_run = models.ForeignKey(
+        ConcernRun,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="ai_usage_records",
+    )
+    consistency_run = models.ForeignKey(
+        ConsistencyRun,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="ai_usage_records",
+    )
+    provider = models.CharField(max_length=64, default="openai")
+    model = models.CharField(max_length=128, blank=True)
+    operation = models.CharField(max_length=32, choices=AIUsageOperation.choices)
+    response_id = models.CharField(max_length=128, blank=True)
+    response_status = models.CharField(max_length=32, blank=True)
+    input_tokens = models.PositiveIntegerField(default=0)
+    output_tokens = models.PositiveIntegerField(default=0)
+    reasoning_tokens = models.PositiveIntegerField(default=0)
+    cached_input_tokens = models.PositiveIntegerField(default=0)
+    total_tokens = models.PositiveIntegerField(default=0)
+    usage_details = models.JSONField(default=dict, blank=True)
+    context_metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["project", "created_at"]),
+            models.Index(fields=["organization", "created_at"]),
+            models.Index(fields=["user", "created_at"]),
+            models.Index(fields=["operation", "created_at"]),
+        ]
+
+    def __str__(self):
+        return (
+            f"{self.project.slug}:{self.operation}:{self.provider}:{self.model or 'unknown'}:"
+            f"{self.total_tokens}"
+        )
 
 
 class AuditEvent(TimeStampedModel):

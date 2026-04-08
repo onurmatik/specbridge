@@ -1,6 +1,7 @@
 from django.contrib import admin
 
 from .models import (
+    AIUsageRecord,
     Assumption,
     AuditEvent,
     ConsistencyIssue,
@@ -42,6 +43,24 @@ class ConsistencyRunAdmin(admin.ModelAdmin):
 class ConsistencyIssueAdmin(admin.ModelAdmin):
     list_display = ("title", "project", "severity", "status", "last_seen_at")
     list_filter = ("severity", "status")
+
+
+@admin.register(AIUsageRecord)
+class AIUsageRecordAdmin(admin.ModelAdmin):
+    list_display = (
+        "created_at",
+        "project",
+        "user",
+        "operation",
+        "provider",
+        "model",
+        "input_tokens",
+        "output_tokens",
+        "reasoning_tokens",
+        "total_tokens",
+    )
+    list_filter = ("operation", "provider", "project", "user")
+    search_fields = ("response_id", "model", "project__name", "project__slug", "user__username")
 
 
 @admin.register(AuditEvent)

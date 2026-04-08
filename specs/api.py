@@ -205,10 +205,12 @@ def destroy_spec_section(request, slug: str, section_id: str):
 @router.post("/{slug}/spec/sections/{section_id}/revise-with-ai", auth=django_auth)
 def revise_spec_section_with_ai(request, slug: str, section_id: str, payload: SpecSectionAiRevisionPayload):
     project = get_project_or_404(slug, request.user)
+    actor = resolve_actor(request, project)
     try:
         result = revise_section_with_ai(
             project=project,
             section_id=section_id,
+            actor=actor,
             prompt=payload.prompt,
             action=payload.action,
             title=payload.title,
@@ -498,8 +500,8 @@ def list_consistency_issues(request, slug: str):
 @router.post("/{slug}/consistency-runs", auth=django_auth)
 def create_consistency_run(request, slug: str):
     project = get_project_or_404(slug, request.user)
-    resolve_actor(request, project)
-    run = run_project_consistency(project)
+    actor = resolve_actor(request, project)
+    run = run_project_consistency(project, actor=actor)
     return {"id": run.id, "status": run.status, "issue_count": run.issue_count, "error_message": run.error_message}
 
 

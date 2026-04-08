@@ -3,12 +3,11 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
-from urllib import error, request
 
-from django.conf import settings
 from django.utils import timezone
 
 from specs.models import (
+    AIUsageOperation,
     AuditEventType,
     ConsistencyIssue,
     ConsistencyIssueSeverity,
@@ -16,9 +15,8 @@ from specs.models import (
     ConsistencyRun,
     ConsistencyRunStatus,
 )
+from specs.openai import OpenAIUsageContext, request_openai_json_schema
 from specs.services import build_project_snapshot, log_audit_event
-
-OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
 
 CONSISTENCY_SCHEMA = {
     "type": "object",
@@ -78,20 +76,6 @@ class ConsistencyAnalysisResult:
     issues: list[dict]
 
 
-def _extract_output_text(response_payload: dict) -> str:
-    output_text = response_payload.get("output_text")
-    if output_text:
-        return output_text
-
-    fragments: list[str] = []
-    for output_item in response_payload.get("output", []):
-        for content_item in output_item.get("content", []):
-            text = content_item.get("text")
-            if text:
-                fragments.append(text)
-    return "\n".join(fragment for fragment in fragments if fragment)
-
-
 def _normalize_fingerprint(raw_value: str, fallback_seed: str) -> str:
     candidate = (raw_value or "").strip().lower()
     if candidate:
@@ -127,75 +111,51 @@ def _analysis_prompt(snapshot: dict) -> str:
     )
 
 
-def _truncate_prompt(prompt: str) -> str:
-    max_chars = getattr(settings, "OPENAI_DEFAULT_MAX_INSTRUCTION_CHARS", None)
-    if max_chars is None or max_chars <= 0 or len(prompt) <= max_chars:
-        return prompt
-    return prompt[:max_chars].rstrip() + "\n\n[TRUNCATED]"
-
-
-def analyze_project_consistency(snapshot: dict) -> ConsistencyAnalysisResult:
-    api_key = getattr(settings, "OPENAI_API_KEY", "")
-    if not api_key:
-        raise ConsistencyError("OPENAI_API_KEY is not configured.")
-
-    model = getattr(settings, "OPENAI_DEFAULT_MODEL", "gpt-5-mini")
-    timeout_seconds = getattr(settings, "OPENAI_DEFAULT_TIMEOUT_SECONDS", None)
-    if timeout_seconds is not None:
-        timeout_seconds = max(timeout_seconds, 1)
-    max_output_tokens = getattr(settings, "OPENAI_DEFAULT_MAX_OUTPUT_TOKENS", None)
-    if max_output_tokens is not None:
-        max_output_tokens = max(max_output_tokens, 1)
-    reasoning_effort = getattr(settings, "OPENAI_DEFAULT_REASONING_EFFORT", None)
-    payload = {
-        "model": model,
-        "input": _truncate_prompt(_analysis_prompt(snapshot)),
-        "text": {
-            "format": {
-                "type": "json_schema",
-                "name": "consistency_analysis",
-                "strict": True,
-                "schema": CONSISTENCY_SCHEMA,
-            }
-        },
-    }
-    if max_output_tokens is not None:
-        payload["max_output_tokens"] = max_output_tokens
-    if reasoning_effort:
-        payload["reasoning"] = {"effort": reasoning_effort}
-    response = request.Request(
-        OPENAI_RESPONSES_URL,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
+def _request_openai(
+    *,
+    schema_name: str,
+    schema: dict,
+    prompt: str,
+    usage_context: OpenAIUsageContext | None = None,
+) -> tuple[str, dict]:
+    response = request_openai_json_schema(
+        schema_name=schema_name,
+        schema=schema,
+        prompt=prompt,
+        error_cls=ConsistencyError,
+        empty_output_message="OpenAI returned an empty consistency analysis.",
+        usage_context=usage_context,
     )
-
     try:
-        if timeout_seconds is None:
-            http_response_context = request.urlopen(response)
-        else:
-            http_response_context = request.urlopen(response, timeout=timeout_seconds)
-        with http_response_context as http_response:
-            body = http_response.read().decode("utf-8")
-    except error.HTTPError as exc:
-        details = exc.read().decode("utf-8", errors="replace")
-        raise ConsistencyError(f"OpenAI request failed with HTTP {exc.code}: {details}") from exc
-    except error.URLError as exc:
-        raise ConsistencyError(f"OpenAI request failed: {exc.reason}") from exc
-
-    response_payload = json.loads(body)
-    output_text = _extract_output_text(response_payload).strip()
-    if not output_text:
-        raise ConsistencyError("OpenAI returned an empty consistency analysis.")
-
-    try:
-        parsed_output = json.loads(output_text)
+        parsed_output = json.loads(response.output_text)
     except json.JSONDecodeError as exc:
-        raise ConsistencyError(f"OpenAI returned malformed JSON: {output_text}") from exc
+        raise ConsistencyError(f"OpenAI returned malformed JSON: {response.output_text}") from exc
 
+    return response.model, parsed_output
+
+
+def analyze_project_consistency(
+    snapshot: dict,
+    *,
+    project=None,
+    actor=None,
+    run: ConsistencyRun | None = None,
+    trigger: str = "manual",
+) -> ConsistencyAnalysisResult:
+    model, parsed_output = _request_openai(
+        schema_name="consistency_analysis",
+        schema=CONSISTENCY_SCHEMA,
+        prompt=_analysis_prompt(snapshot),
+        usage_context=OpenAIUsageContext(
+            project=project,
+            actor=actor,
+            operation=AIUsageOperation.CONSISTENCY_SCAN,
+            consistency_run=run,
+            context_metadata={"trigger": trigger},
+        )
+        if project is not None
+        else None,
+    )
     issues = parsed_output.get("issues")
     if not isinstance(issues, list):
         raise ConsistencyError("OpenAI response did not include an issues list.")
@@ -253,21 +213,28 @@ def upsert_consistency_issues(*, project, run: ConsistencyRun, issues: list[dict
     run.save(update_fields=["issue_count", "updated_at"])
 
 
-def run_project_consistency(project) -> ConsistencyRun:
+def run_project_consistency(project, *, actor=None, trigger: str = "manual") -> ConsistencyRun:
     snapshot = build_project_snapshot(project)
     run = ConsistencyRun.objects.create(project=project, provider="openai", model="")
     try:
-        result = analyze_project_consistency(snapshot)
+        result = analyze_project_consistency(
+            snapshot,
+            project=project,
+            actor=actor,
+            run=run,
+            trigger=trigger,
+        )
     except ConsistencyError as exc:
         run.status = ConsistencyRunStatus.FAILED
         run.error_message = str(exc)
         run.save(update_fields=["status", "error_message", "updated_at"])
         log_audit_event(
             project=project,
+            actor=actor,
             event_type=AuditEventType.CONSISTENCY_RUN_FAILED,
             title="Consistency check failed",
             description=str(exc),
-            metadata={"provider": "openai"},
+            metadata={"provider": "openai", "trigger": trigger},
         )
         return run
 
@@ -280,10 +247,16 @@ def run_project_consistency(project) -> ConsistencyRun:
     upsert_consistency_issues(project=project, run=run, issues=result.issues)
     log_audit_event(
         project=project,
+        actor=actor,
         event_type=AuditEventType.CONSISTENCY_RUN_COMPLETED,
         title="Consistency check completed",
         description=f"Found {run.issue_count} issue(s).",
-        metadata={"provider": result.provider, "model": result.model, "issue_count": run.issue_count},
+        metadata={
+            "provider": result.provider,
+            "model": result.model,
+            "issue_count": run.issue_count,
+            "trigger": trigger,
+        },
     )
     return run
 

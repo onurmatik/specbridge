@@ -20,7 +20,7 @@ class Command(BaseCommand):
             return
 
         for project in queryset:
-            run = run_project_consistency(project)
+            run = run_project_consistency(project, trigger="management_command")
             if run.status == "completed":
                 self.stdout.write(
                     self.style.SUCCESS(

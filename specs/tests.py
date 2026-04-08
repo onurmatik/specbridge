@@ -11,9 +11,12 @@ from specs.concerns import (
     ConcernReevaluationResult,
     _request_openai,
     build_concern_proposal_with_ai,
+    run_project_concerns,
 )
+from specs.consistency import run_project_consistency
 from specs.models import Assumption, ConcernProposalChange, ConcernRun, ProjectConcern
-from specs.section_ai import _section_revision_prompt
+from specs.models import AIUsageRecord
+from specs.section_ai import _section_revision_prompt, revise_section_with_ai
 from specs.services import (
     add_spec_section_after,
     delete_spec_section,
@@ -218,6 +221,51 @@ class SpecsServiceTests(TestCase):
         self.assertEqual(payload["body"], "Revised requirements body")
         self.assertEqual(payload["summary"], "Tightened the wording and cleaned up repetition.")
 
+    @override_settings(OPENAI_API_KEY="test-key")
+    @patch("specs.openai.request.urlopen")
+    def test_section_ai_revision_records_token_usage(self, mock_urlopen):
+        section = self._section("requirements")
+        mock_urlopen.return_value = _FakeHTTPResponse(
+            {
+                "id": "resp_section",
+                "status": "completed",
+                "usage": {
+                    "input_tokens": 120,
+                    "output_tokens": 45,
+                    "total_tokens": 165,
+                    "input_tokens_details": {"cached_tokens": 25},
+                    "output_tokens_details": {"reasoning_tokens": 18},
+                },
+                "output_text": json.dumps(
+                    {
+                        "summary": "Refined the section.",
+                        "revised_body": "Updated requirements body",
+                    }
+                ),
+            }
+        )
+
+        result = revise_section_with_ai(
+            project=self.project,
+            section_id=section["id"],
+            actor=self.project.created_by,
+            prompt="Clarify the section.",
+            title=section["title"],
+            body=section["body"],
+        )
+
+        self.assertEqual(result.revised_body, "Updated requirements body")
+        usage = AIUsageRecord.objects.get(operation="section_revision")
+        self.assertEqual(usage.project, self.project)
+        self.assertEqual(usage.organization, self.project.organization)
+        self.assertEqual(usage.user, self.project.created_by)
+        self.assertEqual(usage.input_tokens, 120)
+        self.assertEqual(usage.output_tokens, 45)
+        self.assertEqual(usage.reasoning_tokens, 18)
+        self.assertEqual(usage.cached_input_tokens, 25)
+        self.assertEqual(usage.total_tokens, 165)
+        self.assertEqual(usage.context_metadata["section_id"], section["id"])
+
     def test_section_ai_revision_endpoint_rejects_empty_prompt(self):
         section = self._section("requirements")
 
@@ -354,6 +402,35 @@ class SpecsServiceTests(TestCase):
         self.assertEqual(concern.status, "open")
         self.assertTrue(concern.node_refs)
 
+    @override_settings(OPENAI_API_KEY="test-key")
+    @patch("specs.openai.request.urlopen")
+    def test_run_project_concerns_records_token_usage(self, mock_urlopen):
+        mock_urlopen.return_value = _FakeHTTPResponse(
+            {
+                "id": "resp_concern",
+                "status": "completed",
+                "usage": {
+                    "input_tokens": 300,
+                    "output_tokens": 90,
+                    "total_tokens": 390,
+                    "output_tokens_details": {"reasoning_tokens": 44},
+                },
+                "output_text": json.dumps({"concerns": []}),
+            }
+        )
+
+        run = run_project_concerns(self.project, actor=self.project.created_by)
+
+        usage = AIUsageRecord.objects.get(operation="concern_scan")
+        self.assertEqual(usage.project, self.project)
+        self.assertEqual(usage.user, self.project.created_by)
+        self.assertEqual(usage.concern_run, run)
+        self.assertEqual(usage.input_tokens, 300)
+        self.assertEqual(usage.output_tokens, 90)
+        self.assertEqual(usage.reasoning_tokens, 44)
+        self.assertEqual(usage.total_tokens, 390)
+        self.assertEqual(usage.context_metadata["trigger"], "manual")
+
     @patch("specs.concerns.reevaluate_concern_with_ai")
     def test_re_evaluate_concern_endpoint_updates_status(self, mock_reevaluate):
         concern = ProjectConcern.objects.get(project=self.project, fingerprint="human-fallback-ownership")
@@ -487,7 +564,7 @@ class SpecsServiceTests(TestCase):
         )
 
     @override_settings(OPENAI_API_KEY="test-key")
-    @patch("specs.concerns.request.urlopen")
+    @patch("specs.openai.request.urlopen")
     def test_request_openai_reports_incomplete_json_schema_response(self, mock_urlopen):
         mock_urlopen.return_value = _FakeHTTPResponse(
             {
@@ -513,11 +590,12 @@ class SpecsServiceTests(TestCase):
             )
 
     @override_settings(OPENAI_API_KEY="test-key", OPENAI_CONCERN_PROPOSAL_MAX_OUTPUT_TOKENS=4321)
-    @patch("specs.concerns.request.urlopen")
+    @patch("specs.openai.request.urlopen")
     def test_build_concern_proposal_with_ai_uses_json_schema_and_custom_token_budget(self, mock_urlopen):
         captured_payload: dict[str, object] = {}
 
-        def fake_urlopen(http_request, timeout):
+        def fake_urlopen(*args, **kwargs):
+            http_request = args[0]
             captured_payload.update(json.loads(http_request.data.decode("utf-8")))
             return _FakeHTTPResponse(
                 {
@@ -547,7 +625,7 @@ class SpecsServiceTests(TestCase):
         OPENAI_DEFAULT_MAX_OUTPUT_TOKENS=None,
         OPENAI_DEFAULT_REASONING_EFFORT=None,
     )
-    @patch("specs.concerns.request.urlopen")
+    @patch("specs.openai.request.urlopen")
     def test_request_openai_omits_optional_request_fields_when_settings_are_unset(self, mock_urlopen):
         captured_payload: dict[str, object] = {}
 
@@ -580,6 +658,37 @@ class SpecsServiceTests(TestCase):
         self.assertEqual(parsed_output["summary"], "ok")
         self.assertNotIn("max_output_tokens", captured_payload)
         self.assertNotIn("reasoning", captured_payload)
+
+    @override_settings(OPENAI_API_KEY="test-key")
+    @patch("specs.openai.request.urlopen")
+    def test_run_project_consistency_records_token_usage(self, mock_urlopen):
+        mock_urlopen.return_value = _FakeHTTPResponse(
+            {
+                "id": "resp_consistency",
+                "status": "completed",
+                "usage": {
+                    "input_tokens": 240,
+                    "output_tokens": 60,
+                    "total_tokens": 300,
+                    "input_tokens_details": {"cached_tokens": 40},
+                    "output_tokens_details": {"reasoning_tokens": 22},
+                },
+                "output_text": json.dumps({"issues": []}),
+            }
+        )
+
+        run = run_project_consistency(self.project, actor=self.project.created_by)
+
+        usage = AIUsageRecord.objects.get(operation="consistency_scan")
+        self.assertEqual(usage.project, self.project)
+        self.assertEqual(usage.user, self.project.created_by)
+        self.assertEqual(usage.consistency_run, run)
+        self.assertEqual(usage.input_tokens, 240)
+        self.assertEqual(usage.output_tokens, 60)
+        self.assertEqual(usage.reasoning_tokens, 22)
+        self.assertEqual(usage.cached_input_tokens, 40)
+        self.assertEqual(usage.total_tokens, 300)
+        self.assertEqual(usage.context_metadata["trigger"], "manual")
 
     def test_accepting_proposal_change_updates_section_and_marks_concern_stale(self):
         change = ConcernProposalChange.objects.select_related("proposal__concern").first()
