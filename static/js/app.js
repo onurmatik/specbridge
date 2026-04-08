@@ -2763,7 +2763,13 @@ function sectionActionTitle(button) {
 }
 
 function sectionActionRedirectUrl(sectionId = "") {
-  return sectionId ? `${currentPath()}#spec-section-${sectionId}` : currentPath();
+  if (!sectionId) {
+    return currentPath();
+  }
+  const url = new URL(currentPath(), window.location.origin);
+  url.searchParams.set("section", sectionId);
+  url.hash = `spec-section-${sectionId}`;
+  return `${url.pathname}${url.search}${url.hash}`;
 }
 
 const PROJECT_CREATE_DRAFT_KEY = "specbridge:create-project-draft";
@@ -3682,7 +3688,13 @@ document.addEventListener("click", async (event) => {
     try {
       const responsePayload = await postJson(requestUrl, requestPayload, requestMethod);
       const focusSectionId = responsePayload?.section_id || responsePayload?.focus_section_id || "";
-      window.location.assign(sectionActionRedirectUrl(focusSectionId));
+      const redirectUrl = sectionActionRedirectUrl(focusSectionId);
+      const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      if (redirectUrl === currentUrl) {
+        window.location.reload();
+      } else {
+        window.location.assign(redirectUrl);
+      }
     } catch (error) {
       console.error(error);
       if (error.message.startsWith("Authentication required")) {

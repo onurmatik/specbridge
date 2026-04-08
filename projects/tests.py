@@ -148,6 +148,11 @@ class ProjectPageTests(TestCase):
         self.assertContains(response, "Project identity")
         self.assertContains(response, "Preferences")
         self.assertContains(response, "Spec language")
+        self.assertContains(response, "Format")
+        self.assertContains(
+            response,
+            "Format this section using markdown formatting features such as subheadings, bullet lists, numbered lists, bold text, and emphasis where helpful. Improve scanability while preserving the original meaning, scope, and commitments.",
+        )
         self.assertNotContains(response, "Ask AI to Help Draft")
         self.assertNotContains(response, "Consistency Inbox")
 
