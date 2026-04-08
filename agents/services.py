@@ -5,9 +5,10 @@ from specs.models import AuditEventType
 from specs.services import (
     log_audit_event,
     section_markdown_for_ref,
+    section_title_for_ref,
     update_spec_section,
 )
-from specs.spec_document import markdown_to_blocks
+from specs.spec_document import markdown_to_blocks, strip_redundant_section_heading
 
 
 def apply_suggestion(suggestion, actor):
@@ -20,6 +21,9 @@ def apply_suggestion(suggestion, actor):
         if proposed_body is None and payload.get("body_append"):
             existing_body = section_markdown_for_ref(suggestion.project, primary_ref)
             proposed_body = f"{existing_body}\n\n{payload['body_append']}".strip()
+        effective_title = (payload.get("title") or "").strip() or section_title_for_ref(suggestion.project, primary_ref)
+        if proposed_body is not None and effective_title:
+            proposed_body = strip_redundant_section_heading(proposed_body, effective_title)
         content_blocks = markdown_to_blocks(proposed_body or "") if proposed_body is not None else None
         project_revision = update_spec_section(
             project=suggestion.project,

@@ -2,6 +2,7 @@ import json
 from unittest.mock import patch
 
 from django.test import Client, TestCase, override_settings
+from django.urls import reverse
 
 from projects.demo import ensure_demo_workspace
 from specs.concerns import (
@@ -25,8 +26,8 @@ from specs.services import (
     section_summaries,
     update_spec_section,
 )
-from specs.spec_document import markdown_to_blocks
-from specs.templatetags.specs_formatting import render_unified_diff
+from specs.spec_document import blocks_to_markdown, markdown_to_blocks
+from specs.templatetags.specs_formatting import render_spec_blocks, render_unified_diff
 
 
 class _FakeHTTPResponse:
@@ -53,6 +54,25 @@ class DiffFormattingTests(TestCase):
         self.assertIn('class="diff-line diff-line-remove"', html)
         self.assertIn('class="diff-line diff-line-add"', html)
         self.assertIn('class="diff-line diff-line-context"', html)
+
+
+class SpecDocumentFormattingTests(TestCase):
+    def test_markdown_round_trip_preserves_headings_and_nested_lists(self):
+        markdown = "## Rollout\n\n1. **Primary** flow\n  - *Monitor* alerts\n  - Update docs\n\n### Notes\n\n- Keep ***fallback***"
+
+        blocks = markdown_to_blocks(markdown)
+
+        self.assertEqual(blocks_to_markdown(blocks), markdown)
+
+    def test_render_spec_blocks_renders_lists_inline_marks_and_escapes_html(self):
+        html = render_spec_blocks(markdown_to_blocks("## Rollout\n\n1. **Launch**\n  - *<script>alert(1)</script>*"))
+
+        self.assertIn("<h2>Rollout</h2>", html)
+        self.assertIn("<ol>", html)
+        self.assertIn("<ul>", html)
+        self.assertIn("<strong>Launch</strong>", html)
+        self.assertIn("<em>&lt;script&gt;alert(1)&lt;/script&gt;</em>", html)
+        self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", html)
 
 
 class SpecsServiceTests(TestCase):
@@ -98,6 +118,17 @@ class SpecsServiceTests(TestCase):
         self.assertEqual(self.project.revisions.count(), project_revision_count)
         self.project.spec_document.refresh_from_db()
         self.assertEqual(self.project.spec_document.revisions.count(), spec_revision_count)
+
+    def test_section_summary_hides_redundant_leading_heading(self):
+        section = self._section("overview")
+
+        update_spec_section(
+            project=self.project,
+            section_id=section["id"],
+            content_json=markdown_to_blocks("Overview\n\nActual overview body"),
+        )
+
+        self.assertEqual(self._section("overview")["body"], "Actual overview body")
 
     def test_add_spec_section_after_inserts_custom_section_and_creates_revisions(self):
         section = self._section("overview")
@@ -266,6 +297,27 @@ class SpecsServiceTests(TestCase):
         self.assertEqual(usage.total_tokens, 165)
         self.assertEqual(usage.context_metadata["section_id"], section["id"])
 
+    @patch("specs.section_ai._request_openai")
+    def test_section_ai_revision_strips_redundant_leading_heading(self, mock_request_openai):
+        section = self._section("requirements")
+        mock_request_openai.return_value = (
+            "gpt-5-mini",
+            {
+                "summary": "Refined the section.",
+                "revised_body": "# Requirements\n\nUpdated requirements body",
+            },
+        )
+
+        result = revise_section_with_ai(
+            project=self.project,
+            section_id=section["id"],
+            prompt="Clarify the section.",
+            title=section["title"],
+            body=section["body"],
+        )
+
+        self.assertEqual(result.revised_body, "Updated requirements body")
+
     def test_section_ai_revision_endpoint_rejects_empty_prompt(self):
         section = self._section("requirements")
 
@@ -286,6 +338,120 @@ class SpecsServiceTests(TestCase):
             response.json()["errors"]["section"][0],
             "Enter a revision prompt before running AI.",
         )
+
+    def test_patch_section_endpoint_accepts_content_json_payload(self):
+        section = self._section("requirements")
+        content_json = [
+            {
+                "type": "heading",
+                "attrs": {"level": 2},
+                "content": [{"type": "text", "text": "Acceptance"}],
+            },
+            {
+                "type": "orderedList",
+                "attrs": {"start": 1},
+                "content": [
+                    {
+                        "type": "listItem",
+                        "content": [
+                            {
+                                "type": "paragraph",
+                                "content": [{"type": "text", "text": "Primary flow"}],
+                            },
+                            {
+                                "type": "bulletList",
+                                "content": [
+                                    {
+                                        "type": "listItem",
+                                        "content": [
+                                            {
+                                                "type": "paragraph",
+                                                "content": [{"type": "text", "text": "Nested detail"}],
+                                            }
+                                        ],
+                                    }
+                                ],
+                            },
+                        ],
+                    }
+                ],
+            },
+        ]
+
+        response = self.client.patch(
+            f"/api/projects/{self.project.slug}/spec/sections/{section['id']}",
+            data=json.dumps({"content_json": content_json}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        updated_section = self._section("requirements")
+        self.assertEqual(updated_section["blocks"], content_json)
+        self.assertEqual(
+            updated_section["body"],
+            "## Acceptance\n\n1. Primary flow\n  - Nested detail",
+        )
+        self.project.spec_document.refresh_from_db()
+        self.assertEqual(self.project.spec_document.schema_version, 2)
+
+    def test_patch_section_endpoint_persists_inline_marks(self):
+        section = self._section("requirements")
+        content_json = [
+            {
+                "type": "paragraph",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "Bold",
+                        "marks": [{"type": "bold"}],
+                    },
+                    {
+                        "type": "text",
+                        "text": " and ",
+                    },
+                    {
+                        "type": "text",
+                        "text": "italic",
+                        "marks": [{"type": "italic"}],
+                    },
+                    {
+                        "type": "text",
+                        "text": " text",
+                    },
+                ],
+            }
+        ]
+
+        response = self.client.patch(
+            f"/api/projects/{self.project.slug}/spec/sections/{section['id']}",
+            data=json.dumps({"content_json": content_json}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        updated_section = self._section("requirements")
+        self.assertEqual(updated_section["blocks"], content_json)
+        self.assertEqual(updated_section["body"], "**Bold** and *italic* text")
+        self.assertIn("<strong>Bold</strong>", render_spec_blocks(updated_section["blocks"]))
+        self.assertIn("<em>italic</em>", render_spec_blocks(updated_section["blocks"]))
+
+    def test_history_and_handoff_render_structured_blocks(self):
+        section = self._section("requirements")
+        update_spec_section(
+            project=self.project,
+            section_id=section["id"],
+            content_json=markdown_to_blocks("## Readiness\n\n1. Primary flow\n  - Nested detail"),
+        )
+
+        history_response = self.client.get(f"{reverse('project-history', args=[self.project.slug])}?section={section['id']}")
+        handoff_response = self.client.get(reverse("project-handoff", args=[self.project.slug]))
+
+        self.assertEqual(history_response.status_code, 200)
+        self.assertEqual(handoff_response.status_code, 200)
+        self.assertContains(history_response, "<h2>Readiness</h2>", html=False)
+        self.assertContains(history_response, "Nested detail")
+        self.assertContains(handoff_response, "<h2>Readiness</h2>", html=False)
+        self.assertContains(handoff_response, "Nested detail")
 
     def test_insert_section_endpoint_creates_new_section(self):
         section = self._section("overview")
@@ -617,6 +783,32 @@ class SpecsServiceTests(TestCase):
         self.assertEqual(captured_payload["max_output_tokens"], 4321)
         self.assertEqual(captured_payload["text"]["format"]["type"], "json_schema")
         self.assertTrue(captured_payload["text"]["format"]["strict"])
+
+    @patch("specs.concerns._request_openai")
+    def test_build_concern_proposal_with_ai_strips_redundant_leading_heading(self, mock_request_openai):
+        concern = ProjectConcern.objects.get(project=self.project, fingerprint="human-fallback-ownership")
+        requirements = self._section("requirements")
+        mock_request_openai.return_value = (
+            "gpt-5-mini",
+            {
+                "summary": "Clarify ownership in requirements.",
+                "changes": [
+                    {
+                        "section_id": requirements["id"],
+                        "summary": "Clarify ownership.",
+                        "proposed_body": "## Requirements\n\nUpdated requirements body",
+                    }
+                ],
+            },
+        )
+
+        result = build_concern_proposal_with_ai(
+            {"project": {"slug": self.project.slug}},
+            concern,
+            [requirements],
+        )
+
+        self.assertEqual(result.changes[0]["proposed_body"], "Updated requirements body")
 
     @override_settings(
         OPENAI_API_KEY="test-key",

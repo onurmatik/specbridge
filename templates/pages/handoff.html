@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load specs_formatting %}
 
 {% block title %}SpecBridge · Handoff{% endblock %}
 
@@ -132,10 +133,14 @@
                 </div>
               </div>
             </div>
-            <div class="prose prose-zinc max-w-none prose-sm prose-headings:font-display prose-headings:text-gray-900 prose-p:text-gray-700 prose-li:text-gray-700">
+            <div class="spec-rich-text-tight-lists prose prose-zinc max-w-none prose-sm prose-headings:font-display prose-headings:text-gray-900 prose-p:text-gray-700 prose-li:text-gray-700">
               {% for section in sections %}
                 <h2>{{ forloop.counter }}. {{ section.title }}</h2>
-                <p>{% if section.body %}{{ section.body }}{% else %}<em>No content yet.</em>{% endif %}</p>
+                {% if section.blocks %}
+                  {{ section.blocks|render_spec_blocks }}
+                {% else %}
+                  <p><em>No content yet.</em></p>
+                {% endif %}
               {% endfor %}
             </div>
           </div>

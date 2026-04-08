@@ -9,7 +9,18 @@ from django.utils.text import slugify
 
 from specs.models import DocumentStatus, DocumentType
 
-SPEC_SCHEMA_VERSION = 1
+SPEC_SCHEMA_VERSION = 2
+HEADING_PATTERN = re.compile(r"^\s{0,3}(#{1,6})\s+(.*?)\s*$")
+LIST_ITEM_PATTERN = re.compile(r"^(\s*)([-*]|\d+\.)\s+(.*)$")
+INLINE_MARKERS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("***", ("bold", "italic")),
+    ("___", ("bold", "italic")),
+    ("**", ("bold",)),
+    ("__", ("bold",)),
+    ("*", ("italic",)),
+    ("_", ("italic",)),
+)
+SUPPORTED_INLINE_MARKS = ("bold", "italic")
 
 DEFAULT_SECTION_SPECS: tuple[dict[str, Any], ...] = (
     {
@@ -66,26 +77,222 @@ DEFAULT_SECTION_SPECS: tuple[dict[str, Any], ...] = (
 SECTION_TEXT_LIMIT = 240
 
 
-def text_node(text: str) -> dict[str, Any]:
-    return {"type": "text", "text": text}
+def _normalized_mark_types(marks: list[dict[str, Any]] | list[str] | tuple[str, ...] | None) -> list[str]:
+    normalized: list[str] = []
+    for mark in marks or []:
+        mark_type = mark.get("type") if isinstance(mark, dict) else str(mark or "")
+        if mark_type in SUPPORTED_INLINE_MARKS and mark_type not in normalized:
+            normalized.append(mark_type)
+    return [mark_type for mark_type in SUPPORTED_INLINE_MARKS if mark_type in normalized]
 
 
-def paragraph_node(text: str) -> dict[str, Any]:
-    return {"type": "paragraph", "content": [text_node(text)]} if text else {"type": "paragraph", "content": []}
+def _mark_objects(mark_types: list[str] | tuple[str, ...]) -> list[dict[str, Any]]:
+    return [{"type": mark_type} for mark_type in _normalized_mark_types(mark_types)]
 
 
-def bullet_list_node(items: list[str]) -> dict[str, Any]:
+def _merged_mark_types(
+    existing: list[str] | tuple[str, ...] | None,
+    extra: list[str] | tuple[str, ...] | None,
+) -> tuple[str, ...]:
+    merged = _normalized_mark_types([*list(existing or ()), *list(extra or ())])
+    return tuple(merged)
+
+
+def text_node(text: str, marks: list[dict[str, Any]] | list[str] | tuple[str, ...] | None = None) -> dict[str, Any]:
+    node = {"type": "text", "text": text}
+    normalized_marks = _mark_objects(marks)
+    if normalized_marks:
+        node["marks"] = normalized_marks
+    return node
+
+
+def _mark_signature(node: dict[str, Any]) -> tuple[str, ...]:
+    return tuple(_normalized_mark_types(node.get("marks")))
+
+
+def _append_inline_text(
+    nodes: list[dict[str, Any]],
+    text: str,
+    marks: list[str] | tuple[str, ...] | None = None,
+) -> None:
+    if not text:
+        return
+    normalized_marks = _mark_objects(marks)
+    if nodes and nodes[-1].get("type") == "text" and _mark_signature(nodes[-1]) == tuple(
+        _normalized_mark_types(marks)
+    ):
+        nodes[-1]["text"] = f"{nodes[-1].get('text', '')}{text}"
+        return
+    nodes.append(text_node(text, normalized_marks))
+
+
+def _underscore_token_is_word_internal(text: str, token_index: int, token: str) -> bool:
+    if not token.startswith("_"):
+        return False
+    before = text[token_index - 1] if token_index > 0 else ""
+    after_index = token_index + len(token)
+    after = text[after_index] if after_index < len(text) else ""
+    return before.isalnum() and after.isalnum()
+
+
+def _find_closing_inline_token(text: str, token: str, start_index: int) -> int:
+    index = start_index
+    while index < len(text):
+        if text[index] == "\\":
+            index += 2
+            continue
+        if text.startswith(token, index):
+            if token.startswith("_") and _underscore_token_is_word_internal(text, index, token):
+                index += 1
+                continue
+            return index
+        index += 1
+    return -1
+
+
+def _parse_inline_markdown(text: str, active_marks: tuple[str, ...] = ()) -> list[dict[str, Any]]:
+    nodes: list[dict[str, Any]] = []
+    buffer: list[str] = []
+    index = 0
+    while index < len(text):
+        if text[index] == "\\" and index + 1 < len(text):
+            buffer.append(text[index + 1])
+            index += 2
+            continue
+
+        matched = False
+        for token, token_marks in INLINE_MARKERS:
+            if not text.startswith(token, index):
+                continue
+            if token.startswith("_") and _underscore_token_is_word_internal(text, index, token):
+                continue
+            closing_index = _find_closing_inline_token(text, token, index + len(token))
+            inner_text = text[index + len(token):closing_index] if closing_index >= 0 else ""
+            if closing_index < 0 or not inner_text:
+                continue
+            if buffer:
+                _append_inline_text(nodes, "".join(buffer), active_marks)
+                buffer = []
+            nodes.extend(_parse_inline_markdown(inner_text, _merged_mark_types(active_marks, token_marks)))
+            index = closing_index + len(token)
+            matched = True
+            break
+        if matched:
+            continue
+
+        buffer.append(text[index])
+        index += 1
+
+    if buffer:
+        _append_inline_text(nodes, "".join(buffer), active_marks)
+    return nodes
+
+
+def inline_nodes(value: str | list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+    if isinstance(value, str):
+        return _parse_inline_markdown(value)
+    if not isinstance(value, list):
+        return []
+
+    nodes: list[dict[str, Any]] = []
+    for node in value:
+        if not isinstance(node, dict):
+            continue
+        if node.get("type") == "text":
+            _append_inline_text(nodes, node.get("text", ""), node.get("marks"))
+            continue
+        for child in inline_nodes(node.get("content", [])):
+            _append_inline_text(nodes, child.get("text", ""), child.get("marks"))
+    return nodes
+
+
+def paragraph_node(text: str | list[dict[str, Any]]) -> dict[str, Any]:
+    content = inline_nodes(text)
+    return {"type": "paragraph", "content": content} if content else {"type": "paragraph", "content": []}
+
+
+def heading_node(text: str | list[dict[str, Any]], level: int) -> dict[str, Any]:
+    normalized_level = max(1, min(int(level or 1), 6))
+    content = inline_nodes(text)
+    return {
+        "type": "heading",
+        "attrs": {"level": normalized_level},
+        "content": content,
+    }
+
+
+def list_item_node(
+    text: str | list[dict[str, Any]] = "",
+    *,
+    children: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    content: list[dict[str, Any]] = []
+    paragraph_content = inline_nodes(text)
+    if paragraph_content or not children:
+        content.append(paragraph_node(paragraph_content))
+    content.extend(children or [])
+    return {"type": "listItem", "content": content}
+
+
+def bullet_list_node(items: list[str] | list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "type": "bulletList",
         "content": [
-            {
-                "type": "listItem",
-                "content": [paragraph_node(item.strip())],
-            }
+            list_item_node(item)
+            if isinstance(item, str)
+            else item
             for item in items
-            if item.strip()
+            if (item.strip() if isinstance(item, str) else isinstance(item, dict))
         ],
     }
+
+
+def ordered_list_node(items: list[str] | list[dict[str, Any]], *, start: int = 1) -> dict[str, Any]:
+    normalized_start = max(int(start or 1), 1)
+    return {
+        "type": "orderedList",
+        "attrs": {"start": normalized_start},
+        "content": [
+            list_item_node(item)
+            if isinstance(item, str)
+            else item
+            for item in items
+            if (item.strip() if isinstance(item, str) else isinstance(item, dict))
+        ],
+    }
+
+
+def _inline_text_from_node(node: dict[str, Any]) -> str:
+    if not isinstance(node, dict):
+        return ""
+    if node.get("type") == "text":
+        return node.get("text", "")
+    return "".join(_inline_text_from_node(item) for item in node.get("content", []))
+
+
+def _escape_inline_markdown_text(text: str) -> str:
+    return (
+        (text or "")
+        .replace("\\", "\\\\")
+        .replace("*", "\\*")
+        .replace("_", "\\_")
+    )
+
+
+def _inline_markdown_from_node(node: dict[str, Any]) -> str:
+    if not isinstance(node, dict):
+        return ""
+    if node.get("type") == "text":
+        text = _escape_inline_markdown_text(node.get("text", ""))
+        mark_types = set(_normalized_mark_types(node.get("marks")))
+        if {"bold", "italic"}.issubset(mark_types):
+            return f"***{text}***"
+        if "bold" in mark_types:
+            return f"**{text}**"
+        if "italic" in mark_types:
+            return f"*{text}*"
+        return text
+    return "".join(_inline_markdown_from_node(item) for item in node.get("content", []))
 
 
 def plain_text_from_node(node: dict[str, Any]) -> str:
@@ -94,14 +301,23 @@ def plain_text_from_node(node: dict[str, Any]) -> str:
     node_type = node.get("type")
     if node_type == "text":
         return node.get("text", "")
-    if node_type in {"paragraph", "listItem"}:
+    if node_type in {"paragraph", "heading"}:
         return "".join(plain_text_from_node(item) for item in node.get("content", []))
-    if node_type == "bulletList":
+    if node_type == "listItem":
+        parts = [plain_text_from_node(item).strip() for item in node.get("content", [])]
+        return "\n".join(part for part in parts if part)
+    if node_type in {"bulletList", "orderedList"}:
         lines = []
-        for item in node.get("content", []):
+        start = max(int(node.get("attrs", {}).get("start", 1) or 1), 1)
+        for index, item in enumerate(node.get("content", []), start=start):
             value = plain_text_from_node(item).strip()
             if value:
-                lines.append(f"- {value}")
+                marker = f"{index}." if node_type == "orderedList" else "-"
+                item_lines = [line.strip() for line in value.splitlines() if line.strip()]
+                if not item_lines:
+                    continue
+                lines.append(f"{marker} {item_lines[0]}")
+                lines.extend(f"  {line}" for line in item_lines[1:])
         return "\n".join(lines)
     return "".join(plain_text_from_node(item) for item in node.get("content", []))
 
@@ -112,28 +328,203 @@ def section_plain_text(section: dict[str, Any]) -> str:
     return "\n\n".join(part for part in parts if part)
 
 
+def _normalized_heading_key(value: str) -> str:
+    candidate = re.sub(r"^\s{0,3}#{1,6}\s*", "", (value or "").strip())
+    return slugify(candidate.rstrip(":").strip())
+
+
+def strip_redundant_section_heading(text: str, title: str) -> str:
+    value = (text or "").strip()
+    normalized_title = _normalized_heading_key(title)
+    if not value or not normalized_title:
+        return value
+
+    lines = value.splitlines()
+    index = 0
+    while index < len(lines):
+        while index < len(lines) and not lines[index].strip():
+            index += 1
+        if index >= len(lines) or _normalized_heading_key(lines[index]) != normalized_title:
+            break
+        index += 1
+    return "\n".join(lines[index:]).strip()
+
+
+def _line_indent(line: str) -> int:
+    return len(line) - len(line.lstrip(" "))
+
+
+def _next_non_blank_index(lines: list[str], start_index: int) -> int:
+    index = start_index
+    while index < len(lines) and not lines[index].strip():
+        index += 1
+    return index
+
+
+def _parse_paragraph(lines: list[str], start_index: int, *, current_indent: int) -> tuple[dict[str, Any], int]:
+    parts: list[str] = []
+    index = start_index
+    while index < len(lines):
+        line = lines[index]
+        if not line.strip():
+            break
+        if HEADING_PATTERN.match(line) and _line_indent(line) <= current_indent:
+            break
+        list_match = LIST_ITEM_PATTERN.match(line)
+        if list_match and _line_indent(line) <= current_indent:
+            break
+        if current_indent and _line_indent(line) <= current_indent and parts:
+            break
+        parts.append(line.strip())
+        index += 1
+    return paragraph_node(" ".join(part for part in parts if part).strip()), index
+
+
+def _parse_list(lines: list[str], start_index: int, current_indent: int) -> tuple[dict[str, Any], int]:
+    first_match = LIST_ITEM_PATTERN.match(lines[start_index])
+    if not first_match:
+        return paragraph_node(lines[start_index].strip()), start_index + 1
+
+    is_ordered = first_match.group(2).endswith(".")
+    start_number = int(first_match.group(2)[:-1]) if is_ordered else 1
+    items: list[dict[str, Any]] = []
+    index = start_index
+    while index < len(lines):
+        index = _next_non_blank_index(lines, index)
+        if index >= len(lines):
+            break
+        match = LIST_ITEM_PATTERN.match(lines[index])
+        if not match or _line_indent(lines[index]) != current_indent:
+            break
+        if match.group(2).endswith(".") != is_ordered:
+            break
+
+        body_parts = [match.group(3).strip()] if match.group(3).strip() else []
+        index += 1
+        children: list[dict[str, Any]] = []
+
+        while index < len(lines):
+            if not lines[index].strip():
+                next_index = _next_non_blank_index(lines, index)
+                if next_index >= len(lines):
+                    index = next_index
+                    break
+                next_match = LIST_ITEM_PATTERN.match(lines[next_index])
+                next_indent = _line_indent(lines[next_index])
+                if next_match and next_indent == current_indent:
+                    index = next_index
+                    break
+                if next_match and next_indent > current_indent:
+                    index = next_index
+                    nested_list, index = _parse_list(lines, index, next_indent)
+                    children.append(nested_list)
+                    continue
+                if next_indent <= current_indent:
+                    index = next_index
+                    break
+                body_parts.append(lines[next_index].strip())
+                index = next_index + 1
+                continue
+
+            next_match = LIST_ITEM_PATTERN.match(lines[index])
+            next_indent = _line_indent(lines[index])
+            if next_match and next_indent == current_indent:
+                break
+            if next_match and next_indent > current_indent:
+                nested_list, index = _parse_list(lines, index, next_indent)
+                children.append(nested_list)
+                continue
+            if next_indent <= current_indent:
+                break
+            body_parts.append(lines[index].strip())
+            index += 1
+
+        items.append(list_item_node(" ".join(part for part in body_parts if part).strip(), children=children))
+
+    list_factory = ordered_list_node if is_ordered else bullet_list_node
+    if is_ordered:
+        return list_factory(items, start=start_number), index
+    return list_factory(items), index
+
+
 def markdown_to_blocks(text: str) -> list[dict[str, Any]]:
     value = (text or "").strip()
     if not value:
         return [paragraph_node("")]
 
     blocks: list[dict[str, Any]] = []
-    for chunk in re.split(r"\n\s*\n", value):
-        lines = [line.rstrip() for line in chunk.splitlines() if line.strip()]
-        if not lines:
+    lines = [line.rstrip() for line in value.splitlines()]
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        if not line.strip():
+            index += 1
             continue
-        if all(line.lstrip().startswith(("-", "*")) for line in lines):
-            items = [line.lstrip()[2:].strip() for line in lines if len(line.lstrip()) >= 2]
-            blocks.append(bullet_list_node(items))
+
+        heading_match = HEADING_PATTERN.match(line)
+        if heading_match:
+            blocks.append(heading_node(heading_match.group(2).strip(), len(heading_match.group(1))))
+            index += 1
             continue
-        paragraph_text = " ".join(line.strip() for line in lines)
-        blocks.append(paragraph_node(paragraph_text))
+
+        list_match = LIST_ITEM_PATTERN.match(line)
+        if list_match:
+            block, index = _parse_list(lines, index, _line_indent(line))
+            blocks.append(block)
+            continue
+
+        block, index = _parse_paragraph(lines, index, current_indent=0)
+        blocks.append(block)
 
     return blocks or [paragraph_node("")]
 
 
+def _markdown_lines_from_list_item(
+    item: dict[str, Any],
+    *,
+    indent: int,
+    marker: str,
+) -> list[str]:
+    content = item.get("content", [])
+    paragraph = next((child for child in content if child.get("type") == "paragraph"), None)
+    nested_children = [child for child in content if child.get("type") in {"bulletList", "orderedList"}]
+    other_children = [
+        child
+        for child in content
+        if child.get("type") not in {"paragraph", "bulletList", "orderedList"}
+    ]
+    first_line = _inline_markdown_from_node(paragraph or {}).strip()
+    lines = [f"{' ' * indent}{marker} {first_line}".rstrip()]
+    for child in nested_children:
+        child_markdown = _markdown_from_block(child, indent=indent + 2)
+        if child_markdown:
+            lines.extend(child_markdown.splitlines())
+    for child in other_children:
+        child_text = _inline_markdown_from_node(child).strip()
+        if child_text:
+            lines.append(f"{' ' * (indent + 2)}{child_text}")
+    return lines
+
+
+def _markdown_from_block(block: dict[str, Any], *, indent: int = 0) -> str:
+    node_type = block.get("type")
+    if node_type == "paragraph":
+        return _inline_markdown_from_node(block).strip()
+    if node_type == "heading":
+        level = max(int(block.get("attrs", {}).get("level", 1) or 1), 1)
+        return f"{'#' * min(level, 6)} {_inline_markdown_from_node(block).strip()}".rstrip()
+    if node_type in {"bulletList", "orderedList"}:
+        start = max(int(block.get("attrs", {}).get("start", 1) or 1), 1)
+        lines: list[str] = []
+        for offset, item in enumerate(block.get("content", [])):
+            marker = f"{start + offset}." if node_type == "orderedList" else "-"
+            lines.extend(_markdown_lines_from_list_item(item, indent=indent, marker=marker))
+        return "\n".join(lines)
+    return _inline_markdown_from_node(block).strip()
+
+
 def blocks_to_markdown(blocks: list[dict[str, Any]]) -> str:
-    parts = [plain_text_from_node(block).strip() for block in blocks or []]
+    parts = [_markdown_from_block(block).strip() for block in blocks or []]
     return "\n\n".join(part for part in parts if part).strip()
 
 
@@ -165,7 +556,7 @@ def build_section_node(
             "required": bool(required),
             "legacy_slug": legacy_slug or normalized_key,
         },
-        "content": markdown_to_blocks(body),
+        "content": markdown_to_blocks(strip_redundant_section_heading(body, title)),
     }
 
 
@@ -207,15 +598,16 @@ def section_attrs(section: dict[str, Any]) -> dict[str, Any]:
 
 def section_summary(section: dict[str, Any]) -> dict[str, Any]:
     attrs = section_attrs(section)
+    title = attrs.get("title", "Untitled Section")
     return {
         "id": attrs.get("id", ""),
         "key": attrs.get("key", ""),
-        "title": attrs.get("title", "Untitled Section"),
+        "title": title,
         "kind": attrs.get("kind", DocumentType.CUSTOM),
         "status": attrs.get("status", DocumentStatus.ITERATING),
         "required": bool(attrs.get("required", False)),
         "legacy_slug": attrs.get("legacy_slug", attrs.get("key", "")),
-        "body": blocks_to_markdown(section.get("content", [])),
+        "body": strip_redundant_section_heading(blocks_to_markdown(section.get("content", [])), title),
         "blocks": copy.deepcopy(section.get("content", [])),
     }
 
@@ -419,7 +811,8 @@ def section_markdown_from_ref(content_json: dict[str, Any] | None, primary_ref: 
     section = find_section(content_json, primary_ref.get("section_id", ""))
     if not section:
         return ""
-    return blocks_to_markdown(section.get("content", []))
+    title = section_attrs(section).get("title", "")
+    return strip_redundant_section_heading(blocks_to_markdown(section.get("content", [])), title)
 
 
 def section_status_from_ref(content_json: dict[str, Any] | None, primary_ref: dict[str, Any] | None) -> str:

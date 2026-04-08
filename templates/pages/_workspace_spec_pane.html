@@ -1,3 +1,50 @@
+{% load specs_formatting %}
+
+<style>
+  [data-spec-section-editor][contenteditable="true"] {
+    border: 0 !important;
+    box-shadow: none !important;
+    caret-color: #18181b;
+    cursor: text;
+    outline: none !important;
+  }
+
+  [data-spec-section-editor][contenteditable="true"]:focus,
+  [data-spec-section-editor][contenteditable="true"]:focus-visible {
+    border: 0 !important;
+    box-shadow: none !important;
+    outline: none !important;
+  }
+
+  [data-spec-section-editor][contenteditable="true"]:empty::before {
+    content: attr(placeholder);
+    color: #a1a1aa;
+  }
+
+  [data-spec-live-editor] [data-live-md-active="true"] {
+    position: relative;
+  }
+
+  [data-spec-live-editor] [data-live-md-active="true"]::before {
+    content: attr(data-live-md-marker);
+    color: #a1a1aa;
+    font-weight: 700;
+    white-space: pre;
+  }
+
+  [data-spec-live-editor] li[data-live-md-active="true"] {
+    list-style-type: none;
+  }
+
+  [data-spec-live-editor] li[data-live-md-active="true"]::before {
+    position: absolute;
+    right: 100%;
+    top: 0;
+    margin-right: 0.375rem;
+    pointer-events: none;
+  }
+</style>
+
 <section id="workspace-spec-pane" class="min-h-0 min-w-0 flex-1 overflow-hidden bg-white" data-workspace-spec-region>
   <div class="flex h-full flex-col" data-spec-workspace data-scroll-target-section="{% if selected_section_ids %}{{ selected_section_ids.0 }}{% elif active_section %}{{ active_section.id }}{% endif %}">
     <div class="sticky top-0 z-30 relative border-b border-gray-200 bg-white">
@@ -217,32 +264,44 @@
 
                   <div class="{% if item.concerns %}lg:pr-60{% endif %}">
                     {% if request.user.is_authenticated %}
-                      <form
-                        class="space-y-4"
-                        data-api-form="/api/projects/{{ project.slug }}/spec/sections/{{ section.id }}"
-                        data-api-method="PATCH"
-                        data-spec-section-form
-                      >
-                        {% csrf_token %}
-                        <input
-                          type="text"
-                          name="title"
-                          value="{{ section.title }}"
-                          class="w-full border-0 bg-transparent pr-40 lg:pr-72 font-display text-2xl font-bold tracking-tight text-gray-900 focus:outline-none focus:ring-0"
+                      {% with content_script_id='spec-section-content-'|add:section.id %}
+                        <form
+                          class="space-y-4"
+                          data-api-form="/api/projects/{{ project.slug }}/spec/sections/{{ section.id }}"
+                          data-api-method="PATCH"
+                          data-spec-section-form
+                          data-section-content-script-id="{{ content_script_id }}"
                         >
-                        <input type="hidden" name="status" value="{{ section.status }}" data-section-status-input>
-                        <textarea
-                          name="body"
-                          rows="10"
-                          data-spec-section-input
-                          class="block min-h-[220px] w-full resize-none border-0 bg-transparent px-0 py-2 text-[15px] leading-8 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-0"
-                          placeholder="Write the current source of truth for this section."
-                        >{{ section.body }}</textarea>
-                      </form>
+                          {% csrf_token %}
+                          <input
+                            type="text"
+                            name="title"
+                            value="{{ section.title }}"
+                            class="w-full border-0 bg-transparent pr-40 lg:pr-72 font-display text-2xl font-bold tracking-tight text-gray-900 focus:outline-none focus:ring-0"
+                          >
+                          <input type="hidden" name="status" value="{{ section.status }}" data-section-status-input>
+                          <div
+                            contenteditable="true"
+                            spellcheck="true"
+                            data-spec-section-editor
+                            data-spec-live-editor
+                            class="spec-rich-text-tight-lists prose prose-zinc mt-4 min-h-[220px] max-w-none bg-transparent px-0 py-2 text-[15px] leading-8 text-gray-800 outline-none prose-headings:font-display prose-headings:text-gray-900 prose-p:my-0 prose-li:text-gray-800 prose-ul:my-3 prose-ol:my-3"
+                            placeholder="Write the current source of truth for this section."
+                          ></div>
+                          <textarea hidden rows="1" data-spec-section-markdown>{{ section.body }}</textarea>
+                          {{ section.blocks|json_script:content_script_id }}
+                        </form>
+                      {% endwith %}
                     {% else %}
                       <div>
                         <h2 class="pr-40 lg:pr-72 font-display text-2xl font-bold tracking-tight text-gray-900">{{ section.title }}</h2>
-                        <div class="mt-4 whitespace-pre-wrap text-[15px] leading-8 text-gray-700">{{ section.body|default:"No content yet." }}</div>
+                        <div class="spec-rich-text-tight-lists prose prose-zinc mt-4 max-w-none text-[15px] leading-8 prose-headings:font-display prose-headings:text-gray-900 prose-p:text-gray-700 prose-li:text-gray-700">
+                          {% if section.blocks %}
+                            {{ section.blocks|render_spec_blocks }}
+                          {% else %}
+                            <p>No content yet.</p>
+                          {% endif %}
+                        </div>
                       </div>
                     {% endif %}
                   </div>

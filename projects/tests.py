@@ -17,6 +17,8 @@ from projects.demo import ensure_demo_workspace
 from projects.invitations import get_invite_for_token, invitation_token
 from projects.models import MembershipRole, Project, ProjectInvite, ProjectMembership
 from projects.services import create_project_workspace, section_summaries
+from specs.services import update_spec_section
+from specs.spec_document import markdown_to_blocks
 
 User = get_user_model()
 
@@ -119,7 +121,8 @@ class ProjectPageTests(TestCase):
         self.assertContains(response, 'data-api-submit-button', html=False)
         self.assertContains(response, 'data-api-button-icon', html=False)
         self.assertContains(response, 'data-spec-section-form', html=False)
-        self.assertContains(response, 'data-spec-section-input', html=False)
+        self.assertContains(response, 'data-spec-section-editor', html=False)
+        self.assertContains(response, 'data-spec-section-markdown', html=False)
         self.assertContains(response, 'data-spec-nav-link', html=False)
         self.assertContains(response, 'data-spec-nav-fade-left', html=False)
         self.assertContains(response, "Alignment Stream")
@@ -144,6 +147,20 @@ class ProjectPageTests(TestCase):
         self.assertContains(response, f'/api/projects/{self.project.slug}/settings', html=False)
         self.assertNotContains(response, "Ask AI to Help Draft")
         self.assertNotContains(response, "Consistency Inbox")
+
+    def test_anonymous_workspace_renders_structured_section_html(self):
+        section = section_summaries(self.project)[2]
+        update_spec_section(
+            project=self.project,
+            section_id=section["id"],
+            content_json=markdown_to_blocks("## Readiness\n\n- First pass\n- Second pass"),
+        )
+
+        response = self.client.get(reverse("project-workspace", args=[self.project.slug]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "<h2>Readiness</h2>", html=False)
+        self.assertContains(response, "<li>First pass</li>", html=False)
 
     def test_workspace_open_filter_hides_general_posts_and_decisions(self):
         self.client.force_login(self.project.created_by)
@@ -504,7 +521,7 @@ class ProjectPageTests(TestCase):
         self.assertEqual(payload["redirect_to"], reverse("project-workspace", args=[created_project.slug]))
         self.assertEqual(created_project.organization.name, "Sarah Stone Workspace")
         self.assertEqual(created_project.memberships.count(), 1)
-        self.assertEqual(created_project.spec_document.schema_version, 1)
+        self.assertEqual(created_project.spec_document.schema_version, 2)
         self.assertEqual(created_project.spec_document.revisions.count(), 1)
         self.assertEqual(created_project.revisions.count(), 1)
 

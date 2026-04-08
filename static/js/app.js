@@ -335,12 +335,1182 @@ async function flushDocumentEditorAutosave(controller, { force = false } = {}) {
   return controller.inFlight;
 }
 
+const SPEC_EDITOR_HEADING_PATTERN = /^\s{0,3}(#{1,6})\s+(.*?)\s*$/;
+const SPEC_EDITOR_LIST_PATTERN = /^(\s*)([-*]|\d+\.)\s+(.*)$/;
+
+function escapeHtml(value) {
+  return `${value || ""}`
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function specNormalizedMarkTypes(marks) {
+  const normalized = [];
+  (marks || []).forEach((mark) => {
+    const markType = typeof mark === "string" ? mark : mark?.type;
+    if ((markType === "bold" || markType === "italic") && !normalized.includes(markType)) {
+      normalized.push(markType);
+    }
+  });
+  return ["bold", "italic"].filter((markType) => normalized.includes(markType));
+}
+
+function specMarkObjects(markTypes) {
+  return specNormalizedMarkTypes(markTypes).map((type) => ({ type }));
+}
+
+function specMarkSignature(node) {
+  return specNormalizedMarkTypes(node?.marks || []).join("|");
+}
+
+function specAppendInlineText(nodes, text, marks = []) {
+  if (!text) {
+    return;
+  }
+  const normalizedMarks = specMarkObjects(marks);
+  const signature = specNormalizedMarkTypes(normalizedMarks).join("|");
+  const previous = nodes[nodes.length - 1];
+  if (previous?.type === "text" && specMarkSignature(previous) === signature) {
+    previous.text = `${previous.text || ""}${text}`;
+    return;
+  }
+  nodes.push(specTextNode(text, normalizedMarks));
+}
+
+function specTextNode(text, marks = []) {
+  const node = { type: "text", text: `${text || ""}` };
+  const normalizedMarks = specMarkObjects(marks);
+  if (normalizedMarks.length) {
+    node.marks = normalizedMarks;
+  }
+  return node;
+}
+
+function specInlineNodes(value) {
+  if (typeof value === "string") {
+    return parseSpecInlineMarkdown(value);
+  }
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const nodes = [];
+  value.forEach((node) => {
+    if (!node || typeof node !== "object") {
+      return;
+    }
+    if (node.type === "text") {
+      specAppendInlineText(nodes, `${node.text || ""}`, node.marks || []);
+      return;
+    }
+    (Array.isArray(node.content) ? node.content : []).forEach((child) => {
+      specInlineNodes([child]).forEach((grandchild) => {
+        specAppendInlineText(nodes, `${grandchild.text || ""}`, grandchild.marks || []);
+      });
+    });
+  });
+  return nodes;
+}
+
+function specParagraphNode(text = "") {
+  const content = specInlineNodes(text);
+  return content.length
+    ? { type: "paragraph", content }
+    : { type: "paragraph", content: [] };
+}
+
+function specHeadingNode(text = "", level = 2) {
+  const normalizedLevel = Math.max(1, Math.min(Number.parseInt(level || 2, 10) || 2, 6));
+  return {
+    type: "heading",
+    attrs: { level: normalizedLevel },
+    content: specInlineNodes(text),
+  };
+}
+
+function specListItemNode(text = "", children = []) {
+  const paragraphContent = specInlineNodes(text);
+  const content = [];
+  if (paragraphContent.length || !children.length) {
+    content.push(specParagraphNode(paragraphContent));
+  }
+  content.push(...children);
+  return { type: "listItem", content };
+}
+
+function specBulletListNode(items = []) {
+  return {
+    type: "bulletList",
+    content: items
+      .map((item) => (typeof item === "string" ? specListItemNode(item) : item))
+      .filter((item) => item && typeof item === "object"),
+  };
+}
+
+function specOrderedListNode(items = [], start = 1) {
+  return {
+    type: "orderedList",
+    attrs: { start: Math.max(Number.parseInt(start || 1, 10) || 1, 1) },
+    content: items
+      .map((item) => (typeof item === "string" ? specListItemNode(item) : item))
+      .filter((item) => item && typeof item === "object"),
+  };
+}
+
+function specInlineTextFromNode(node) {
+  if (!node || typeof node !== "object") {
+    return "";
+  }
+  if (node.type === "text") {
+    return `${node.text || ""}`;
+  }
+  return Array.isArray(node.content)
+    ? node.content.map((child) => specInlineTextFromNode(child)).join("")
+    : "";
+}
+
+function specSliceInlineContent(content, offset) {
+  const nodes = [];
+  let remainingOffset = Math.max(Number.parseInt(offset || 0, 10) || 0, 0);
+  (Array.isArray(content) ? content : []).forEach((node) => {
+    if (!node || node.type !== "text") {
+      return;
+    }
+    const text = `${node.text || ""}`;
+    if (!text) {
+      return;
+    }
+    if (remainingOffset >= text.length) {
+      remainingOffset -= text.length;
+      return;
+    }
+    specAppendInlineText(nodes, text.slice(remainingOffset), node.marks || []);
+    remainingOffset = 0;
+  });
+  return nodes;
+}
+
+function specMarkdownShortcutMatch(text) {
+  const normalized = `${text || ""}`
+    .replace(/\u200B/g, "")
+    .replace(/\u00a0/g, " ");
+
+  const headingMatch = normalized.match(/^(#{1,6})(\s+)(.*)$/);
+  if (headingMatch) {
+    return {
+      type: "heading",
+      level: headingMatch[1].length,
+      prefixLength: headingMatch[1].length + headingMatch[2].length,
+      text: headingMatch[3] || "",
+    };
+  }
+
+  const listMatch = normalized.match(/^([-*]|\d+\.)(\s+)(.*)$/);
+  if (listMatch) {
+    return {
+      type: listMatch[1].endsWith(".") ? "orderedList" : "bulletList",
+      start: listMatch[1].endsWith(".") ? Math.max(Number.parseInt(listMatch[1], 10) || 1, 1) : 1,
+      prefixLength: listMatch[1].length + listMatch[2].length,
+      text: listMatch[3] || "",
+    };
+  }
+
+  return null;
+}
+
+function specMarkdownShortcutBlockFromParagraphContent(content) {
+  const inlineContent = Array.isArray(content) ? content : [];
+  const match = specMarkdownShortcutMatch(specInlineTextFromNode({ content: inlineContent }));
+  if (!match) {
+    return null;
+  }
+  const bodyContent = specSliceInlineContent(inlineContent, match.prefixLength);
+  if (match.type === "heading") {
+    return specHeadingNode(bodyContent, match.level);
+  }
+  const item = specListItemNode(bodyContent);
+  return match.type === "orderedList"
+    ? specOrderedListNode([item], match.start)
+    : specBulletListNode([item]);
+}
+
+function specEscapeInlineMarkdown(text) {
+  return `${text || ""}`
+    .replaceAll("\\", "\\\\")
+    .replaceAll("*", "\\*")
+    .replaceAll("_", "\\_");
+}
+
+function specInlineMarkdownFromNode(node) {
+  if (!node || typeof node !== "object") {
+    return "";
+  }
+  if (node.type === "text") {
+    const text = specEscapeInlineMarkdown(node.text || "");
+    const markTypes = new Set(specNormalizedMarkTypes(node.marks || []));
+    if (markTypes.has("bold") && markTypes.has("italic")) {
+      return `***${text}***`;
+    }
+    if (markTypes.has("bold")) {
+      return `**${text}**`;
+    }
+    if (markTypes.has("italic")) {
+      return `*${text}*`;
+    }
+    return text;
+  }
+  return Array.isArray(node.content)
+    ? node.content.map((child) => specInlineMarkdownFromNode(child)).join("")
+    : "";
+}
+
+function specBlockIsEmpty(block) {
+  if (!block || typeof block !== "object") {
+    return true;
+  }
+  if (block.type === "paragraph" || block.type === "heading") {
+    return !specInlineTextFromNode(block).trim();
+  }
+  if (block.type === "listItem") {
+    return !(Array.isArray(block.content) && block.content.some((child) => !specBlockIsEmpty(child)));
+  }
+  if (block.type === "bulletList" || block.type === "orderedList") {
+    return !(Array.isArray(block.content) && block.content.some((item) => !specBlockIsEmpty(item)));
+  }
+  return !specInlineTextFromNode(block).trim();
+}
+
+function normalizeSpecBlocks(blocks) {
+  const normalized = Array.isArray(blocks)
+    ? blocks.filter((block) => !specBlockIsEmpty(block))
+    : [];
+  return normalized.length ? normalized : [specParagraphNode("")];
+}
+
+function specLineIndent(line) {
+  return (line.match(/^ */) || [""])[0].length;
+}
+
+function nextNonBlankSpecLineIndex(lines, startIndex) {
+  let index = startIndex;
+  while (index < lines.length && !lines[index].trim()) {
+    index += 1;
+  }
+  return index;
+}
+
+function specUnderscoreMarkerIsWordInternal(text, index, token) {
+  if (!token.startsWith("_")) {
+    return false;
+  }
+  const before = index > 0 ? text[index - 1] : "";
+  const after = index + token.length < text.length ? text[index + token.length] : "";
+  return /\w/.test(before) && /\w/.test(after);
+}
+
+function specFindClosingInlineToken(text, token, startIndex) {
+  let index = startIndex;
+  while (index < text.length) {
+    if (text[index] === "\\") {
+      index += 2;
+      continue;
+    }
+    if (text.startsWith(token, index)) {
+      if (token.startsWith("_") && specUnderscoreMarkerIsWordInternal(text, index, token)) {
+        index += 1;
+        continue;
+      }
+      return index;
+    }
+    index += 1;
+  }
+  return -1;
+}
+
+function parseSpecInlineMarkdown(text, activeMarks = []) {
+  const value = `${text || ""}`;
+  const nodes = [];
+  let buffer = "";
+  let index = 0;
+  const markers = [
+    ["***", ["bold", "italic"]],
+    ["___", ["bold", "italic"]],
+    ["**", ["bold"]],
+    ["__", ["bold"]],
+    ["*", ["italic"]],
+    ["_", ["italic"]],
+  ];
+
+  while (index < value.length) {
+    if (value[index] === "\\" && index + 1 < value.length) {
+      buffer += value[index + 1];
+      index += 2;
+      continue;
+    }
+
+    let matched = false;
+    for (const [token, tokenMarks] of markers) {
+      if (!value.startsWith(token, index)) {
+        continue;
+      }
+      if (token.startsWith("_") && specUnderscoreMarkerIsWordInternal(value, index, token)) {
+        continue;
+      }
+      const closingIndex = specFindClosingInlineToken(value, token, index + token.length);
+      const innerText = closingIndex >= 0 ? value.slice(index + token.length, closingIndex) : "";
+      if (closingIndex < 0 || !innerText) {
+        continue;
+      }
+      if (buffer) {
+        specAppendInlineText(nodes, buffer, activeMarks);
+        buffer = "";
+      }
+      parseSpecInlineMarkdown(
+        innerText,
+        [...specNormalizedMarkTypes(activeMarks), ...tokenMarks]
+      ).forEach((node) => {
+        specAppendInlineText(nodes, `${node.text || ""}`, node.marks || []);
+      });
+      index = closingIndex + token.length;
+      matched = true;
+      break;
+    }
+
+    if (matched) {
+      continue;
+    }
+
+    buffer += value[index];
+    index += 1;
+  }
+
+  if (buffer) {
+    specAppendInlineText(nodes, buffer, activeMarks);
+  }
+  return nodes;
+}
+
+function parseSpecParagraph(lines, startIndex, currentIndent) {
+  const parts = [];
+  let index = startIndex;
+  while (index < lines.length) {
+    const line = lines[index];
+    if (!line.trim()) {
+      break;
+    }
+    if (SPEC_EDITOR_HEADING_PATTERN.test(line) && specLineIndent(line) <= currentIndent) {
+      break;
+    }
+    const listMatch = line.match(SPEC_EDITOR_LIST_PATTERN);
+    if (listMatch && specLineIndent(line) <= currentIndent) {
+      break;
+    }
+    if (currentIndent && specLineIndent(line) <= currentIndent && parts.length) {
+      break;
+    }
+    parts.push(line.trim());
+    index += 1;
+  }
+  return [specParagraphNode(parts.join(" ").trim()), index];
+}
+
+function parseSpecList(lines, startIndex, currentIndent) {
+  const firstMatch = lines[startIndex]?.match(SPEC_EDITOR_LIST_PATTERN);
+  if (!firstMatch) {
+    return [specParagraphNode(lines[startIndex] || ""), startIndex + 1];
+  }
+
+  const ordered = firstMatch[2].endsWith(".");
+  const startNumber = ordered ? Number.parseInt(firstMatch[2].slice(0, -1), 10) || 1 : 1;
+  const items = [];
+  let index = startIndex;
+
+  while (index < lines.length) {
+    index = nextNonBlankSpecLineIndex(lines, index);
+    if (index >= lines.length) {
+      break;
+    }
+    const match = lines[index].match(SPEC_EDITOR_LIST_PATTERN);
+    if (!match || specLineIndent(lines[index]) !== currentIndent) {
+      break;
+    }
+    if (match[2].endsWith(".") !== ordered) {
+      break;
+    }
+
+    const bodyParts = match[3].trim() ? [match[3].trim()] : [];
+    const children = [];
+    index += 1;
+
+    while (index < lines.length) {
+      if (!lines[index].trim()) {
+        const nextIndex = nextNonBlankSpecLineIndex(lines, index);
+        if (nextIndex >= lines.length) {
+          index = nextIndex;
+          break;
+        }
+        const nextMatch = lines[nextIndex].match(SPEC_EDITOR_LIST_PATTERN);
+        const nextIndent = specLineIndent(lines[nextIndex]);
+        if (nextMatch && nextIndent === currentIndent) {
+          index = nextIndex;
+          break;
+        }
+        if (nextMatch && nextIndent > currentIndent) {
+          index = nextIndex;
+          const [nestedList, nestedIndex] = parseSpecList(lines, index, nextIndent);
+          children.push(nestedList);
+          index = nestedIndex;
+          continue;
+        }
+        if (nextIndent <= currentIndent) {
+          index = nextIndex;
+          break;
+        }
+        bodyParts.push(lines[nextIndex].trim());
+        index = nextIndex + 1;
+        continue;
+      }
+
+      const nextMatch = lines[index].match(SPEC_EDITOR_LIST_PATTERN);
+      const nextIndent = specLineIndent(lines[index]);
+      if (nextMatch && nextIndent === currentIndent) {
+        break;
+      }
+      if (nextMatch && nextIndent > currentIndent) {
+        const [nestedList, nestedIndex] = parseSpecList(lines, index, nextIndent);
+        children.push(nestedList);
+        index = nestedIndex;
+        continue;
+      }
+      if (nextIndent <= currentIndent) {
+        break;
+      }
+      bodyParts.push(lines[index].trim());
+      index += 1;
+    }
+
+    items.push(specListItemNode(bodyParts.join(" ").trim(), children.filter((child) => !specBlockIsEmpty(child))));
+  }
+
+  return [
+    ordered ? specOrderedListNode(items, startNumber) : specBulletListNode(items),
+    index,
+  ];
+}
+
+function specMarkdownToBlocks(markdown) {
+  const value = `${markdown || ""}`.trim();
+  if (!value) {
+    return [specParagraphNode("")];
+  }
+
+  const lines = value.split(/\r?\n/).map((line) => line.replace(/\s+$/, ""));
+  const blocks = [];
+  let index = 0;
+
+  while (index < lines.length) {
+    const line = lines[index];
+    if (!line.trim()) {
+      index += 1;
+      continue;
+    }
+
+    const headingMatch = line.match(SPEC_EDITOR_HEADING_PATTERN);
+    if (headingMatch) {
+      blocks.push(specHeadingNode(headingMatch[2].trim(), headingMatch[1].length));
+      index += 1;
+      continue;
+    }
+
+    const listMatch = line.match(SPEC_EDITOR_LIST_PATTERN);
+    if (listMatch) {
+      const [block, nextIndex] = parseSpecList(lines, index, specLineIndent(line));
+      blocks.push(block);
+      index = nextIndex;
+      continue;
+    }
+
+    const [block, nextIndex] = parseSpecParagraph(lines, index, 0);
+    blocks.push(block);
+    index = nextIndex;
+  }
+
+  return normalizeSpecBlocks(blocks);
+}
+
+function markdownLinesFromSpecListItem(item, indent, marker) {
+  const content = Array.isArray(item?.content) ? item.content : [];
+  const paragraph = content.find((child) => child?.type === "paragraph");
+  const nestedLists = content.filter((child) => child?.type === "bulletList" || child?.type === "orderedList");
+  const otherChildren = content.filter((child) => (
+    child?.type !== "paragraph"
+    && child?.type !== "bulletList"
+    && child?.type !== "orderedList"
+  ));
+  const lines = [`${" ".repeat(indent)}${marker} ${specInlineMarkdownFromNode(paragraph || {}).trim()}`.trimEnd()];
+  nestedLists.forEach((child) => {
+    const childMarkdown = markdownFromSpecBlock(child, indent + 2);
+    if (childMarkdown) {
+      lines.push(...childMarkdown.split("\n"));
+    }
+  });
+  otherChildren.forEach((child) => {
+    const childText = specInlineMarkdownFromNode(child).trim();
+    if (childText) {
+      lines.push(`${" ".repeat(indent + 2)}${childText}`);
+    }
+  });
+  return lines;
+}
+
+function markdownFromSpecBlock(block, indent = 0) {
+  if (!block || typeof block !== "object") {
+    return "";
+  }
+  if (block.type === "paragraph") {
+    return specInlineMarkdownFromNode(block).trim();
+  }
+  if (block.type === "heading") {
+    const level = Math.max(1, Math.min(Number.parseInt(block.attrs?.level || 1, 10) || 1, 6));
+    return `${"#".repeat(level)} ${specInlineMarkdownFromNode(block).trim()}`.trimEnd();
+  }
+  if (block.type === "bulletList" || block.type === "orderedList") {
+    const start = Math.max(Number.parseInt(block.attrs?.start || 1, 10) || 1, 1);
+    const lines = [];
+    (block.content || []).forEach((item, offset) => {
+      const marker = block.type === "orderedList" ? `${start + offset}.` : "-";
+      lines.push(...markdownLinesFromSpecListItem(item, indent, marker));
+    });
+    return lines.join("\n");
+  }
+  return specInlineMarkdownFromNode(block).trim();
+}
+
+function specBlocksToMarkdown(blocks) {
+  return normalizeSpecBlocks(blocks)
+    .map((block) => markdownFromSpecBlock(block).trim())
+    .filter(Boolean)
+    .join("\n\n")
+    .trim();
+}
+
+function specInlineHtmlFromNode(node) {
+  if (!node || typeof node !== "object") {
+    return "";
+  }
+  if (node.type === "text") {
+    let html = escapeHtml(node.text || "");
+    const markTypes = new Set(specNormalizedMarkTypes(node.marks || []));
+    if (markTypes.has("italic")) {
+      html = `<em>${html}</em>`;
+    }
+    if (markTypes.has("bold")) {
+      html = `<strong>${html}</strong>`;
+    }
+    return html;
+  }
+  return Array.isArray(node.content)
+    ? node.content.map((child) => specInlineHtmlFromNode(child)).join("")
+    : "";
+}
+
+function specBlockToEditorHtml(block) {
+  if (!block || typeof block !== "object") {
+    return "";
+  }
+  if (block.type === "paragraph") {
+    const text = specInlineHtmlFromNode(block);
+    return `<p>${text || "<br>"}</p>`;
+  }
+  if (block.type === "heading") {
+    const level = Math.max(1, Math.min(Number.parseInt(block.attrs?.level || 2, 10) || 2, 6));
+    const text = specInlineHtmlFromNode(block);
+    return `<h${level}>${text || "<br>"}</h${level}>`;
+  }
+  if (block.type === "bulletList" || block.type === "orderedList") {
+    const tag = block.type === "orderedList" ? "ol" : "ul";
+    const start = block.type === "orderedList"
+      ? ` start="${Math.max(Number.parseInt(block.attrs?.start || 1, 10) || 1, 1)}"`
+      : "";
+    const items = (block.content || []).map((item) => specListItemToEditorHtml(item)).join("");
+    return `<${tag}${start}>${items}</${tag}>`;
+  }
+  return "";
+}
+
+function specListItemToEditorHtml(item) {
+  const content = Array.isArray(item?.content) ? item.content : [];
+  const paragraph = content.find((child) => child?.type === "paragraph");
+  const nestedLists = content.filter((child) => child?.type === "bulletList" || child?.type === "orderedList");
+  const text = specInlineHtmlFromNode(paragraph || {});
+  const nestedHtml = nestedLists.map((child) => specBlockToEditorHtml(child)).join("");
+  return `<li>${text || (!nestedHtml ? "<br>" : "")}${nestedHtml}</li>`;
+}
+
+function specBlocksToEditorHtml(blocks) {
+  const html = normalizeSpecBlocks(blocks).map((block) => specBlockToEditorHtml(block)).join("");
+  return html || "<p><br></p>";
+}
+
+function specElementStyleMarks(element) {
+  if (!(element instanceof HTMLElement)) {
+    return [];
+  }
+  const marks = [];
+  const fontWeight = `${element.style?.fontWeight || ""}`.toLowerCase();
+  const fontWeightValue = Number.parseInt(fontWeight, 10);
+  if (
+    element.tagName?.toLowerCase() === "strong"
+    || element.tagName?.toLowerCase() === "b"
+    || fontWeight === "bold"
+    || fontWeight === "bolder"
+    || (!Number.isNaN(fontWeightValue) && fontWeightValue >= 600)
+  ) {
+    marks.push("bold");
+  }
+  if (
+    element.tagName?.toLowerCase() === "em"
+    || element.tagName?.toLowerCase() === "i"
+    || `${element.style?.fontStyle || ""}`.toLowerCase() === "italic"
+  ) {
+    marks.push("italic");
+  }
+  return marks;
+}
+
+function specInlineNodesFromDom(node, activeMarks = []) {
+  if (!node) {
+    return [];
+  }
+  if (node.nodeType === Node.TEXT_NODE) {
+    const text = `${node.textContent || ""}`.replace(/\u200B/g, "");
+    return text ? [specTextNode(text, activeMarks)] : [];
+  }
+  if (node.nodeType !== Node.ELEMENT_NODE) {
+    return [];
+  }
+
+  const tag = node.tagName.toLowerCase();
+  if (tag === "br") {
+    return [];
+  }
+
+  const nextMarks = [...specNormalizedMarkTypes(activeMarks), ...specElementStyleMarks(node)];
+  const nodes = [];
+  Array.from(node.childNodes).forEach((child) => {
+    specInlineNodesFromDom(child, nextMarks).forEach((inlineNode) => {
+      specAppendInlineText(nodes, `${inlineNode.text || ""}`, inlineNode.marks || []);
+    });
+  });
+  return nodes;
+}
+
+function specBlockFromElement(element) {
+  if (!element || element.nodeType !== Node.ELEMENT_NODE) {
+    return null;
+  }
+  const tag = element.tagName.toLowerCase();
+  if (tag === "p" || tag === "div") {
+    const inlineContent = specInlineNodesFromDom(element);
+    return specMarkdownShortcutBlockFromParagraphContent(inlineContent) || specParagraphNode(inlineContent);
+  }
+  if (/^h[1-6]$/.test(tag)) {
+    return specHeadingNode(specInlineNodesFromDom(element), Number.parseInt(tag.slice(1), 10));
+  }
+  if (tag === "ul" || tag === "ol") {
+    return specListNodeFromElement(element);
+  }
+  return null;
+}
+
+function specBlocksFromContainerElement(element) {
+  const block = specBlockFromElement(element);
+  return block ? [block] : [];
+}
+
+function specListItemFromElement(element) {
+  const inlineNodes = [];
+  const children = [];
+  Array.from(element.childNodes).forEach((child) => {
+    if (child.nodeType === Node.ELEMENT_NODE) {
+      const tag = child.tagName.toLowerCase();
+      if (tag === "ul" || tag === "ol") {
+        children.push(specListNodeFromElement(child));
+        return;
+      }
+      if (tag === "br") {
+        return;
+      }
+    }
+    specInlineNodesFromDom(child).forEach((inlineNode) => {
+      specAppendInlineText(inlineNodes, `${inlineNode.text || ""}`, inlineNode.marks || []);
+    });
+  });
+  return specListItemNode(
+    inlineNodes,
+    children.filter((child) => !specBlockIsEmpty(child))
+  );
+}
+
+function specListNodeFromElement(element) {
+  const tag = element.tagName.toLowerCase();
+  const items = Array.from(element.children)
+    .filter((child) => child.tagName?.toLowerCase() === "li")
+    .map((child) => specListItemFromElement(child))
+    .filter((item) => !specBlockIsEmpty(item));
+  const start = tag === "ol"
+    ? Math.max(Number.parseInt(element.getAttribute("start") || "1", 10) || 1, 1)
+    : 1;
+  return tag === "ol"
+    ? specOrderedListNode(items, start)
+    : specBulletListNode(items);
+}
+
+function specBlocksFromDomNode(node) {
+  if (!node) {
+    return [];
+  }
+  if (node.nodeType === Node.TEXT_NODE) {
+    const text = `${node.textContent || ""}`.replace(/\u200B/g, "").trim();
+    return text ? [specParagraphNode(text)] : [];
+  }
+  if (node.nodeType !== Node.ELEMENT_NODE) {
+    return [];
+  }
+
+  const tag = node.tagName.toLowerCase();
+  if (tag === "p" || tag === "div") {
+    return specBlocksFromContainerElement(node);
+  }
+  if (/^h[1-6]$/.test(tag)) {
+    return [specHeadingNode(specInlineNodesFromDom(node), Number.parseInt(tag.slice(1), 10))];
+  }
+  if (tag === "ul" || tag === "ol") {
+    return [specListNodeFromElement(node)];
+  }
+  if (tag === "br") {
+    return [];
+  }
+  return Array.from(node.childNodes).flatMap((child) => specBlocksFromDomNode(child));
+}
+
+function specBlocksFromEditor(editor) {
+  if (!editor) {
+    return [specParagraphNode("")];
+  }
+  return normalizeSpecBlocks(
+    Array.from(editor.childNodes).flatMap((node) => specBlocksFromDomNode(node))
+  );
+}
+
 function specSectionFormNodes() {
   return Array.from(document.querySelectorAll("[data-spec-section-form]"));
 }
 
+function specEditorNode(form) {
+  return form?.querySelector?.("[data-spec-section-editor]") || null;
+}
+
+function specMarkdownNode(form) {
+  return form?.querySelector?.("[data-spec-section-markdown]") || null;
+}
+
+function initialSpecSectionBlocks(form) {
+  const scriptId = form?.dataset?.sectionContentScriptId || "";
+  const scriptNode = scriptId ? document.getElementById(scriptId) : null;
+  if (!scriptNode) {
+    return [specParagraphNode("")];
+  }
+  try {
+    return normalizeSpecBlocks(JSON.parse(scriptNode.textContent || "[]"));
+  } catch (error) {
+    console.error(error);
+    return [specParagraphNode("")];
+  }
+}
+
+function specClosestEditableBlock(node, editor) {
+  let element = node?.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+  if (!element || !editor) {
+    return null;
+  }
+  const block = element.closest("p, li, h1, h2, h3, h4, h5, h6");
+  return block && editor.contains(block) ? block : null;
+}
+
+function firstSpecEditableBlock(editor) {
+  return editor?.querySelector?.("p, li, h1, h2, h3, h4, h5, h6") || null;
+}
+
+function specListItemText(item) {
+  if (!item) {
+    return "";
+  }
+  const textParts = [];
+  Array.from(item.childNodes).forEach((child) => {
+    if (child.nodeType === Node.ELEMENT_NODE) {
+      const tag = child.tagName.toLowerCase();
+      if (tag === "ul" || tag === "ol") {
+        return;
+      }
+    }
+    textParts.push(child.textContent || "");
+  });
+  return textParts.join(" ").replace(/\s+/g, " ").trim();
+}
+
+function specMarkdownMarkerForBlock(block) {
+  if (!block) {
+    return "";
+  }
+  const tag = block.tagName.toLowerCase();
+  if (/^h[1-6]$/.test(tag)) {
+    return `${"#".repeat(Number.parseInt(tag.slice(1), 10) || 1)} `;
+  }
+  if (tag === "li") {
+    const list = block.parentElement;
+    if (!list) {
+      return "- ";
+    }
+    if (list.tagName.toLowerCase() === "ol") {
+      const start = Math.max(Number.parseInt(list.getAttribute("start") || "1", 10) || 1, 1);
+      const siblings = Array.from(list.children).filter((item) => item.tagName?.toLowerCase() === "li");
+      const index = Math.max(siblings.indexOf(block), 0);
+      return `${start + index}. `;
+    }
+    return "- ";
+  }
+  return "";
+}
+
+function refreshSpecEditorActiveState(form) {
+  const editor = specEditorNode(form);
+  if (!editor) {
+    return;
+  }
+
+  editor.querySelectorAll("[data-live-md-active]").forEach((node) => {
+    node.removeAttribute("data-live-md-active");
+    node.removeAttribute("data-live-md-marker");
+  });
+
+  const selection = window.getSelection();
+  if (!selection?.anchorNode || !editor.contains(selection.anchorNode)) {
+    return;
+  }
+
+  const block = specClosestEditableBlock(selection.anchorNode, editor);
+  const marker = specMarkdownMarkerForBlock(block);
+  if (!block || !marker) {
+    return;
+  }
+
+  block.dataset.liveMdActive = "true";
+  block.dataset.liveMdMarker = marker;
+}
+
+function ensureSpecEditorCaretVisible(form) {
+  const editor = specEditorNode(form);
+  const selection = window.getSelection();
+  if (!editor || !selection) {
+    return;
+  }
+  if (selection.anchorNode && editor.contains(selection.anchorNode)) {
+    return;
+  }
+  const block = firstSpecEditableBlock(editor) || editor;
+  setCaretInElement(block);
+}
+
+function refreshAllSpecEditorActiveStates() {
+  specSectionFormNodes().forEach((form) => {
+    refreshSpecEditorActiveState(form);
+  });
+}
+
+function renderSpecSectionEditor(form, blocks) {
+  const editor = specEditorNode(form);
+  if (!editor) {
+    return;
+  }
+  editor.innerHTML = specBlocksToEditorHtml(blocks);
+  refreshSpecEditorActiveState(form);
+}
+
+function setSpecSectionBlocks(form, blocks) {
+  const normalizedBlocks = normalizeSpecBlocks(blocks);
+  renderSpecSectionEditor(form, normalizedBlocks);
+  const markdownInput = specMarkdownNode(form);
+  if (markdownInput) {
+    markdownInput.value = specBlocksToMarkdown(normalizedBlocks);
+    resizeDocumentEditorInput(markdownInput);
+  }
+}
+
+function getSpecSectionBlocks(form) {
+  return specBlocksFromEditor(specEditorNode(form));
+}
+
+function getSpecSectionMarkdown(form) {
+  return specBlocksToMarkdown(getSpecSectionBlocks(form));
+}
+
+function setSpecSectionMarkdown(form, markdown) {
+  const blocks = specMarkdownToBlocks(markdown);
+  setSpecSectionBlocks(form, blocks);
+  return blocks;
+}
+
+function activeSpecContentInput(form) {
+  return specEditorNode(form);
+}
+
+function moveCaretToEnd(node) {
+  if (!node || node.nodeType !== Node.ELEMENT_NODE) {
+    return;
+  }
+  const selection = window.getSelection();
+  if (!selection) {
+    return;
+  }
+  const range = document.createRange();
+  range.selectNodeContents(node);
+  range.collapse(false);
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
+function ensureSpecCaretTextNode(element) {
+  if (!element) {
+    return null;
+  }
+  const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+  const firstText = walker.nextNode();
+  if (firstText) {
+    return firstText;
+  }
+  const textNode = document.createTextNode("");
+  element.insertBefore(textNode, element.firstChild || null);
+  return textNode;
+}
+
+function setCaretInElement(element, offset = null) {
+  if (!element) {
+    return;
+  }
+  const textNode = ensureSpecCaretTextNode(element);
+  const targetOffset = Math.min(
+    offset ?? (textNode.textContent || "").length,
+    (textNode.textContent || "").length,
+  );
+  const selection = window.getSelection();
+  if (!selection) {
+    return;
+  }
+  const range = document.createRange();
+  range.setStart(textNode, targetOffset);
+  range.collapse(true);
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
+function specSelectionRangeWithinEditor(editor) {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount < 1) {
+    return null;
+  }
+  const range = selection.getRangeAt(0);
+  if (!editor) {
+    return null;
+  }
+  const anchorInside = !selection.anchorNode || editor.contains(selection.anchorNode);
+  const focusInside = !selection.focusNode || editor.contains(selection.focusNode);
+  return anchorInside && focusInside ? range : null;
+}
+
+function specEditorForCurrentSelection() {
+  const selection = window.getSelection();
+  if (!selection) {
+    return null;
+  }
+  const anchorElement = selection.anchorNode?.nodeType === Node.TEXT_NODE
+    ? selection.anchorNode.parentElement
+    : selection.anchorNode;
+  const focusElement = selection.focusNode?.nodeType === Node.TEXT_NODE
+    ? selection.focusNode.parentElement
+    : selection.focusNode;
+  const anchorEditor = anchorElement?.closest?.("[data-spec-section-editor]");
+  const focusEditor = focusElement?.closest?.("[data-spec-section-editor]");
+  if (anchorEditor && focusEditor && anchorEditor === focusEditor) {
+    return anchorEditor;
+  }
+  return anchorEditor || focusEditor || null;
+}
+
+function specUnwrapElement(element) {
+  if (!element?.parentNode) {
+    return;
+  }
+  while (element.firstChild) {
+    element.parentNode.insertBefore(element.firstChild, element);
+  }
+  element.remove();
+}
+
+function specClosestFormatElement(node, editor, tagName) {
+  let element = node?.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+  while (element && element !== editor) {
+    if (element.tagName?.toLowerCase() === tagName) {
+      return element;
+    }
+    element = element.parentElement;
+  }
+  return null;
+}
+
+function specRangeCoversElementText(range, element) {
+  if (!range || !element) {
+    return false;
+  }
+  const probe = document.createRange();
+  probe.selectNodeContents(element);
+  return range.toString() && range.toString() === probe.toString();
+}
+
+function specWrapRangeWithTag(range, tagName) {
+  if (!range || range.collapsed) {
+    return false;
+  }
+  const fragment = range.extractContents();
+  if (!fragment.textContent?.replace(/\u200B/g, "").trim() && !fragment.querySelector?.("*")) {
+    return false;
+  }
+  const wrapper = document.createElement(tagName);
+  wrapper.appendChild(fragment);
+  range.insertNode(wrapper);
+  const selection = window.getSelection();
+  if (selection) {
+    const nextRange = document.createRange();
+    nextRange.selectNodeContents(wrapper);
+    selection.removeAllRanges();
+    selection.addRange(nextRange);
+  }
+  return true;
+}
+
+function specSelectionAtBlockStart(block) {
+  const selection = window.getSelection();
+  if (!selection || !selection.isCollapsed || !block || !selection.anchorNode) {
+    return false;
+  }
+  const range = document.createRange();
+  range.selectNodeContents(block);
+  range.setEnd(selection.anchorNode, selection.anchorOffset);
+  return !range.toString();
+}
+
+function replaceSpecBlockNode(block, replacement, caretTarget = null) {
+  if (!block || !replacement) {
+    return;
+  }
+  block.replaceWith(replacement);
+  const target = caretTarget || replacement;
+  if (target.tagName?.toLowerCase() === "ul" || target.tagName?.toLowerCase() === "ol") {
+    setCaretInElement(target.querySelector("li"));
+  } else {
+    setCaretInElement(target);
+  }
+}
+
+function maybeTransformSpecMarkdownPrefix(editor) {
+  const selection = window.getSelection();
+  const block = specClosestEditableBlock(selection?.anchorNode, editor);
+  if (!block) {
+    return false;
+  }
+
+  const tag = block.tagName.toLowerCase();
+  if (tag !== "p" && tag !== "div") {
+    return false;
+  }
+
+  const text = (block.textContent || "").replace(/\u200B/g, "").replace(/\u00a0/g, " ");
+  const match = specMarkdownShortcutMatch(text);
+  if (!match) {
+    return false;
+  }
+
+  if (match.type === "heading") {
+    const heading = document.createElement(`h${match.level}`);
+    if (match.text) {
+      heading.textContent = match.text;
+    } else {
+      heading.innerHTML = "<br>";
+    }
+    replaceSpecBlockNode(block, heading, heading);
+    return true;
+  }
+
+  if (match.type === "bulletList" || match.type === "orderedList") {
+    const ordered = match.type === "orderedList";
+    const list = document.createElement(ordered ? "ol" : "ul");
+    if (ordered) {
+      list.setAttribute("start", `${match.start}`);
+    }
+    const item = document.createElement("li");
+    if (match.text) {
+      item.textContent = match.text;
+    } else {
+      item.innerHTML = "<br>";
+    }
+    list.appendChild(item);
+    replaceSpecBlockNode(block, list, item);
+    return true;
+  }
+
+  return false;
+}
+
+function applySpecInlineFormat(editor, command) {
+  if (!editor || !command) {
+    return false;
+  }
+  const range = specSelectionRangeWithinEditor(editor);
+  const tagName = command === "bold" ? "strong" : command === "italic" ? "em" : "";
+  if (range && !range.collapsed && tagName) {
+    const formatAncestor = specClosestFormatElement(range.commonAncestorContainer, editor, tagName);
+    if (formatAncestor && specRangeCoversElementText(range, formatAncestor)) {
+      specUnwrapElement(formatAncestor);
+      return true;
+    }
+    return specWrapRangeWithTag(range, tagName);
+  }
+  try {
+    document.execCommand("styleWithCSS", false, false);
+  } catch (error) {
+    console.debug(error);
+  }
+  try {
+    return document.execCommand(command, false);
+  } catch (error) {
+    console.error(error);
+    return false;
+  }
+}
+
+function serializeSpecSectionForm(form) {
+  return {
+    title: form?.querySelector?.("input[name='title']")?.value || "",
+    status: form?.querySelector?.("[data-section-status-input]")?.value || "iterating",
+    content_json: getSpecSectionBlocks(form),
+  };
+}
+
 function specSectionSnapshot(form) {
-  return JSON.stringify(serializeForm(form));
+  return JSON.stringify(serializeSpecSectionForm(form));
 }
 
 function setSpecSectionAutosaveStatus(form, state, label = "") {
@@ -375,7 +1545,7 @@ async function flushSpecSectionAutosave(controller, { force = false } = {}) {
 
   controller.inFlight = postJson(
     controller.form.dataset.apiForm,
-    { ...serializeForm(controller.form), __form: controller.form },
+    { ...serializeSpecSectionForm(controller.form), __form: controller.form },
     controller.form.dataset.apiMethod || "POST"
   )
     .then(() => {
@@ -491,6 +1661,157 @@ function initializeDocumentEditorAutosave() {
   });
 }
 
+function initializeSpecSectionEditors() {
+  specSectionFormNodes().forEach((form) => {
+    if (form.dataset.editorInitialized === "true") {
+      return;
+    }
+
+    form.dataset.editorInitialized = "true";
+    const editor = specEditorNode(form);
+    const markdownInput = specMarkdownNode(form);
+
+    if (!editor || !markdownInput) {
+      return;
+    }
+
+    setSpecSectionBlocks(form, initialSpecSectionBlocks(form));
+
+    editor.addEventListener("paste", (event) => {
+      event.preventDefault();
+      const text = event.clipboardData?.getData("text/plain") || "";
+      document.execCommand("insertText", false, text);
+      editor.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    editor.addEventListener("focus", () => {
+      ensureSpecEditorCaretVisible(form);
+      refreshSpecEditorActiveState(form);
+    });
+
+    editor.addEventListener("keydown", (event) => {
+      if (event.key === "Tab") {
+        event.preventDefault();
+        document.execCommand(event.shiftKey ? "outdent" : "indent", false);
+        editor.dispatchEvent(new Event("input", { bubbles: true }));
+        return;
+      }
+
+      if (event.key === "Backspace") {
+        const selection = window.getSelection();
+        let node = selection?.anchorNode || null;
+        if (node?.nodeType === Node.TEXT_NODE) {
+          node = node.parentElement;
+        }
+        const block = specClosestEditableBlock(node, editor);
+        if (block && specSelectionAtBlockStart(block)) {
+          if (/^h[1-6]$/.test(block.tagName.toLowerCase())) {
+            event.preventDefault();
+            const paragraph = document.createElement("p");
+            paragraph.textContent = block.textContent || "";
+            replaceSpecBlockNode(block, paragraph, paragraph);
+            editor.dispatchEvent(new Event("input", { bubbles: true }));
+            return;
+          }
+          if (block.tagName.toLowerCase() === "li") {
+            event.preventDefault();
+            document.execCommand("outdent", false);
+            editor.dispatchEvent(new Event("input", { bubbles: true }));
+            return;
+          }
+        }
+      }
+
+      if (event.key !== "Enter") {
+        return;
+      }
+
+      const selection = window.getSelection();
+      let node = selection?.anchorNode || null;
+      if (node?.nodeType === Node.TEXT_NODE) {
+        node = node.parentElement;
+      }
+      const listItem = node?.closest?.("li");
+      const listNode = node?.closest?.("ul, ol");
+      if (listItem && listNode && !listItem.textContent.replace(/\u200B/g, "").trim() && !listItem.querySelector("ul, ol")) {
+        event.preventDefault();
+        document.execCommand("outdent", false);
+        document.execCommand("formatBlock", false, "P");
+        editor.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    });
+
+    editor.addEventListener("input", () => {
+      if (maybeTransformSpecMarkdownPrefix(editor)) {
+        refreshSpecEditorActiveState(form);
+      }
+      markdownInput.value = specBlocksToMarkdown(specBlocksFromEditor(editor));
+      refreshSpecEditorActiveState(form);
+    });
+
+    editor.addEventListener("click", () => {
+      ensureSpecEditorCaretVisible(form);
+      refreshSpecEditorActiveState(form);
+    });
+  });
+
+  if (document.body.dataset.specEditorSelectionInitialized === "true") {
+    return;
+  }
+  document.body.dataset.specEditorSelectionInitialized = "true";
+  document.addEventListener("selectionchange", () => {
+    refreshAllSpecEditorActiveStates();
+  });
+
+  if (document.body.dataset.specEditorInlineFormatInitialized === "true") {
+    return;
+  }
+  document.body.dataset.specEditorInlineFormatInitialized = "true";
+
+  const handleSpecInlineFormat = (command) => {
+    const editor = specEditorForCurrentSelection();
+    if (!editor) {
+      return false;
+    }
+    applySpecInlineFormat(editor, command);
+    window.requestAnimationFrame(() => {
+      editor.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    return true;
+  };
+
+  document.addEventListener("beforeinput", (event) => {
+    if (event.inputType !== "formatBold" && event.inputType !== "formatItalic") {
+      return;
+    }
+    if (!specEditorForCurrentSelection()) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    handleSpecInlineFormat(event.inputType === "formatBold" ? "bold" : "italic");
+  }, true);
+
+  document.addEventListener("keydown", (event) => {
+    if (!(event.metaKey || event.ctrlKey) || event.altKey) {
+      return;
+    }
+    const code = `${event.code || ""}`.toLowerCase();
+    const key = `${event.key || ""}`.toLowerCase();
+    const isBold = code === "keyb" || key === "b";
+    const isItalic = code === "keyi" || key === "i" || key === "ı";
+    if (!isBold && !isItalic) {
+      return;
+    }
+    if (!specEditorForCurrentSelection()) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    handleSpecInlineFormat(isBold ? "bold" : "italic");
+  }, true);
+}
+
 function initializeSpecSectionAutosave() {
   specSectionFormNodes().forEach((form) => {
     if (form.dataset.autosaveInitialized === "true") {
@@ -498,13 +1819,13 @@ function initializeSpecSectionAutosave() {
     }
 
     form.dataset.autosaveInitialized = "true";
-    const editorInput = form.querySelector("[data-spec-section-input]");
-    if (!editorInput) {
+    const titleInput = form.querySelector("input[name='title']");
+    const statusInput = form.querySelector("[data-section-status-input]");
+    const editor = specEditorNode(form);
+    const markdownInput = specMarkdownNode(form);
+    if (!titleInput || !statusInput || !editor || !markdownInput) {
       return;
     }
-    const watchedFields = Array.from(form.querySelectorAll("input[name], textarea[name], select[name]"));
-
-    resizeDocumentEditorInput(editorInput);
 
     const controller = {
       form,
@@ -519,7 +1840,6 @@ function initializeSpecSectionAutosave() {
     setSpecSectionAutosaveStatus(form, "saved");
 
     const scheduleAutosave = () => {
-      resizeDocumentEditorInput(editorInput);
       const nextSnapshot = specSectionSnapshot(form);
       if (nextSnapshot === controller.lastSavedSnapshot) {
         controller.dirty = false;
@@ -539,15 +1859,9 @@ function initializeSpecSectionAutosave() {
       }, 900);
     };
 
-    watchedFields.forEach((field) => {
-      const handler = () => {
-        if (field === editorInput) {
-          resizeDocumentEditorInput(editorInput);
-        }
-        scheduleAutosave();
-      };
-      field.addEventListener("input", handler);
-      field.addEventListener("change", handler);
+    [titleInput, statusInput].forEach((field) => {
+      field.addEventListener("input", scheduleAutosave);
+      field.addEventListener("change", scheduleAutosave);
       if (field.type !== "hidden") {
         field.addEventListener("blur", () => {
           flushSpecSectionAutosave(controller).catch((error) => {
@@ -555,6 +1869,13 @@ function initializeSpecSectionAutosave() {
           });
         });
       }
+    });
+
+    editor.addEventListener("input", scheduleAutosave);
+    editor.addEventListener("blur", () => {
+      flushSpecSectionAutosave(controller).catch((error) => {
+        console.error(error);
+      });
     });
 
     form.addEventListener("submit", (event) => {
@@ -686,12 +2007,13 @@ function initializeSectionAiControls() {
     const menu = shell.querySelector("[data-section-ai-menu]");
     const sectionNode = shell.closest("[data-spec-section]");
     const form = sectionNode?.querySelector?.("[data-spec-section-form]");
-    const bodyInput = form?.querySelector?.("[data-spec-section-input]");
+    const editor = specEditorNode(form);
+    const markdownInput = specMarkdownNode(form);
     const titleInput = form?.querySelector?.("input[name='title']");
     const promptInput = menu?.querySelector?.("[data-section-ai-prompt]");
     const runButton = menu?.querySelector?.("[data-section-ai-run]");
 
-    if (!toggle || !menu || !form || !bodyInput || !promptInput || !runButton) {
+    if (!toggle || !menu || !form || !editor || !markdownInput || !promptInput || !runButton) {
       return;
     }
 
@@ -754,12 +2076,13 @@ function initializeSectionAiControls() {
       setSpecSectionAutosaveStatus(form, "saving", "AI editing...");
 
       try {
+        const currentBody = getSpecSectionMarkdown(form);
         const responsePayload = await postJson(
           `${form.dataset.apiForm}/revise-with-ai`,
           {
             prompt: promptInput.value || "",
             title: titleInput?.value || "",
-            body: bodyInput.value || "",
+            body: currentBody,
             __form: form,
           }
         );
@@ -770,20 +2093,18 @@ function initializeSectionAiControls() {
           return;
         }
 
-        if (revisedBody.trim() === (bodyInput.value || "").trim()) {
+        if (revisedBody.trim() === currentBody.trim()) {
           setSpecSectionAutosaveStatus(form, "saved", "No AI changes");
           setSectionAiMenuState(shell, false);
           return;
         }
 
-        bodyInput.value = revisedBody;
-        resizeDocumentEditorInput(bodyInput);
-        bodyInput.dispatchEvent(new Event("input", { bubbles: true }));
+        setSpecSectionMarkdown(form, revisedBody);
         setSectionAiMenuState(shell, false);
-        bodyInput.focus();
-        if (typeof bodyInput.setSelectionRange === "function") {
-          bodyInput.setSelectionRange(bodyInput.value.length, bodyInput.value.length);
-        }
+        const activeInput = activeSpecContentInput(form);
+        activeInput?.dispatchEvent?.(new Event("input", { bubbles: true }));
+        editor.focus();
+        moveCaretToEnd(editor);
       } catch (error) {
         console.error(error);
         if (error.message.startsWith("Authentication required")) {
@@ -2454,6 +3775,7 @@ document.addEventListener("input", (event) => {
 
 initializeDocumentCreateControls();
 initializeDocumentEditorAutosave();
+initializeSpecSectionEditors();
 initializeSpecSectionAutosave();
 initializeSectionStatusControls();
 initializeSectionActionControls();

@@ -25,6 +25,7 @@ from specs.spec_document import (
     section_markdown_from_ref,
     section_status_from_ref,
     section_summary,
+    strip_redundant_section_heading,
     update_section_content,
 )
 
@@ -32,10 +33,15 @@ from specs.spec_document import (
 def ensure_spec_document(project) -> ProjectSpecDocument:
     spec_document = getattr(project, "spec_document", None)
     if spec_document:
+        update_fields: list[str] = []
         if not spec_document.content_json:
             spec_document.content_json = default_spec_content(project)
+            update_fields.append("content_json")
+        if spec_document.schema_version != SPEC_SCHEMA_VERSION:
             spec_document.schema_version = SPEC_SCHEMA_VERSION
-            spec_document.save(update_fields=["content_json", "schema_version", "updated_at"])
+            update_fields.append("schema_version")
+        if update_fields:
+            spec_document.save(update_fields=[*update_fields, "updated_at"])
         return spec_document
 
     return ProjectSpecDocument.objects.create(
@@ -285,10 +291,19 @@ def apply_batch_spec_operations(
         operation_type = (operation.get("type") or "").strip()
         if operation_type == "update_section":
             section_id = operation.get("section_id", "")
+            existing_section = find_section(next_content, section_id)
+            if not existing_section:
+                continue
+            normalized_body = strip_redundant_section_heading(
+                operation.get("body", ""),
+                section_summary(existing_section)["title"],
+            )
+            if not normalized_body:
+                continue
             next_content, updated_section, changed = update_section_content(
                 next_content,
                 section_id,
-                content_blocks=markdown_to_blocks(operation.get("body", "")),
+                content_blocks=markdown_to_blocks(normalized_body),
             )
             if not updated_section or not changed:
                 continue
@@ -305,12 +320,16 @@ def apply_batch_spec_operations(
 
         if operation_type == "insert_section_after":
             after_section_id = operation.get("after_section_id", "")
+            normalized_title = (operation.get("title") or "New Section").strip() or "New Section"
+            normalized_body = strip_redundant_section_heading(operation.get("body", ""), normalized_title)
+            if not normalized_body:
+                continue
             next_content, inserted_section = insert_section_after(
                 next_content,
                 project=project,
                 after_section_id=after_section_id,
-                title=operation.get("title") or "New Section",
-                body=operation.get("body", ""),
+                title=normalized_title,
+                body=normalized_body,
             )
             if not inserted_section:
                 continue

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from specs.models import AIUsageOperation
 from specs.openai import OpenAIUsageContext, request_openai_json_schema
 from specs.services import ensure_spec_document
-from specs.spec_document import find_section, section_summary
+from specs.spec_document import find_section, section_summary, strip_redundant_section_heading
 
 SECTION_REVISION_ACTIONS = {
     "revise": {
@@ -96,13 +96,15 @@ def _section_revision_prompt(*, prompt: str, title: str, kind: str, status: str,
         "You are revising a single section from a collaborative product specification.\n"
         "Operate only on the supplied section body.\n"
         "Do not change the section title, section status, or document type.\n"
+        "Do not repeat the section title as a heading or opening line in the revised body.\n"
         "Always return the revised section and summary in English, even if the user's request or the current "
         "section body is written in another language.\n"
         "Do not add new requirements, owners, metrics, integrations, dates, APIs, decisions, or implementation "
         "details that are not already supported by the current text.\n"
         "Do not reference other sections unless the current body already does.\n"
         "Treat the user's request as an editing instruction, not as permission to expand product scope.\n"
-        "Return markdown-friendly body text using paragraphs and bullet lists only when helpful.\n"
+        "Return markdown-friendly body text using paragraphs, subheadings, bullet lists, and numbered lists when helpful.\n"
+        "Nested lists are allowed when they improve clarity.\n"
         f"User revision request: {prompt}\n\n"
         f"Section title: {title}\n"
         f"Section kind: {kind}\n"
@@ -166,7 +168,7 @@ def revise_section_with_ai(
             },
         ),
     )
-    revised_body = (parsed_output.get("revised_body") or "").strip()
+    revised_body = strip_redundant_section_heading(parsed_output.get("revised_body") or "", effective_title)
     if not revised_body:
         raise SectionRevisionError("OpenAI did not return revised section content.")
 

@@ -8,6 +8,22 @@
   <meta http-equiv="Cache-Control" content="no-store">
   <meta http-equiv="Pragma" content="no-cache">
   <link rel="stylesheet" href="{% static 'dist/app.css' %}?v={{ frontend_asset_version }}">
+  <style>
+    .spec-rich-text-tight-lists :where(li) {
+      margin-top: 0 !important;
+      margin-bottom: 0 !important;
+    }
+
+    .spec-rich-text-tight-lists :where(li > p) {
+      margin-top: 0 !important;
+      margin-bottom: 0 !important;
+    }
+
+    .spec-rich-text-tight-lists :where(ul, ol) {
+      margin-top: 0.5rem !important;
+      margin-bottom: 0.5rem !important;
+    }
+  </style>
   <script defer src="https://code.iconify.design/iconify-icon/1.0.7/iconify-icon.min.js"></script>
   {% if frontend_disable_service_workers %}
     <script>

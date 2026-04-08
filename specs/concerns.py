@@ -39,6 +39,7 @@ from specs.spec_document import (
     markdown_to_blocks,
     section_catalog,
     section_summary,
+    strip_redundant_section_heading,
 )
 AI_CONCERN_SCOPES = (
     ConcernType.CONSISTENCY,
@@ -249,6 +250,9 @@ def _proposal_prompt(snapshot: dict, concern: ProjectConcern, sections: list[dic
     return (
         "You are helping a team resolve a project concern.\n"
         "Produce reviewable per-section body rewrites. Do not rename or reorder sections.\n"
+        "Do not repeat a section title as a heading or opening line inside the proposed body.\n"
+        "Use markdown subheadings, bullet lists, and numbered lists when they make the edit easier to scan.\n"
+        "Nested lists are allowed when they stay concise.\n"
         "Only return changes for sections that should actually be edited.\n"
         "Keep the edits concrete and internally consistent.\n"
         f"Concern JSON:\n{json.dumps(_serialize_concern(concern), ensure_ascii=True)}\n\n"
@@ -460,11 +464,29 @@ def build_concern_proposal_with_ai(
             },
         ),
     )
+    section_titles = {section.get("id", ""): section.get("title", "") for section in sections}
+    normalized_changes: list[dict] = []
+    for change in parsed_output.get("changes", []):
+        section_id = (change.get("section_id") or "").strip()
+        proposed_body = strip_redundant_section_heading(
+            change.get("proposed_body", ""),
+            section_titles.get(section_id, ""),
+        )
+        if not section_id or not proposed_body:
+            continue
+        normalized_changes.append(
+            {
+                "section_id": section_id,
+                "summary": (change.get("summary") or "").strip(),
+                "proposed_body": proposed_body,
+            }
+        )
+
     return ConcernProposalResult(
         provider="openai",
         model=model,
         summary=parsed_output["summary"],
-        changes=parsed_output["changes"],
+        changes=normalized_changes,
     )
 
 

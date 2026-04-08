@@ -422,13 +422,13 @@ class StreamAttachmentApplyTests(AlignmentMediaTestCase):
                     {
                         "type": "update_section",
                         "section_id": requirements["id"],
-                        "body": "Updated requirements body from uploaded reference.",
+                        "body": "## Requirements\n\nUpdated requirements body from uploaded reference.",
                     },
                     {
                         "type": "insert_section_after",
                         "after_section_id": tech_stack["id"],
                         "title": "Integration",
-                        "body": "Integration section body from uploaded reference.",
+                        "body": "# Integration\n\nIntegration section body from uploaded reference.",
                     },
                 ],
             },
@@ -444,10 +444,18 @@ class StreamAttachmentApplyTests(AlignmentMediaTestCase):
         updated_requirements = find_section(spec_document.content_json, requirements["id"])
         sections_after = section_catalog(spec_document.content_json)
         inserted_section = next(section for section in sections_after if section["title"] == "Integration")
+        inserted_section_node = find_section(spec_document.content_json, inserted_section["id"])
         latest_revision = self.project.revisions.order_by("-number").first()
 
-        self.assertIn("Updated requirements body", updated_requirements["content"][0]["content"][0]["text"])
+        self.assertEqual(
+            updated_requirements["content"][0]["content"][0]["text"],
+            "Updated requirements body from uploaded reference.",
+        )
         self.assertEqual(inserted_section["body"], "Integration section body from uploaded reference.")
+        self.assertEqual(
+            inserted_section_node["content"][0]["content"][0]["text"],
+            "Integration section body from uploaded reference.",
+        )
         self.assertEqual(latest_revision.source_post_id, self.post.id)
         self.assertEqual(result.agent_post.kind, StreamPostKind.AGENT)
         self.assertIn("Updated Requirements", result.agent_post.body)
