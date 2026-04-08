@@ -214,6 +214,7 @@ function sectionAiMenuIsOpen(shell) {
 
 const documentEditorAutosaveControllers = [];
 const specSectionAutosaveControllers = [];
+let specNavigationCleanup = null;
 
 function documentEditorFormNodes() {
   return Array.from(document.querySelectorAll("[data-document-editor-form]"));
@@ -563,6 +564,17 @@ function initializeSpecSectionAutosave() {
       });
     });
   });
+}
+
+function resetSpecSectionAutosaveControllers() {
+  specSectionAutosaveControllers.forEach((controller) => {
+    window.clearTimeout(controller?.timer);
+    if (controller) {
+      controller.timer = null;
+      controller.pendingAfterSave = false;
+    }
+  });
+  specSectionAutosaveControllers.length = 0;
 }
 
 async function flushAllPendingAutosaves() {
@@ -1227,7 +1239,12 @@ function initializeWorkspaceSplitPane() {
   syncToViewport();
 }
 
-function initializeSpecNavigation() {
+function initializeSpecNavigation({ preserveScroll = false } = {}) {
+  if (typeof specNavigationCleanup === "function") {
+    specNavigationCleanup();
+    specNavigationCleanup = null;
+  }
+
   const workspace = document.querySelector("[data-spec-workspace]");
   const container = workspace?.querySelector?.("[data-spec-scroll-container]");
   const navScroller = workspace?.querySelector?.("[data-spec-nav]");
@@ -1282,27 +1299,49 @@ function initializeSpecNavigation() {
     }
   };
 
-  navLinks.forEach((link) => {
-    link.addEventListener("click", (event) => {
+  const navLinkListeners = navLinks.map((link) => {
+    const onClick = (event) => {
       event.preventDefault();
       const sectionId = link.dataset.sectionId;
       if (!scrollToSpecSection(workspace, sectionId)) {
         return;
       }
       window.history.replaceState(null, "", `#spec-section-${sectionId}`);
-    });
+    };
+    link.addEventListener("click", onClick);
+    return [link, onClick];
   });
 
+  const onContainerScroll = () => {
+    updateActiveSection();
+  };
+  const onNavScroll = () => {
+    updateNavFades();
+  };
+  const onWindowResize = () => {
+    updateNavFades();
+  };
+
+  container.addEventListener("scroll", onContainerScroll);
+  navScroller.addEventListener("scroll", onNavScroll);
+  window.addEventListener("resize", onWindowResize);
+
+  specNavigationCleanup = () => {
+    container.removeEventListener("scroll", onContainerScroll);
+    navScroller.removeEventListener("scroll", onNavScroll);
+    window.removeEventListener("resize", onWindowResize);
+    navLinkListeners.forEach(([link, listener]) => {
+      link.removeEventListener("click", listener);
+    });
+  };
+
   const initialTarget = hashSpecSectionId() || workspace.dataset.scrollTargetSection;
-  if (initialTarget) {
+  if (!preserveScroll && initialTarget) {
     window.setTimeout(() => {
       scrollToSpecSection(workspace, initialTarget, hashSpecSectionId() ? "auto" : "smooth");
     }, 120);
   }
 
-  container.addEventListener("scroll", updateActiveSection);
-  navScroller.addEventListener("scroll", updateNavFades);
-  window.addEventListener("resize", updateNavFades);
   updateActiveSection();
   window.setTimeout(updateNavFades, 100);
 }
@@ -1666,6 +1705,18 @@ function workspaceStreamScrollNode(root = document) {
   return root?.querySelector?.("[data-workspace-stream-scroll]") || null;
 }
 
+function workspaceSpecRegionNode(root = document) {
+  return root?.querySelector?.("[data-workspace-spec-region]") || null;
+}
+
+function workspaceSpecScrollNode(root = document) {
+  return root?.querySelector?.("[data-spec-scroll-container]") || null;
+}
+
+function workspaceSpecNavNode(root = document) {
+  return root?.querySelector?.("[data-spec-nav]") || null;
+}
+
 function workspaceLiveRefreshEnabled() {
   return Boolean(workspaceLiveRefreshRoot() && workspaceHeaderRegionNode() && workspaceStreamLiveRegionNode());
 }
@@ -1681,14 +1732,7 @@ function hasBlockingAutosaveState() {
   return controllers.some((controller) => controller?.dirty || controller?.inFlight);
 }
 
-function shouldPauseBackgroundRefresh() {
-  if (document.hidden) {
-    return true;
-  }
-  const tagName = document.activeElement?.tagName?.toLowerCase();
-  if (tagName === "textarea" || tagName === "input" || tagName === "select") {
-    return true;
-  }
+function workspaceUiRefreshBlocked() {
   if (authModalNode() && !authModalNode().classList.contains("hidden")) {
     return true;
   }
@@ -1704,13 +1748,55 @@ function shouldPauseBackgroundRefresh() {
   return false;
 }
 
+function shouldPauseBackgroundRefresh() {
+  if (document.hidden) {
+    return true;
+  }
+  const tagName = document.activeElement?.tagName?.toLowerCase();
+  if (tagName === "textarea" || tagName === "input" || tagName === "select") {
+    return true;
+  }
+  if (workspaceUiRefreshBlocked()) {
+    return true;
+  }
+  return false;
+}
+
+function shouldPauseWorkspaceSpecRefresh() {
+  if (document.hidden || workspaceUiRefreshBlocked()) {
+    return true;
+  }
+  return Boolean(document.activeElement?.closest?.("[data-workspace-spec-region]"));
+}
+
+function reinitializeWorkspaceSpecPane({ preserveScroll = false } = {}) {
+  resetSpecSectionAutosaveControllers();
+  initializeSpecSectionAutosave();
+  initializeSectionStatusControls();
+  initializeSectionActionControls();
+  initializeSectionAiControls();
+  initializeSpecNavigation({ preserveScroll });
+}
+
+function workspaceActionUpdatesDocument(button = null) {
+  if (button?.dataset?.workspaceRefreshSpec === "true") {
+    return true;
+  }
+  const actionUrl = `${button?.dataset?.apiPost || ""}`;
+  return (
+    /\/concern-proposals\/\d+\/changes\/\d+\/accept\/?$/.test(actionUrl) ||
+    /\/agent-suggestions\/\d+\/apply\/?$/.test(actionUrl)
+  );
+}
+
 let workspaceLiveRefreshInFlight = null;
 
-async function refreshWorkspaceLiveRegions({ force = false } = {}) {
+async function refreshWorkspaceLiveRegions({ force = false, includeSpec = true } = {}) {
   if (!workspaceLiveRefreshEnabled()) {
     return false;
   }
-  if (!force && (shouldPauseBackgroundRefresh() || hasBlockingAutosaveState())) {
+  const blockingAutosave = hasBlockingAutosaveState();
+  if (!force && (shouldPauseBackgroundRefresh() || blockingAutosave)) {
     return false;
   }
   if (workspaceLiveRefreshInFlight) {
@@ -1719,11 +1805,17 @@ async function refreshWorkspaceLiveRegions({ force = false } = {}) {
 
   const currentHeader = workspaceHeaderRegionNode();
   const currentStream = workspaceStreamLiveRegionNode();
+  const currentSpec = workspaceSpecRegionNode();
   if (!currentHeader || !currentStream) {
     return false;
   }
 
   const previousScrollTop = workspaceStreamScrollNode()?.scrollTop || 0;
+  const shouldRefreshSpec = Boolean(
+    includeSpec && currentSpec && !blockingAutosave && !shouldPauseWorkspaceSpecRefresh()
+  );
+  const previousSpecScrollTop = shouldRefreshSpec ? workspaceSpecScrollNode()?.scrollTop || 0 : 0;
+  const previousSpecNavScrollLeft = shouldRefreshSpec ? workspaceSpecNavNode()?.scrollLeft || 0 : 0;
   workspaceLiveRefreshInFlight = fetch(workspaceLiveRefreshUrl(), {
     method: "GET",
     headers: {
@@ -1743,11 +1835,29 @@ async function refreshWorkspaceLiveRegions({ force = false } = {}) {
       const parsedDocument = new DOMParser().parseFromString(html, "text/html");
       const nextHeader = workspaceHeaderRegionNode(parsedDocument);
       const nextStream = workspaceStreamLiveRegionNode(parsedDocument);
+      const nextSpec = shouldRefreshSpec ? workspaceSpecRegionNode(parsedDocument) : null;
       if (!nextHeader || !nextStream) {
         throw new Error("Workspace live refresh response missing regions.");
       }
+      if (shouldRefreshSpec && !nextSpec) {
+        throw new Error("Workspace live refresh response missing spec region.");
+      }
       currentHeader.replaceWith(nextHeader);
       currentStream.replaceWith(nextStream);
+      if (shouldRefreshSpec) {
+        currentSpec.replaceWith(nextSpec);
+        reinitializeWorkspaceSpecPane({ preserveScroll: true });
+        const nextSpecScroll = workspaceSpecScrollNode();
+        const nextSpecNav = workspaceSpecNavNode();
+        if (nextSpecScroll) {
+          nextSpecScroll.scrollTop = previousSpecScrollTop;
+          nextSpecScroll.dispatchEvent(new Event("scroll"));
+        }
+        if (nextSpecNav) {
+          nextSpecNav.scrollLeft = previousSpecNavScrollLeft;
+          nextSpecNav.dispatchEvent(new Event("scroll"));
+        }
+      }
       const nextScrollNode = workspaceStreamScrollNode();
       if (nextScrollNode) {
         nextScrollNode.scrollTop = previousScrollTop;
@@ -1947,7 +2057,7 @@ document.addEventListener("submit", async (event) => {
       form.reset();
       syncStreamComposerFiles(form);
       form.querySelector("[data-stream-input]")?.focus();
-      const refreshed = await refreshWorkspaceLiveRegions({ force: true });
+      const refreshed = await refreshWorkspaceLiveRegions({ force: true, includeSpec: false });
       if (!refreshed) {
         window.location.reload();
       }
@@ -1957,7 +2067,7 @@ document.addEventListener("submit", async (event) => {
             console.error(error);
           })
           .finally(async () => {
-            const nextRefresh = await refreshWorkspaceLiveRegions({ force: true });
+            const nextRefresh = await refreshWorkspaceLiveRegions({ force: true, includeSpec: true });
             if (!nextRefresh) {
               window.location.reload();
             }
@@ -2188,7 +2298,10 @@ document.addEventListener("click", async (event) => {
     try {
       await postJson(button.dataset.apiPost, {});
       if (workspaceLiveRefreshEnabled() && button.closest("[data-workspace-stream-live-region]")) {
-        const refreshed = await refreshWorkspaceLiveRegions({ force: true });
+        const refreshed = await refreshWorkspaceLiveRegions({
+          force: true,
+          includeSpec: workspaceActionUpdatesDocument(button),
+        });
         if (!refreshed) {
           window.location.reload();
         }

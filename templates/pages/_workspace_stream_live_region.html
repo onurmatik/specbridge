@@ -332,7 +332,7 @@
                     {% if request.user.is_authenticated and proposal_item.change.status == 'pending' %}
                       <div class="flex gap-2">
                         <button class="secondary-button !px-3 !py-1.5 !text-xs" data-api-post="/api/projects/{{ project.slug }}/concern-proposals/{{ item.proposal.id }}/changes/{{ proposal_item.change.id }}/reject">Reject</button>
-                        <button class="primary-button !px-3 !py-1.5 !text-xs" data-api-post="/api/projects/{{ project.slug }}/concern-proposals/{{ item.proposal.id }}/changes/{{ proposal_item.change.id }}/accept">Accept</button>
+                        <button class="primary-button !px-3 !py-1.5 !text-xs" data-api-post="/api/projects/{{ project.slug }}/concern-proposals/{{ item.proposal.id }}/changes/{{ proposal_item.change.id }}/accept" data-workspace-refresh-spec="true">Accept</button>
                       </div>
                     {% endif %}
                   </div>

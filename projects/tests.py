@@ -16,7 +16,7 @@ from alignment.stream_attachments import attach_files_to_post
 from projects.demo import ensure_demo_workspace
 from projects.invitations import get_invite_for_token, invitation_token
 from projects.models import MembershipRole, Project, ProjectInvite, ProjectMembership
-from projects.services import create_project_workspace
+from projects.services import create_project_workspace, section_summaries
 
 User = get_user_model()
 
@@ -109,6 +109,7 @@ class ProjectPageTests(TestCase):
         self.assertContains(response, 'data-workspace-header-region', html=False)
         self.assertContains(response, 'data-workspace-stream-live-region', html=False)
         self.assertContains(response, 'data-workspace-stream-scroll', html=False)
+        self.assertContains(response, 'data-workspace-spec-region', html=False)
         self.assertContains(response, 'data-workspace-stream-composer', html=False)
         self.assertContains(response, 'data-api-method="PATCH"', html=False)
         self.assertContains(response, 'data-api-loading-label="Scanning..."', html=False)
@@ -227,9 +228,11 @@ class ProjectPageTests(TestCase):
         self.assertContains(response, 'data-workspace-header-region', html=False)
         self.assertContains(response, 'data-workspace-stream-live-region', html=False)
         self.assertContains(response, 'data-workspace-stream-scroll', html=False)
+        self.assertContains(response, 'data-workspace-spec-region', html=False)
+        self.assertContains(response, 'data-spec-section-form', html=False)
+        self.assertContains(response, 'data-spec-scroll-container', html=False)
         self.assertNotContains(response, 'data-workspace-live-refresh-root', html=False)
         self.assertNotContains(response, 'data-workspace-split-root', html=False)
-        self.assertNotContains(response, 'data-spec-section-form', html=False)
         self.assertNotContains(response, 'data-stream-input', html=False)
 
     def test_workspace_live_fragment_honors_stream_filter_query(self):
@@ -272,8 +275,21 @@ class ProjectPageTests(TestCase):
         self.assertContains(response, "Focused Concern")
         self.assertContains(response, concern.title)
         self.assertContains(response, "Address in Chat")
+        self.assertContains(response, 'data-workspace-spec-region', html=False)
         self.assertNotContains(response, 'name="concern_id"', html=False)
         self.assertNotContains(response, 'data-stream-input', html=False)
+
+    def test_workspace_live_fragment_honors_section_query_for_spec_scroll_target(self):
+        self.client.force_login(self.project.created_by)
+        section_id = section_summaries(self.project)[1]["id"]
+
+        response = self.client.get(
+            f"{reverse('project-workspace', args=[self.project.slug])}?_fragment=workspace-live&section={section_id}"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, f'data-scroll-target-section="{section_id}"', html=False)
+        self.assertContains(response, f'data-section-id="{section_id}"', html=False)
 
     def test_workspace_concern_query_focuses_thread_and_composer(self):
         self.client.force_login(self.project.created_by)
