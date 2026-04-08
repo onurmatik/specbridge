@@ -34,7 +34,7 @@ self.addEventListener("fetch", () => {});
 
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
+    path('admin-qweasd123/', admin.site.urls),
     path('service-worker.js', retire_service_worker),
     path('api/', api.urls),
     path('', include('accounts.urls')),
