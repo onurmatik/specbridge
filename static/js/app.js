@@ -972,7 +972,7 @@ function formatFileSize(bytes) {
   return `${(value / (1024 * 1024)).toFixed(1).replace(/\\.0$/, "")} MB`;
 }
 
-const DEFAULT_STREAM_ATTACHMENT_PROMPT = "Update the current spec to align with this document";
+const DEFAULT_STREAM_ATTACHMENT_PROMPT = "Update the current spec to align with this document.";
 
 function streamComposerFileInput(form) {
   return form?.querySelector?.("[data-stream-file-input]") || null;
