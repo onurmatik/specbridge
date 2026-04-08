@@ -100,6 +100,81 @@ function projectSettingsSubmitNode(surface) {
   return surface?.querySelector?.("[data-project-settings-submit]") || null;
 }
 
+const PROJECT_SETTINGS_DEFAULT_TAB = "identity";
+const PROJECT_SETTINGS_TABS = {
+  identity: ["project_name", "tagline"],
+  preferences: ["spec_language"],
+};
+
+function normalizeProjectSettingsTab(value) {
+  return Object.prototype.hasOwnProperty.call(PROJECT_SETTINGS_TABS, value)
+    ? value
+    : PROJECT_SETTINGS_DEFAULT_TAB;
+}
+
+function projectSettingsTabButtons(root = document) {
+  return Array.from(root?.querySelectorAll?.("[data-project-settings-tab-button]") || []);
+}
+
+function projectSettingsTabPanels(root = document) {
+  return Array.from(root?.querySelectorAll?.("[data-project-settings-panel]") || []);
+}
+
+function activeProjectSettingsTab(root = document) {
+  const surface = projectSettingsSurface(root);
+  return normalizeProjectSettingsTab(surface?.dataset?.projectSettingsTab);
+}
+
+function projectSettingsTabForField(field) {
+  return Object.entries(PROJECT_SETTINGS_TABS).find(([, fields]) => fields.includes(field))?.[0] || null;
+}
+
+function projectSettingsTabForErrors(errors = {}, fallbackTab = PROJECT_SETTINGS_DEFAULT_TAB) {
+  const normalizedFallback = normalizeProjectSettingsTab(fallbackTab);
+  for (const field of Object.keys(errors || {})) {
+    const tab = projectSettingsTabForField(field);
+    if (tab) {
+      return tab;
+    }
+  }
+  return normalizedFallback;
+}
+
+function setProjectSettingsTab(root = document, tab = PROJECT_SETTINGS_DEFAULT_TAB) {
+  const surface = projectSettingsSurface(root);
+  if (!surface) {
+    return;
+  }
+  const normalizedTab = normalizeProjectSettingsTab(tab);
+  surface.dataset.projectSettingsTab = normalizedTab;
+
+  projectSettingsTabButtons(surface).forEach((button) => {
+    const isActive = button.dataset.projectSettingsTabButton === normalizedTab;
+    button.setAttribute("aria-selected", isActive ? "true" : "false");
+    button.classList.toggle("border-gray-900", isActive);
+    button.classList.toggle("text-gray-900", isActive);
+    button.classList.toggle("border-transparent", !isActive);
+    button.classList.toggle("text-gray-500", !isActive);
+  });
+
+  projectSettingsTabPanels(surface).forEach((panel) => {
+    const isActive = panel.dataset.projectSettingsPanel === normalizedTab;
+    panel.hidden = !isActive;
+    panel.classList.toggle("hidden", !isActive);
+  });
+}
+
+function projectSettingsFocusTarget(form, tab = PROJECT_SETTINGS_DEFAULT_TAB) {
+  if (!form) {
+    return null;
+  }
+  const normalizedTab = normalizeProjectSettingsTab(tab);
+  if (normalizedTab === "preferences") {
+    return form.querySelector("select[name='spec_language']");
+  }
+  return form.querySelector("input[name='project_name']");
+}
+
 function closeDocumentSuggestionMenus(exceptShell = null) {
   document.querySelectorAll("[data-document-create-shell]").forEach((shell) => {
     if (exceptShell && shell === exceptShell) {
@@ -2742,7 +2817,8 @@ function projectSettingsDefaults(form) {
   }
   return {
     project_name: form.elements.namedItem("project_name")?.defaultValue || "",
-    tagline: form.elements.namedItem("tagline")?.defaultValue || ""
+    tagline: form.elements.namedItem("tagline")?.defaultValue || "",
+    spec_language: form.elements.namedItem("spec_language")?.defaultValue || "en"
   };
 }
 
@@ -2983,22 +3059,29 @@ function closeProjectModal() {
   document.body.classList.remove("overflow-hidden");
 }
 
-function openProjectSettingsModal(payload = null) {
+function openProjectSettingsModal(payload = null, options = {}) {
   const modal = projectSettingsModalNode();
   if (!modal) {
     return;
   }
   const surface = modal.querySelector("[data-project-settings-surface]");
   const form = projectSettingsFormNode(surface);
+  const activeTab = projectSettingsTabForErrors(
+    options.errors || {},
+    options.activeTab || PROJECT_SETTINGS_DEFAULT_TAB
+  );
   closeAuthModal();
   closeProjectModal();
   clearProjectSettingsErrorsForSurface(surface);
   hydrateProjectSettingsForm(form, payload || projectSettingsDefaults(form));
+  setProjectSettingsTab(surface, activeTab);
   modal.classList.remove("hidden");
   document.body.classList.add("overflow-hidden");
-  const activeInput = form?.querySelector("input[name='project_name']");
+  const activeInput = projectSettingsFocusTarget(form, activeTab);
   activeInput?.focus();
-  activeInput?.select();
+  if (activeInput?.matches?.("input[type='text']")) {
+    activeInput.select();
+  }
 }
 
 function closeProjectSettingsModal() {
@@ -3326,6 +3409,7 @@ document.addEventListener("submit", async (event) => {
   if (projectSettingsForm) {
     event.preventDefault();
     const surface = projectSettingsSurface(projectSettingsForm);
+    const activeTab = activeProjectSettingsTab(surface);
     clearProjectSettingsErrorsForSurface(surface);
     setProjectSettingsSubmitting(surface, true);
     const payload = serializeForm(projectSettingsForm);
@@ -3338,13 +3422,14 @@ document.addEventListener("submit", async (event) => {
       if (error.message.startsWith("Authentication required")) {
         return;
       }
-      openProjectSettingsModal(payload);
+      const errors = error.payload?.errors || { __all__: ["Project settings could not be saved. Please try again."] };
+      openProjectSettingsModal(payload, { activeTab, errors });
       showProjectSettingsErrors(
-        surface,
-        error.payload?.errors || { __all__: ["Project settings could not be saved. Please try again."] }
+        projectSettingsSurface() || surface,
+        errors
       );
     } finally {
-      setProjectSettingsSubmitting(surface, false);
+      setProjectSettingsSubmitting(projectSettingsSurface() || surface, false);
     }
     return;
   }
@@ -3422,6 +3507,16 @@ document.addEventListener("click", async (event) => {
   if (projectSettingsTrigger) {
     event.preventDefault();
     openProjectSettingsModal();
+    return;
+  }
+
+  const projectSettingsTabButton = event.target.closest("[data-project-settings-tab-button]");
+  if (projectSettingsTabButton) {
+    event.preventDefault();
+    setProjectSettingsTab(
+      projectSettingsTabButton,
+      projectSettingsTabButton.dataset.projectSettingsTabButton
+    );
     return;
   }
 

@@ -15,6 +15,7 @@ from alignment.services import (
     workspace_concern_chat_prompt,
 )
 from projects.demo import DEMO_PROJECT_SLUG, DEMO_USERNAMES, ensure_demo_workspace
+from projects.languages import DEFAULT_PROJECT_SPEC_LANGUAGE, PROJECT_SPEC_LANGUAGE_CHOICES
 from projects.models import MembershipRole, Organization, Project, ProjectMembership
 from specs.models import ConcernStatus, ConsistencyIssueStatus
 from specs.services import (
@@ -149,6 +150,7 @@ def create_project_workspace(
     actor,
     project_name: str,
     tagline: str,
+    spec_language: str = DEFAULT_PROJECT_SPEC_LANGUAGE,
 ):
     resolved_tagline = tagline or _default_tagline(project_name)
     summary = _default_summary(project_name, resolved_tagline)
@@ -166,6 +168,7 @@ def create_project_workspace(
         tagline=resolved_tagline,
         summary=summary,
         status_label=DEFAULT_PROJECT_STATUS_LABEL,
+        spec_language=spec_language,
         created_by=actor,
         last_activity_at=timezone.now(),
     )
@@ -190,9 +193,11 @@ def update_project_identity(
     project: Project,
     project_name: str,
     tagline: str,
+    spec_language: str | None = None,
 ):
     resolved_project_name = (project_name or "").strip()
     resolved_tagline = (tagline or "").strip() or _default_tagline(resolved_project_name)
+    resolved_spec_language = (spec_language or project.spec_language or DEFAULT_PROJECT_SPEC_LANGUAGE).strip()
 
     current_tagline, current_detail = split_project_summary(project)
     current_effective_tagline = current_tagline or _default_tagline(project.name)
@@ -205,8 +210,9 @@ def update_project_identity(
     project.name = resolved_project_name
     project.tagline = resolved_tagline
     project.summary = _compose_summary(resolved_tagline, next_detail)
+    project.spec_language = resolved_spec_language
     project.last_activity_at = timezone.now()
-    project.save(update_fields=["name", "tagline", "summary", "last_activity_at", "updated_at"])
+    project.save(update_fields=["name", "tagline", "summary", "spec_language", "last_activity_at", "updated_at"])
     return project
 
 
@@ -263,6 +269,7 @@ def page_context(project, active_item):
     memberships = list(project.memberships.select_related("user").order_by("-is_active", "created_at"))
     return {
         "project": project,
+        "project_spec_language_choices": PROJECT_SPEC_LANGUAGE_CHOICES,
         "active_item": active_item,
         "navigation_items": navigation_for_project(project),
         "memberships": memberships,

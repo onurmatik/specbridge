@@ -2,6 +2,7 @@ from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
+from projects.languages import DEFAULT_PROJECT_SPEC_LANGUAGE, PROJECT_SPEC_LANGUAGE_CHOICES
 from specbridge.model_mixins import TimeStampedModel
 
 
@@ -35,6 +36,11 @@ class Project(TimeStampedModel):
     tagline = models.CharField(max_length=255)
     summary = models.TextField()
     status_label = models.CharField(max_length=64, default="Aligning")
+    spec_language = models.CharField(
+        max_length=16,
+        choices=PROJECT_SPEC_LANGUAGE_CHOICES,
+        default=DEFAULT_PROJECT_SPEC_LANGUAGE,
+    )
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,

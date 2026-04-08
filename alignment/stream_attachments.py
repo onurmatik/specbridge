@@ -16,6 +16,7 @@ from alignment.models import (
     StreamPostKind,
     StreamPostProcessingStatus,
 )
+from projects.languages import project_spec_language_label
 from specs.models import AIUsageOperation
 from specs.openai import OpenAIUsageContext, request_openai_json_schema
 from specs.services import apply_batch_spec_operations, section_summaries
@@ -329,10 +330,10 @@ def _trim_text_for_summary(text: str, budget: int = STREAM_ATTACHMENT_SUMMARY_IN
     return f"{normalized[:head_budget].rstrip()}\n\n[...]\n\n{normalized[-tail_budget:].lstrip()}"
 
 
-def _summary_prompt(*, attachment: StreamAttachment, text: str) -> str:
+def _summary_prompt(*, attachment: StreamAttachment, text: str, output_language: str) -> str:
     return (
         "You are summarizing an uploaded reference document for a collaborative product spec workspace.\n"
-        "Return a concise, implementation-relevant summary in English.\n"
+        f"Return a concise, implementation-relevant summary in {output_language}.\n"
         "Call out requirements, constraints, integrations, APIs, compliance notes, and non-obvious caveats when present.\n"
         "Do not invent content that is not supported by the document.\n"
         f"File name: {attachment.original_name}\n"
@@ -343,12 +344,14 @@ def _summary_prompt(*, attachment: StreamAttachment, text: str) -> str:
 
 
 def summarize_attachment_for_apply(attachment: StreamAttachment, *, actor=None) -> dict:
+    output_language = project_spec_language_label(getattr(attachment.project, "spec_language", None))
     _, parsed = _request_openai(
         schema_name="stream_attachment_summary",
         schema=ATTACHMENT_SUMMARY_SCHEMA,
         prompt=_summary_prompt(
             attachment=attachment,
             text=_trim_text_for_summary(attachment.extracted_text),
+            output_language=output_language,
         ),
         project=attachment.project,
         actor=actor,
@@ -381,7 +384,7 @@ def _docs_payload_for_apply(attachments: list[StreamAttachment], *, actor=None) 
     return [summarize_attachment_for_apply(attachment, actor=actor) for attachment in attachments]
 
 
-def _stream_apply_prompt(*, prompt: str, sections: list[dict], documents: list[dict]) -> str:
+def _stream_apply_prompt(*, prompt: str, sections: list[dict], documents: list[dict], output_language: str) -> str:
     section_payload = [
         {
             "id": section["id"],
@@ -395,7 +398,7 @@ def _stream_apply_prompt(*, prompt: str, sections: list[dict], documents: list[d
     return (
         "You are applying uploaded reference documents to a collaborative product specification.\n"
         "Interpret the user's prompt as a direct instruction to mutate the current spec.\n"
-        "Return spec-ready English content only.\n"
+        f"Return spec-ready {output_language} content only.\n"
         "Do not repeat a section title as a heading or opening line inside any returned section body.\n"
         "Use markdown subheadings, bullet lists, and numbered lists when they improve scanability.\n"
         "Nested lists are allowed when the structure stays compact.\n"
@@ -470,6 +473,7 @@ def process_uploaded_documents_for_post(post: StreamPost, *, prompt: str, actor=
             prompt=prompt,
             sections=sections,
             documents=_docs_payload_for_apply(attachments, actor=actor),
+            output_language=project_spec_language_label(getattr(post.project, "spec_language", None)),
         ),
         project=post.project,
         actor=actor,

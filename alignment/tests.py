@@ -411,6 +411,8 @@ class StreamAttachmentApplyTests(AlignmentMediaTestCase):
 
     @patch("alignment.stream_attachments._request_openai")
     def test_process_uploaded_documents_updates_spec_and_creates_agent_notice(self, mock_request_openai):
+        self.project.spec_language = "tr"
+        self.project.save(update_fields=["spec_language", "updated_at"])
         sections = section_summaries(self.project)
         requirements = next(section for section in sections if section["title"] == "Requirements")
         tech_stack = next(section for section in sections if section["title"] == "Tech Stack")
@@ -460,3 +462,4 @@ class StreamAttachmentApplyTests(AlignmentMediaTestCase):
         self.assertEqual(result.agent_post.kind, StreamPostKind.AGENT)
         self.assertIn("Updated Requirements", result.agent_post.body)
         self.assertIn("Added Integration", result.agent_post.body)
+        self.assertIn("Return spec-ready Turkish content only.", mock_request_openai.call_args.kwargs["prompt"])

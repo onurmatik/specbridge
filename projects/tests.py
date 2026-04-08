@@ -145,6 +145,9 @@ class ProjectPageTests(TestCase):
         self.assertContains(response, 'data-workspace-resize-handle', html=False)
         self.assertContains(response, 'data-project-settings-trigger', html=False)
         self.assertContains(response, f'/api/projects/{self.project.slug}/settings', html=False)
+        self.assertContains(response, "Project identity")
+        self.assertContains(response, "Preferences")
+        self.assertContains(response, "Spec language")
         self.assertNotContains(response, "Ask AI to Help Draft")
         self.assertNotContains(response, "Consistency Inbox")
 
@@ -570,6 +573,7 @@ class ProjectPageTests(TestCase):
                 {
                     "project_name": "Launch Control Center",
                     "tagline": "Shared source of truth for release readiness",
+                    "spec_language": "tr",
                 }
             ),
             content_type="application/json",
@@ -579,6 +583,7 @@ class ProjectPageTests(TestCase):
         project.refresh_from_db()
         self.assertEqual(project.name, "Launch Control Center")
         self.assertEqual(project.tagline, "Shared source of truth for release readiness")
+        self.assertEqual(project.spec_language, "tr")
         self.assertEqual(
             project.summary,
             "Shared source of truth for release readiness. "
@@ -588,6 +593,7 @@ class ProjectPageTests(TestCase):
         self.assertEqual(response.json()["project"]["name"], "Launch Control Center")
         self.assertEqual(response.json()["project"]["tagline"], "Shared source of truth for release readiness")
         self.assertEqual(response.json()["project"]["summary"], project.summary)
+        self.assertEqual(response.json()["project"]["spec_language"], "tr")
 
     def test_authenticated_user_cannot_update_project_settings_without_name(self):
         self.client.force_login(self.project.created_by)
@@ -607,6 +613,27 @@ class ProjectPageTests(TestCase):
         self.assertEqual(
             response.json()["errors"]["project_name"][0],
             "Project name is required.",
+        )
+
+    def test_authenticated_user_cannot_update_project_settings_with_unsupported_language(self):
+        self.client.force_login(self.project.created_by)
+
+        response = self.client.post(
+            f"/api/projects/{self.project.slug}/settings",
+            data=json.dumps(
+                {
+                    "project_name": "Launch Board",
+                    "tagline": "Operational control plane for launch readiness.",
+                    "spec_language": "xx",
+                }
+            ),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(
+            response.json()["errors"]["spec_language"][0],
+            "Choose a supported spec language.",
         )
 
     def test_members_page_shows_invite_actions_for_pending_invites(self):

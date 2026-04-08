@@ -506,9 +506,10 @@ class SpecsServiceTests(TestCase):
             kind="requirements",
             status="iterating",
             body="Gecikmeli e-posta teslimatı durumunda kullanıcıya açık bir yönlendirme göster.",
+            output_language="Turkish",
         )
 
-        self.assertIn("Always return the revised section and summary in English", prompt)
+        self.assertIn("Always return the revised section and summary in Turkish", prompt)
 
     def test_create_and_validate_assumption_endpoints(self):
         section = self._section("requirements")

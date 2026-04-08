@@ -99,6 +99,7 @@ def build_project_snapshot(project) -> dict[str, Any]:
             "name": project.name,
             "tagline": project.tagline,
             "summary": project.summary,
+            "spec_language": project.spec_language,
         },
         "spec": build_spec_snapshot(project),
         "decisions": [

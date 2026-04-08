@@ -9,6 +9,7 @@ from ninja.security import django_auth
 
 from alignment.services import compute_dashboard_metrics
 from projects.invitations import send_project_invitation_email
+from projects.languages import DEFAULT_PROJECT_SPEC_LANGUAGE, is_supported_project_spec_language
 from projects.models import MembershipRole, ProjectInvite, ProjectMembership
 from projects.services import create_project_workspace, get_project_or_404, resolve_actor, update_project_identity
 from specs.models import AuditEventType
@@ -31,6 +32,7 @@ class InvitePayload(Schema):
 class ProjectSettingsPayload(Schema):
     project_name: str
     tagline: str | None = None
+    spec_language: str | None = None
 
 
 class MembershipUpdatePayload(Schema):
@@ -90,6 +92,7 @@ def project_stats(request, slug: str):
             "slug": project.slug,
             "name": project.name,
             "tagline": project.tagline,
+            "spec_language": project.spec_language,
             "status_label": project.status_label,
         },
         "metrics": metrics,
@@ -119,10 +122,13 @@ def update_project_settings(request, slug: str, payload: ProjectSettingsPayload)
     project = get_project_or_404(slug, request.user)
     project_name = payload.project_name.strip()
     tagline = (payload.tagline or "").strip()
+    spec_language = (payload.spec_language or project.spec_language or DEFAULT_PROJECT_SPEC_LANGUAGE).strip()
     errors = {}
 
     if not project_name:
         errors["project_name"] = ["Project name is required."]
+    if not is_supported_project_spec_language(spec_language):
+        errors["spec_language"] = ["Choose a supported spec language."]
 
     if errors:
         return JsonResponse({"ok": False, "errors": errors}, status=422)
@@ -131,6 +137,7 @@ def update_project_settings(request, slug: str, payload: ProjectSettingsPayload)
         project=project,
         project_name=project_name,
         tagline=tagline,
+        spec_language=spec_language,
     )
     return {
         "ok": True,
@@ -140,6 +147,7 @@ def update_project_settings(request, slug: str, payload: ProjectSettingsPayload)
             "name": updated_project.name,
             "tagline": updated_project.tagline,
             "summary": updated_project.summary,
+            "spec_language": updated_project.spec_language,
             "status_label": updated_project.status_label,
         },
     }

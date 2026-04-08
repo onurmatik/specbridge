@@ -1,77 +1,98 @@
-<div data-project-settings-surface class="grid lg:grid-cols-[1.02fr,0.98fr]">
-  <section class="border-b border-gray-200 bg-gradient-to-br from-white via-gray-50 to-blue-50/60 p-8 sm:p-10 lg:border-b-0 lg:border-r">
-    <span class="workspace-badge border-blue-200 bg-blue-50 text-blue-700">
-      <iconify-icon icon="lucide:settings-2"></iconify-icon>
-      Project Settings
-    </span>
-    <h3 class="mt-5 max-w-lg font-display text-4xl font-bold tracking-tight text-gray-900">Edit Project Identity</h3>
-    <p class="mt-4 max-w-xl text-base leading-relaxed text-gray-600">
-      Update the project name and tagline from one shared place.
-    </p>
-
-    <div class="mt-8 space-y-4">
-      <div class="rounded-2xl border border-gray-200 bg-white/80 p-4 shadow-card">
-        <div class="flex items-start gap-3">
-          <div class="rounded-xl bg-blue-100 p-2 text-blue-700">
-            <iconify-icon icon="lucide:type"></iconify-icon>
-          </div>
-          <div>
-            <div class="text-sm font-medium text-gray-900">Identity stays consistent</div>
-            <p class="mt-1 text-xs leading-relaxed text-gray-500">The title and tagline feed the workspace header, stream context, and project directory cards.</p>
-          </div>
-        </div>
-      </div>
-      <div class="rounded-2xl border border-gray-200 bg-white/80 p-4 shadow-card">
-        <div class="flex items-start gap-3">
-          <div class="rounded-xl bg-gray-100 p-2 text-gray-700">
-            <iconify-icon icon="lucide:link-2"></iconify-icon>
-          </div>
-          <div>
-            <div class="text-sm font-medium text-gray-900">Existing links stay stable</div>
-            <p class="mt-1 text-xs leading-relaxed text-gray-500">Changing the visible title does not rewrite the current workspace URL or break existing links.</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section class="bg-white p-8 sm:p-10">
-    <div class="mb-6">
-      <h4 class="font-display text-2xl font-bold tracking-tight text-gray-900">Project-Level Parameters</h4>
-      <p class="mt-2 text-sm text-gray-500">Edit the shared identity fields used across the workspace.</p>
+<div data-project-settings-surface class="flex h-full flex-col bg-white">
+  <div class="px-8 py-8 sm:px-10">
+    <div class="pr-12">
+      <h3 class="font-display text-3xl font-bold tracking-tight text-gray-900">Project Settings</h3>
+      <p class="mt-2 text-sm text-gray-500">Update identity fields and shared output preferences.</p>
     </div>
 
-    <div data-project-settings-errors class="mb-5 hidden rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700"></div>
-
-    <form
-      method="post"
-      action="/api/projects/{{ project.slug }}/settings"
-      data-project-settings-form
-      class="space-y-4"
-    >
-      {% csrf_token %}
-      <div>
-        <label class="mb-2 block text-sm font-medium text-gray-700">Project title</label>
-        <input
-          type="text"
-          name="project_name"
-          value="{{ project.name }}"
-          class="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-200"
+    <div class="mt-6">
+      <div class="flex items-center gap-6" role="tablist" aria-label="Project settings sections">
+        <button
+          id="project-settings-tab-identity"
+          type="button"
+          data-project-settings-tab-button="identity"
+          role="tab"
+          aria-selected="true"
+          aria-controls="project-settings-panel-identity"
+          class="border-b-2 border-gray-900 px-1 pb-3 text-sm font-medium text-gray-900 transition-colors"
         >
-        <p data-project-settings-field-error="project_name" class="mt-2 hidden text-sm text-red-600"></p>
+          Project identity
+        </button>
+        <button
+          id="project-settings-tab-preferences"
+          type="button"
+          data-project-settings-tab-button="preferences"
+          role="tab"
+          aria-selected="false"
+          aria-controls="project-settings-panel-preferences"
+          class="border-b-2 border-transparent px-1 pb-3 text-sm font-medium text-gray-500 transition-colors hover:text-gray-900"
+        >
+          Preferences
+        </button>
       </div>
+    </div>
+  </div>
 
-      <div>
-        <label class="mb-2 block text-sm font-medium text-gray-700">Tagline</label>
-        <textarea
-          name="tagline"
-          rows="3"
-          placeholder="Optional. Leave blank to regenerate the default tagline."
-          class="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-200"
-        >{{ project.tagline }}</textarea>
-        <p data-project-settings-field-error="tagline" class="mt-2 hidden text-sm text-red-600"></p>
-      </div>
+  <form method="post" action="/api/projects/{{ project.slug }}/settings" data-project-settings-form class="flex min-h-0 flex-1 flex-col">
+    {% csrf_token %}
+    <div class="min-h-0 flex-1 overflow-y-auto px-8 py-6 sm:px-10">
+      <div data-project-settings-errors class="mb-5 hidden rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700"></div>
 
+      <section
+        id="project-settings-panel-identity"
+        data-project-settings-panel="identity"
+        role="tabpanel"
+        aria-labelledby="project-settings-tab-identity"
+        class="space-y-4"
+      >
+        <div>
+          <label class="mb-2 block text-sm font-medium text-gray-700">Project title</label>
+          <input
+            type="text"
+            name="project_name"
+            value="{{ project.name }}"
+            class="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-200"
+          >
+          <p data-project-settings-field-error="project_name" class="mt-2 hidden text-sm text-red-600"></p>
+        </div>
+
+        <div>
+          <label class="mb-2 block text-sm font-medium text-gray-700">Tagline</label>
+          <textarea
+            name="tagline"
+            rows="3"
+            placeholder="Optional. Leave blank to regenerate the default tagline."
+            class="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-200"
+          >{{ project.tagline }}</textarea>
+          <p data-project-settings-field-error="tagline" class="mt-2 hidden text-sm text-red-600"></p>
+        </div>
+      </section>
+
+      <section
+        id="project-settings-panel-preferences"
+        data-project-settings-panel="preferences"
+        role="tabpanel"
+        aria-labelledby="project-settings-tab-preferences"
+        class="hidden space-y-4"
+        hidden
+      >
+        <div>
+          <label class="mb-2 block text-sm font-medium text-gray-700">Spec language</label>
+          <select
+            name="spec_language"
+            class="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-200"
+          >
+            {% for value, label in project_spec_language_choices %}
+              <option value="{{ value }}"{% if project.spec_language == value %} selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+          <p class="mt-2 text-sm text-gray-500">Language of the output documents; you can still interact with the agent using any language.</p>
+          <p data-project-settings-field-error="spec_language" class="mt-2 hidden text-sm text-red-600"></p>
+        </div>
+      </section>
+    </div>
+
+    <div class="border-t border-gray-200 bg-white px-8 py-5 sm:px-10">
       <div class="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
         <button type="button" data-project-settings-modal-close class="secondary-button">Cancel</button>
         <button type="submit" data-project-settings-submit class="primary-button">
@@ -79,6 +100,6 @@
           Save Changes
         </button>
       </div>
-    </form>
-  </section>
+    </div>
+  </form>
 </div>

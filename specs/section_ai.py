@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
+from projects.languages import project_spec_language_label
 from specs.models import AIUsageOperation
 from specs.openai import OpenAIUsageContext, request_openai_json_schema
 from specs.services import ensure_spec_document
@@ -91,13 +92,21 @@ def _request_openai(
         raise SectionRevisionError(f"OpenAI returned malformed JSON: {response.output_text}") from exc
 
 
-def _section_revision_prompt(*, prompt: str, title: str, kind: str, status: str, body: str) -> str:
+def _section_revision_prompt(
+    *,
+    prompt: str,
+    title: str,
+    kind: str,
+    status: str,
+    body: str,
+    output_language: str,
+) -> str:
     return (
         "You are revising a single section from a collaborative product specification.\n"
         "Operate only on the supplied section body.\n"
         "Do not change the section title, section status, or document type.\n"
         "Do not repeat the section title as a heading or opening line in the revised body.\n"
-        "Always return the revised section and summary in English, even if the user's request or the current "
+        f"Always return the revised section and summary in {output_language}, even if the user's request or the current "
         "section body is written in another language.\n"
         "Do not add new requirements, owners, metrics, integrations, dates, APIs, decisions, or implementation "
         "details that are not already supported by the current text.\n"
@@ -155,6 +164,7 @@ def revise_section_with_ai(
             kind=section_data["kind"],
             status=section_data["status"],
             body=effective_body,
+            output_language=project_spec_language_label(getattr(project, "spec_language", None)),
         ),
         usage_context=OpenAIUsageContext(
             project=project,
