@@ -972,6 +972,8 @@ function formatFileSize(bytes) {
   return `${(value / (1024 * 1024)).toFixed(1).replace(/\\.0$/, "")} MB`;
 }
 
+const DEFAULT_STREAM_ATTACHMENT_PROMPT = "Update the current spec to align with this document";
+
 function streamComposerFileInput(form) {
   return form?.querySelector?.("[data-stream-file-input]") || null;
 }
@@ -980,8 +982,8 @@ function streamComposerFileList(form) {
   return form?.querySelector?.("[data-stream-file-list]") || null;
 }
 
-function streamComposerHelperPrompts(form) {
-  return form?.querySelector?.("[data-stream-file-helper-prompts]") || null;
+function streamComposerTextInput(form) {
+  return form?.querySelector?.("[data-stream-input]") || null;
 }
 
 function streamComposerSelectedFiles(form) {
@@ -1004,10 +1006,25 @@ function setStreamComposerFiles(form, files) {
   input.files = dataTransfer.files;
 }
 
+function setStreamComposerDefaultPrompt(form) {
+  const input = streamComposerTextInput(form);
+  if (!input) {
+    return;
+  }
+  const currentValue = `${input.value || ""}`.trim();
+  if (currentValue && currentValue !== DEFAULT_STREAM_ATTACHMENT_PROMPT) {
+    return;
+  }
+  input.value = DEFAULT_STREAM_ATTACHMENT_PROMPT;
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  if (typeof input.setSelectionRange === "function") {
+    input.setSelectionRange(input.value.length, input.value.length);
+  }
+}
+
 function syncStreamComposerFiles(form) {
   const fileList = streamComposerFileList(form);
-  const helperPrompts = streamComposerHelperPrompts(form);
-  if (!fileList || !helperPrompts) {
+  if (!fileList) {
     return;
   }
 
@@ -1016,12 +1033,11 @@ function syncStreamComposerFiles(form) {
 
   if (!files.length) {
     fileList.classList.add("hidden");
-    helperPrompts.classList.add("hidden");
     return;
   }
 
   fileList.classList.remove("hidden");
-  helperPrompts.classList.remove("hidden");
+  setStreamComposerDefaultPrompt(form);
 
   files.forEach((file, index) => {
     const chip = document.createElement("div");
@@ -1041,6 +1057,21 @@ function syncStreamComposerFiles(form) {
     chip.appendChild(removeButton);
     fileList.appendChild(chip);
   });
+}
+
+function mergeStreamComposerFiles(form, nextFiles, { baseFiles = null } = {}) {
+  const mergedFiles = Array.isArray(baseFiles) ? [...baseFiles] : streamComposerSelectedFiles(form);
+  const existingKeys = new Set(mergedFiles.map(streamComposerFileKey));
+  Array.from(nextFiles || []).forEach((file) => {
+    const fileKey = streamComposerFileKey(file);
+    if (existingKeys.has(fileKey)) {
+      return;
+    }
+    existingKeys.add(fileKey);
+    mergedFiles.push(file);
+  });
+  setStreamComposerFiles(form, mergedFiles);
+  syncStreamComposerFiles(form);
 }
 
 function initializeWorkspaceSplitPane() {
@@ -2243,19 +2274,31 @@ document.addEventListener("change", (event) => {
   }
 
   const previousFiles = Array.isArray(fileInput.__previousFiles) ? fileInput.__previousFiles : [];
-  const mergedFiles = [...previousFiles];
-  const existingKeys = new Set(previousFiles.map(streamComposerFileKey));
-  Array.from(fileInput.files || []).forEach((file) => {
-    const fileKey = streamComposerFileKey(file);
-    if (existingKeys.has(fileKey)) {
-      return;
-    }
-    existingKeys.add(fileKey);
-    mergedFiles.push(file);
-  });
   delete fileInput.__previousFiles;
-  setStreamComposerFiles(form, mergedFiles);
-  syncStreamComposerFiles(form);
+  mergeStreamComposerFiles(form, fileInput.files, { baseFiles: previousFiles });
+});
+
+document.addEventListener("dragover", (event) => {
+  const dropTarget = event.target.closest("[data-stream-drop-target]");
+  if (!dropTarget || !event.dataTransfer?.files?.length) {
+    return;
+  }
+  event.preventDefault();
+  event.dataTransfer.dropEffect = "copy";
+});
+
+document.addEventListener("drop", (event) => {
+  const dropTarget = event.target.closest("[data-stream-drop-target]");
+  if (!dropTarget || !event.dataTransfer?.files?.length) {
+    return;
+  }
+  event.preventDefault();
+  const form = dropTarget.closest("[data-workspace-stream-composer]");
+  if (!form) {
+    return;
+  }
+  mergeStreamComposerFiles(form, event.dataTransfer.files);
+  dropTarget.focus();
 });
 
 document.addEventListener("input", (event) => {
