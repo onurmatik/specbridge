@@ -3181,6 +3181,7 @@ function shouldPauseWorkspaceSpecRefresh() {
 
 function reinitializeWorkspaceSpecPane({ preserveScroll = false } = {}) {
   resetSpecSectionAutosaveControllers();
+  initializeSpecSectionEditors();
   initializeSpecSectionAutosave();
   initializeSectionStatusControls();
   initializeSectionActionControls();
