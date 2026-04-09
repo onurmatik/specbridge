@@ -1,5 +1,6 @@
 from django.urls import path
 
+from exports import views as export_views
 from projects import views
 
 
@@ -19,6 +20,7 @@ urlpatterns = [
     path("projects/<slug:slug>/decisions/", views.project_decisions, name="project-decisions"),
     path("projects/<slug:slug>/history/", views.project_history, name="project-history"),
     path("projects/<slug:slug>/handoff/", views.project_handoff, name="project-handoff"),
+    path("projects/<slug:slug>/exports/<int:export_id>/download/", export_views.download_export, name="project-export-download"),
     path("projects/<slug:slug>/assumptions/", views.project_assumptions, name="project-assumptions"),
     path("projects/<slug:slug>/members/", views.project_members, name="project-members"),
 ]

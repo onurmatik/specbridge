@@ -720,7 +720,10 @@ def ensure_demo_workspace():
             filename="q3-auth-revamp_prd_seed.md",
             status=ExportStatus.READY,
             generated_by=sarah,
-            configuration={"section_ids": ",".join(section["id"] for section in sections.values())},
+            configuration={
+                "section_ids": ",".join(section["id"] for section in sections.values()),
+                "file_type": "md",
+            },
             content="# Authentication Revamp\n\nSeed export.",
             share_enabled=True,
             share_token="demo-share-token",

@@ -19,7 +19,9 @@ cffi==2.0.0 ; platform_python_implementation != 'PyPy'
     #   cryptography
     #   pynacl
 charset-normalizer==3.4.7
-    # via requests
+    # via
+    #   reportlab
+    #   requests
 cryptography==46.0.6
     # via
     #   paramiko
@@ -61,6 +63,8 @@ packaging==26.0
     # via gunicorn
 paramiko==4.0.0
     # via fabric
+pillow==12.2.0
+    # via reportlab
 pycparser==3.0 ; implementation_name != 'PyPy' and platform_python_implementation != 'PyPy'
     # via cffi
 pydantic==2.12.5
@@ -78,6 +82,8 @@ python-dateutil==2.9.0.post0
 python-docx==1.2.0
     # via specbridge
 python-dotenv==1.2.2
+    # via specbridge
+reportlab==4.4.10
     # via specbridge
 requests==2.33.1
     # via specbridge

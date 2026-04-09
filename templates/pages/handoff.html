@@ -2,19 +2,20 @@
 {% load specs_formatting %}
 
 {% block title %}SpecBridge · Handoff{% endblock %}
+{% block body_class %}overflow-hidden bg-gray-50 text-gray-900{% endblock %}
 
 {% block content %}
-<div class="app-shell">
+<div class="app-shell h-screen">
   {% include "components/global_sidebar.html" %}
   <main class="flex min-w-0 flex-1 flex-col">
     {% include "components/page_header.html" %}
-    <div class="flex flex-1 overflow-hidden">
-      <aside class="z-10 flex w-72 flex-shrink-0 flex-col border-r border-gray-200 bg-white">
+    <div class="flex min-h-0 flex-1 overflow-hidden">
+      <aside class="z-10 flex min-h-0 w-72 flex-shrink-0 flex-col overflow-hidden border-r border-gray-200 bg-white">
         <div class="border-b border-gray-100 px-6 py-5">
           <h2 class="font-display text-lg font-bold text-gray-900">Export Format</h2>
           <p class="mt-1 text-xs text-gray-500">Package selected spec sections for handoff.</p>
         </div>
-        <div class="flex flex-col gap-2 overflow-y-auto p-4">
+        <div class="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-4">
           <button class="w-full rounded-xl border border-gray-900 bg-gray-50 p-4 text-left ring-1 ring-gray-900" data-format-button="prd">
             <h3 class="text-sm font-semibold text-gray-900">Product Requirements</h3>
             <p class="mt-1 text-xs leading-relaxed text-gray-500">Cross-functional document package with product context and UX detail.</p>
@@ -31,18 +32,23 @@
             <h3 class="text-sm font-semibold text-gray-700">Coding Agent Prompt</h3>
             <p class="mt-1 text-xs leading-relaxed text-gray-500">Prompt-friendly markdown sourced from the selected spec sections.</p>
           </button>
+          <button class="w-full rounded-xl border border-gray-100 bg-white p-4 text-left hover:border-purple-200 hover:bg-purple-50" data-format-button="uiux_agent">
+            <h3 class="text-sm font-semibold text-gray-700">UI/UX Agent Prompt</h3>
+            <p class="mt-1 text-xs leading-relaxed text-gray-500">Prompt package for designing the app, screens, and workflows from the spec.</p>
+          </button>
         </div>
       </aside>
 
-      <section class="z-10 flex w-96 flex-shrink-0 flex-col border-r border-gray-200 bg-white">
+      <section class="z-10 flex min-h-0 w-96 flex-shrink-0 flex-col overflow-hidden border-r border-gray-200 bg-white">
         <div class="border-b border-gray-100 px-6 py-5">
           <h2 class="font-display text-lg font-bold text-gray-900">Configuration</h2>
           {% if not request.user.is_authenticated %}
             <p class="mt-1 text-xs font-medium uppercase tracking-wider text-gray-400">Read-only until you sign in</p>
           {% endif %}
         </div>
-        <form class="flex flex-1 flex-col overflow-y-auto" data-api-form="/api/projects/{{ project.slug }}/exports">
+        <form class="flex min-h-0 flex-1 flex-col overflow-y-auto" data-api-form="/api/projects/{{ project.slug }}/exports" data-export-download-form="true">
           <input type="hidden" name="format" value="prd" data-format-input>
+          <input type="hidden" name="file_type" value="md" data-file-type-input>
           <input type="hidden" name="section_ids" value="{% for section in sections %}{{ section.id }}{% if not forloop.last %},{% endif %}{% endfor %}" data-section-ids-input>
           <div class="space-y-8 p-6">
             <div>
@@ -61,12 +67,24 @@
             </div>
             <div>
               <h3 class="mb-4 text-sm font-bold uppercase tracking-wider text-gray-900">File Type</h3>
-              <div class="grid grid-cols-2 gap-2">
-                <label class="rounded-md border border-gray-900 bg-gray-900 px-3 py-2 text-center text-sm font-medium text-white">Markdown</label>
-                <label class="rounded-md border border-gray-200 bg-white px-3 py-2 text-center text-sm font-medium text-gray-700">PDF</label>
-                <label class="rounded-md border border-gray-200 bg-white px-3 py-2 text-center text-sm font-medium text-gray-700">Notion</label>
-                <label class="rounded-md border border-gray-200 bg-white px-3 py-2 text-center text-sm font-medium text-gray-700">DOCX</label>
+              <div class="flex flex-nowrap gap-2">
+                <button type="button" class="min-w-0 flex-1 whitespace-nowrap rounded-md border border-gray-900 bg-gray-900 px-3 py-2 text-center text-sm font-medium text-white" data-file-type-button="md">Markdown</button>
+                <button type="button" class="min-w-0 flex-1 whitespace-nowrap rounded-md border border-gray-200 bg-white px-3 py-2 text-center text-sm font-medium text-gray-700 hover:bg-gray-50" data-file-type-button="pdf">PDF</button>
+                <button type="button" class="min-w-0 flex-1 whitespace-nowrap rounded-md border border-gray-200 bg-white px-3 py-2 text-center text-sm font-medium text-gray-700 hover:bg-gray-50" data-file-type-button="docx">DOCX</button>
               </div>
+            </div>
+            <div>
+              {% if request.user.is_authenticated %}
+                <button type="submit" data-api-submit-button data-api-loading-label="Generating..." class="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-decision py-3 text-sm font-bold text-white shadow-sm transition-all hover:bg-emerald-600">
+                  <iconify-icon icon="lucide:wand-2" data-api-button-icon></iconify-icon>
+                  <span data-api-button-label>Generate Export</span>
+                </button>
+              {% else %}
+                <button type="button" class="flex w-full items-center justify-center gap-2 rounded-xl bg-gray-900 py-3 text-sm font-bold text-white shadow-sm transition-all hover:bg-gray-800" data-auth-modal-trigger data-auth-mode="login">
+                  <iconify-icon icon="lucide:log-in"></iconify-icon>
+                  Sign In to Export
+                </button>
+              {% endif %}
             </div>
             <div>
               <h3 class="mb-4 text-sm font-bold uppercase tracking-wider text-gray-900">Access & Sharing</h3>
@@ -85,23 +103,10 @@
               </div>
             </div>
           </div>
-          <div class="mt-auto border-t border-gray-100 bg-white p-6">
-            {% if request.user.is_authenticated %}
-              <button type="submit" class="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-decision py-3 text-sm font-bold text-white shadow-sm transition-all hover:bg-emerald-600">
-                <iconify-icon icon="lucide:wand-2"></iconify-icon>
-                Generate Export
-              </button>
-            {% else %}
-              <button type="button" class="flex w-full items-center justify-center gap-2 rounded-xl bg-gray-900 py-3 text-sm font-bold text-white shadow-sm transition-all hover:bg-gray-800" data-auth-modal-trigger data-auth-mode="login">
-                <iconify-icon icon="lucide:log-in"></iconify-icon>
-                Sign In to Export
-              </button>
-            {% endif %}
-          </div>
         </form>
       </section>
 
-      <section class="relative flex-1 overflow-y-auto bg-gray-100">
+      <section class="relative min-h-0 flex-1 overflow-y-auto bg-gray-100">
         <div class="mx-auto max-w-3xl px-8 py-8 pb-32">
           <div class="relative min-h-[800px] rounded-lg border border-gray-200 bg-white p-12 shadow-paper">
             <div class="absolute right-0 top-0 p-6">

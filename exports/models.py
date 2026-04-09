@@ -9,6 +9,13 @@ class ExportFormat(models.TextChoices):
     TECH_SPEC = "tech_spec", "Technical Spec"
     TASKS = "tasks", "Task Breakdown"
     AGENT = "agent", "Coding Agent Prompt"
+    UI_UX_AGENT = "uiux_agent", "UI/UX Agent Prompt"
+
+
+class ExportFileType(models.TextChoices):
+    MARKDOWN = "md", "Markdown"
+    PDF = "pdf", "PDF"
+    DOCX = "docx", "DOCX"
 
 
 class ExportStatus(models.TextChoices):

@@ -3100,6 +3100,18 @@ function setAsyncButtonSubmitting(button, isSubmitting) {
   }
 }
 
+function triggerFileDownload(url) {
+  if (!url) {
+    return;
+  }
+  const link = document.createElement("a");
+  link.href = url;
+  link.style.display = "none";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
+
 function openProjectModal() {
   const modal = projectModalNode();
   if (!modal) {
@@ -3549,6 +3561,13 @@ document.addEventListener("submit", async (event) => {
       }
       return;
     }
+    if (form.dataset.exportDownloadForm === "true" && responsePayload?.download_url) {
+      triggerFileDownload(responsePayload.download_url);
+      window.setTimeout(() => {
+        window.location.reload();
+      }, 250);
+      return;
+    }
     window.location.reload();
   } catch (error) {
     console.error(error);
@@ -3872,6 +3891,22 @@ document.addEventListener("click", async (event) => {
     });
     formatButton.classList.remove("border-gray-100", "bg-white");
     formatButton.classList.add("border-gray-900", "bg-gray-50", "ring-1", "ring-gray-900");
+    return;
+  }
+
+  const fileTypeButton = event.target.closest("[data-file-type-button]");
+  if (fileTypeButton) {
+    const nextValue = fileTypeButton.dataset.fileTypeButton;
+    const hiddenInput = document.querySelector("[data-file-type-input]");
+    if (hiddenInput) {
+      hiddenInput.value = nextValue;
+    }
+    document.querySelectorAll("[data-file-type-button]").forEach((node) => {
+      node.classList.remove("border-gray-900", "bg-gray-900", "text-white");
+      node.classList.add("border-gray-200", "bg-white", "text-gray-700");
+    });
+    fileTypeButton.classList.remove("border-gray-200", "bg-white", "text-gray-700");
+    fileTypeButton.classList.add("border-gray-900", "bg-gray-900", "text-white");
   }
 });
 

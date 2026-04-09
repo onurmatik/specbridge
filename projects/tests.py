@@ -101,6 +101,28 @@ class ProjectPageTests(TestCase):
             response = self.client.get(path)
             self.assertEqual(response.status_code, 200, path)
 
+    def test_handoff_page_renders_export_controls(self):
+        self.client.force_login(self.project.created_by)
+
+        response = self.client.get(reverse("project-handoff", args=[self.project.slug]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-format-button="uiux_agent"', html=False)
+        self.assertContains(response, 'data-file-type-button="md"', html=False)
+        self.assertContains(response, 'data-file-type-button="pdf"', html=False)
+        self.assertContains(response, 'data-file-type-button="docx"', html=False)
+        self.assertContains(response, 'data-file-type-input', html=False)
+        self.assertContains(response, 'data-export-download-form="true"', html=False)
+        self.assertContains(response, 'flex flex-nowrap gap-2', html=False)
+        self.assertContains(response, 'class="app-shell h-screen"', html=False)
+        self.assertContains(response, 'overflow-hidden bg-gray-50 text-gray-900', html=False)
+        self.assertContains(response, 'flex min-h-0 flex-1 overflow-hidden', html=False)
+        self.assertContains(response, 'min-h-0 w-72', html=False)
+        self.assertContains(response, 'min-h-0 w-96', html=False)
+        html = response.content.decode("utf-8")
+        self.assertLess(html.index("File Type"), html.index("Generate Export"))
+        self.assertLess(html.index("Generate Export"), html.index("Access & Sharing"))
+
     def test_authenticated_workspace_renders_unified_spec_and_issues_rail(self):
         self.client.force_login(self.project.created_by)
 

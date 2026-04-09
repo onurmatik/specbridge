@@ -1,0 +1,38 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="10" y1="8" x2="54" y2="56" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#27272A"/>
+      <stop offset="1" stop-color="#18181B"/>
+    </linearGradient>
+    <linearGradient id="left-pillar" x1="18" y1="18" x2="26" y2="46" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#34D399"/>
+      <stop offset="1" stop-color="#10B981"/>
+    </linearGradient>
+    <linearGradient id="right-pillar" x1="38" y1="18" x2="48" y2="46" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#A78BFA"/>
+      <stop offset="1" stop-color="#8B5CF6"/>
+    </linearGradient>
+    <linearGradient id="bridge-line" x1="17" y1="28" x2="47" y2="40" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#E4E4E7"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="4" y="4" width="56" height="56" rx="18" fill="url(#bg)"/>
+  <rect x="15" y="19" width="10" height="25" rx="5" fill="url(#left-pillar)"/>
+  <rect x="39" y="19" width="10" height="25" rx="5" fill="url(#right-pillar)"/>
+
+  <path
+    d="M18 40C19.5 28.75 26.125 23 32 23C37.875 23 44.5 28.75 46 40"
+    stroke="url(#bridge-line)"
+    stroke-width="6"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <path
+    d="M19 40H45"
+    stroke="#F4F4F5"
+    stroke-width="4"
+    stroke-linecap="round"
+  />
+</svg>
