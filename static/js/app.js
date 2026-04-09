@@ -3100,16 +3100,44 @@ function setAsyncButtonSubmitting(button, isSubmitting) {
   }
 }
 
-function triggerFileDownload(url) {
+async function triggerFileDownload(url, filename = "") {
   if (!url) {
     return;
   }
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      "X-Requested-With": "XMLHttpRequest"
+    },
+    credentials: "same-origin",
+    cache: "no-store"
+  });
+  if (response.status === 401 || response.status === 403) {
+    openAuthModal("login");
+    const error = new Error(`Authentication required: ${response.status}`);
+    error.status = response.status;
+    throw error;
+  }
+  if (!response.ok) {
+    const error = new Error(`Download failed: ${response.status}`);
+    error.status = response.status;
+    throw error;
+  }
+
+  const payload = await response.blob();
+  const downloadUrl = window.URL.createObjectURL(payload);
   const link = document.createElement("a");
-  link.href = url;
+  link.href = downloadUrl;
+  if (filename) {
+    link.download = filename;
+  }
   link.style.display = "none";
   document.body.appendChild(link);
   link.click();
   link.remove();
+  window.setTimeout(() => {
+    window.URL.revokeObjectURL(downloadUrl);
+  }, 1000);
 }
 
 function openProjectModal() {
@@ -3562,10 +3590,8 @@ document.addEventListener("submit", async (event) => {
       return;
     }
     if (form.dataset.exportDownloadForm === "true" && responsePayload?.download_url) {
-      triggerFileDownload(responsePayload.download_url);
-      window.setTimeout(() => {
-        window.location.reload();
-      }, 250);
+      await triggerFileDownload(responsePayload.download_url, responsePayload.filename || "");
+      window.location.reload();
       return;
     }
     window.location.reload();
