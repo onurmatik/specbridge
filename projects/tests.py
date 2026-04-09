@@ -413,6 +413,8 @@ class ProjectPageTests(TestCase):
         self.assertContains(response, member_project.name)
         self.assertNotContains(response, self.project.name)
         self.assertContains(response, "Select Project")
+        self.assertContains(response, "Browse all projects")
+        self.assertContains(response, "data-project-switcher-menu", html=False)
         self.assertContains(response, "Create Project")
         self.assertContains(response, "active workspace")
         self.assertNotContains(response, "Open Demo Project")

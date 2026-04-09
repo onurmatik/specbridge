@@ -184,6 +184,34 @@ function closeDocumentSuggestionMenus(exceptShell = null) {
   });
 }
 
+function closeProjectSwitcherMenus(exceptShell = null) {
+  document.querySelectorAll("[data-project-switcher-shell]").forEach((shell) => {
+    if (exceptShell && shell === exceptShell) {
+      return;
+    }
+    setProjectSwitcherMenuState(shell, false);
+  });
+}
+
+function setProjectSwitcherMenuState(shell, isOpen) {
+  if (!shell) {
+    return;
+  }
+  const menu = shell.querySelector("[data-project-switcher-menu]");
+  const toggle = shell.querySelector("[data-project-switcher-toggle]");
+  if (menu) {
+    menu.hidden = !isOpen;
+  }
+  shell.dataset.projectSwitcherOpen = isOpen ? "true" : "false";
+  if (toggle) {
+    toggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
+  }
+}
+
+function projectSwitcherMenuIsOpen(shell) {
+  return shell?.dataset?.projectSwitcherOpen === "true";
+}
+
 function setDocumentSuggestionMenuState(shell, isOpen) {
   if (!shell) {
     return;
@@ -2278,6 +2306,39 @@ function initializeDocumentCreateControls() {
   });
 }
 
+function initializeProjectSwitcherControls() {
+  document.querySelectorAll("[data-project-switcher-shell]").forEach((shell) => {
+    if (shell.dataset.projectSwitcherInitialized === "true") {
+      return;
+    }
+
+    shell.dataset.projectSwitcherInitialized = "true";
+
+    const toggle = shell.querySelector("[data-project-switcher-toggle]");
+    const menu = shell.querySelector("[data-project-switcher-menu]");
+
+    if (!toggle || !menu) {
+      return;
+    }
+
+    setProjectSwitcherMenuState(shell, false);
+
+    toggle.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const nextOpenState = !projectSwitcherMenuIsOpen(shell);
+      closeProjectSwitcherMenus(shell);
+      setProjectSwitcherMenuState(shell, nextOpenState);
+    });
+
+    menu.querySelectorAll("a").forEach((link) => {
+      link.addEventListener("click", () => {
+        closeProjectSwitcherMenus();
+      });
+    });
+  });
+}
+
 function syncExportSelection(form) {
   const hiddenInput = form?.querySelector?.("[data-section-ids-input]");
   if (!hiddenInput) {
@@ -3619,6 +3680,10 @@ document.addEventListener("click", async (event) => {
     closeDocumentSuggestionMenus();
   }
 
+  if (!event.target.closest("[data-project-switcher-shell]")) {
+    closeProjectSwitcherMenus();
+  }
+
   if (!event.target.closest("[data-section-ai-shell]")) {
     closeSectionAiMenus();
   }
@@ -3815,6 +3880,7 @@ document.addEventListener("keydown", (event) => {
     return;
   }
   closeDocumentSuggestionMenus();
+  closeProjectSwitcherMenus();
   closeSectionStatusMenus();
   closeSectionActionMenus();
   closeSectionAiMenus();
@@ -3882,6 +3948,7 @@ document.addEventListener("input", (event) => {
 });
 
 initializeDocumentCreateControls();
+initializeProjectSwitcherControls();
 initializeDocumentEditorAutosave();
 initializeSpecSectionEditors();
 initializeSpecSectionAutosave();
